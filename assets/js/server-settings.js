@@ -54,8 +54,9 @@
   }
   // Custom sources live alongside the built-in keys: 'google' loads a Google
   // Fonts stylesheet, 'upload' registers an uploaded face via @font-face.
-  let fontUrl = '';        // last valid Google Fonts URL
+  let fontUrl = '';        // validated current Google Fonts URL
   let fontFileUrl = '';    // public URL of an already-uploaded face
+  let fontPreviewUrl = '';
   let fontFile = null;     // pending upload, flushed on save
 
   function fontKeyOk(key) {
@@ -67,7 +68,7 @@
     document.documentElement.style.setProperty('--srv-name-font', UI.resolveNameFont({
       name_font: nameFont,
       name_font_url: fontUrl,
-      name_font_file: fontFileUrl,
+      name_font_file: fontPreviewUrl || fontFileUrl,
     }));
   }
 
@@ -93,18 +94,18 @@
 
   // Debounced so we don't inject a <link> for every keystroke mid-paste.
   let urlT = null;
-  $('sNameFontUrl').oninput = (e) => {
-    const raw = e.target.value.trim();
+  function readFontUrl() {
+    const input = $('sNameFontUrl');
+    const raw = input.value.trim().replace(/&amp;/g, '&');
+    // Accept a URL, @import, or the link snippet copied from Google Fonts.
+    const m = raw.match(/https:\/\/fonts\.googleapis\.com\/[^\s'"()<>]+/);
+    fontUrl = (m && UI.googleFontHref(m[0])) || '';
+    input.classList.toggle('bad', !!raw && !fontUrl);
+    return fontUrl;
+  }
+  $('sNameFontUrl').oninput = () => {
     clearTimeout(urlT);
-    urlT = setTimeout(() => {
-      // Accept a bare URL, an @import rule or a full <link> tag.
-      const m = raw.match(/https:\/\/fonts\.googleapis\.com\/[^\s'"()<>]+/);
-      const href = m ? UI.googleFontHref(m[0]) : null;
-      e.target.classList.toggle('bad', !!raw && !href);
-      if (!href) return;
-      fontUrl = href;
-      previewFont();
-    }, 350);
+    urlT = setTimeout(() => { readFontUrl(); previewFont(); }, 350);
   };
 
   $('sNameFontFile').onchange = (e) => {
@@ -114,15 +115,16 @@
     fontFile = f;
     $('sFontFileName').textContent = f.name;
     // Preview straight off the local blob; the real upload happens on save.
-    const blob = URL.createObjectURL(f);
-    document.documentElement.style.setProperty(
-      '--srv-name-font',
-      `'${UI.loadFontFile(blob, `NexSrvPreview${Date.now()}`)}', sans-serif`,
-    );
+    if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+    fontPreviewUrl = URL.createObjectURL(f);
+    previewFont();
   };
 
   $('sNameReset').onclick = () => {
+    clearTimeout(urlT);
     setNameColor('#FFFFFF');
+    if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+    fontPreviewUrl = '';
     fontUrl = ''; fontFileUrl = ''; fontFile = null;
     $('sNameFontUrl').value = ''; $('sNameFontFile').value = ''; $('sFontFileName').textContent = '';
     setNameFont('display');
@@ -150,6 +152,13 @@
   $('btnSave').onclick = async () => {
     const b = $('btnSave'); b.disabled = true; b.textContent = 'Saving…';
     try {
+      // Flush pending input before save; clicking immediately after paste must
+      // not save the previous font (or reject a valid new one).
+      clearTimeout(urlT);
+      if (nameFont === 'google') readFontUrl();
+      const color = $('sNameHex').value.trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Enter a six-digit hex title colour.');
+      setNameColor(color);
       const patch = {
         name: $('sName').value.trim(),
         description: $('sDesc').value.trim() || null,
@@ -172,6 +181,11 @@
       const { error } = await window.db.from('servers').update(patch).eq('id', sid);
       if (error) throw error;
       Object.assign(srv, patch);
+      if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+      fontPreviewUrl = '';
+      $('navTitle').textContent = srv.name;
+      document.title = `${srv.name} — Settings`;
+      previewFont();
       icoFile = banFile = null;
       UI.toast('Server updated.');
     } catch (err) { UI.toast(err.message || 'Could not save.', true); }
@@ -503,6 +517,9 @@
   };
 
   function hydrate() {
+    clearTimeout(urlT);
+    if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+    fontPreviewUrl = '';
     $('sName').value = srv.name || '';
     $('sDesc').value = srv.description || '';
     $('icoPrev').innerHTML = srv.icon_url ? `<img src="${UI.esc(srv.icon_url)}">` : '<i class="fa-regular fa-image"></i>';

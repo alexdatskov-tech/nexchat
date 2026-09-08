@@ -29,7 +29,7 @@
         <div class="scard-banner" style="${bg};background-size:cover;"></div>
         <div class="scard-ico">${ico}</div>
         <div class="scard-body">
-          <div class="scard-name" style="${nameStyle(s.theme)}">
+          <div class="scard-name" style="${UI.esc(nameStyle(s.theme))}">
             <span>${UI.esc(s.name)}</span>
             ${owner ? '<span class="badge badge-owner">Owner</span>' : ''}
           </div>

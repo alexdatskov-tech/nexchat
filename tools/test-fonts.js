@@ -21,7 +21,7 @@ ok('UI.googleFontHref exported', typeof UI.googleFontHref === 'function');
 /* ---- URL validation: only Google's font hosts, only https ---- */
 const GOOD = 'https://fonts.googleapis.com/css2?family=Rubik+Glitch&display=swap';
 ok('accepts a fonts.googleapis.com css2 URL', UI.googleFontHref(GOOD) === GOOD);
-ok('accepts fonts.gstatic.com', !!UI.googleFontHref('https://fonts.gstatic.com/s/rubik/v1/x.woff2'));
+ok('rejects raw font files as Google stylesheets', UI.googleFontHref('https://fonts.gstatic.com/s/rubik/v1/x.woff2') === null);
 ok('trims surrounding whitespace', UI.googleFontHref(`  ${GOOD}  `) === GOOD);
 for (const bad of [
   'http://fonts.googleapis.com/css2?family=Rubik',      // not https

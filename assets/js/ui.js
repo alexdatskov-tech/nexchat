@@ -355,7 +355,8 @@ window.UI = (function () {
     let u;
     try { u = new URL(String(url).trim()); } catch { return null; }
     if (u.protocol !== 'https:') return null;
-    if (!['fonts.googleapis.com', 'fonts.gstatic.com'].includes(u.hostname)) return null;
+    if (u.hostname !== 'fonts.googleapis.com' || !/^\/css2?$/.test(u.pathname)) return null;
+    if (!googleFontFamily(u.href)) return null;
     return u.href;
   }
 
@@ -366,6 +367,11 @@ window.UI = (function () {
       if (!fam) return null;
       return fam.split(':')[0].replace(/\+/g, ' ').trim() || null;
     } catch { return null; }
+  }
+
+  // Quoted CSS strings need CSS escaping, not HTML escaping.
+  function cssString(value) {
+    return "'" + String(value).replace(/['\\\n\r\f]/g, (c) => '\\' + c.charCodeAt(0).toString(16) + ' ') + "'";
   }
 
   function loadGoogleFont(url) {
@@ -392,7 +398,7 @@ window.UI = (function () {
     const ext = (u.pathname.split('.').pop() || '').toLowerCase();
     const fmt = FONT_FORMATS[ext];
     const st = document.createElement('style');
-    st.textContent = `@font-face{font-family:'${family}';src:url('${url}')${fmt ? ` format('${fmt}')` : ''};font-display:swap;}`;
+    st.textContent = `@font-face{font-family:'${family}';src:url(${cssString(u.href)})${fmt ? ` format('${fmt}')` : ''};font-display:swap;}`;
     document.head.appendChild(st);
     return family;
   }
@@ -410,11 +416,11 @@ window.UI = (function () {
     const t = theme || {};
     if (t.name_font === 'google' && t.name_font_url) {
       const fam = loadGoogleFont(t.name_font_url);
-      if (fam) return `'${fam}', ${NAME_FONTS.display.stack}`;
+      if (fam) return `${cssString(fam)}, ${NAME_FONTS.display.stack}`;
     }
     if (t.name_font === 'upload' && t.name_font_file) {
       const fam = loadFontFile(t.name_font_file, fontFamilyFor(t.name_font_file));
-      if (fam) return `'${fam}', ${NAME_FONTS.display.stack}`;
+      if (fam) return `${cssString(fam)}, ${NAME_FONTS.display.stack}`;
     }
     return nameFontStack(t.name_font);
   }
@@ -424,16 +430,63 @@ window.UI = (function () {
   const CHAT_BLUR_DEFAULT = 12;
   const CHAT_DIM_DEFAULT = 42;
 
+  // Older profiles contain both a key and a signed URL. Ignore stale keys
+  // left behind when the user subsequently selected a preset or external URL.
+  function wallpaperKey(theme) {
+    const t = theme || {};
+    if (!t.dash_wallpaper_key) return '';
+    if (!t.dash_bg) return t.dash_wallpaper_key;
+    try {
+      if (/^url\(/i.test(t.dash_bg) && decodeURIComponent(t.dash_bg).includes(t.dash_wallpaper_key)) {
+        return t.dash_wallpaper_key;
+      }
+    } catch { /* malformed legacy URL */ }
+    return '';
+  }
+
+  const wallpaperUrls = new Map();
+  function wallpaperUrl(key) {
+    const cached = wallpaperUrls.get(key);
+    if (cached && cached.until > Date.now()) return cached.promise;
+    const entry = { until: Date.now() + 50 * 60 * 1000 };
+    entry.promise = Promise.resolve().then(() => window.__nx_tp.presign(key, 60))
+      .then((url) => {
+        if (!url) throw new Error('Could not load wallpaper.');
+        return url;
+      }).catch((err) => { wallpaperUrls.delete(key); throw err; });
+    wallpaperUrls.set(key, entry);
+    return entry.promise;
+  }
+
+  let backgroundVersion = 0, backgroundTimer = null;
   /* Applies a user's chosen wallpaper to whatever page is asking. The dashboard
      grid, the profile editor, DMs and server channels all read the same
      profiles.theme keys, so the wallpaper follows the user around the app
      instead of only dressing the portal. */
   function applyBackground(theme) {
-    const t = theme || {};
+    const t = { ...(theme || {}) };
+    const version = ++backgroundVersion;
+    clearTimeout(backgroundTimer);
+    const key = wallpaperKey(t);
+    if (key) {
+      // Never paint a persisted signature. Resolve the stable key at runtime.
+      return wallpaperUrl(key).then((url) => {
+        if (version !== backgroundVersion) return;
+        applyBackground({ ...t, dash_wallpaper_key: null, dash_bg: `url(${cssString(url)})` });
+        backgroundTimer = setTimeout(() => applyBackground(t), Math.max(1000, wallpaperUrls.get(key).until - Date.now()));
+        return url;
+      }).catch((err) => {
+        if (version !== backgroundVersion) return;
+        console.warn('Wallpaper could not be loaded', err);
+        // A temporary network failure must not make the setting disappear.
+        backgroundTimer = setTimeout(() => applyBackground(t), 60 * 1000);
+      });
+    }
     const root = document.documentElement.style;
     if (!t.dash_bg) {
       document.body.classList.remove('has-bg', 'bg-blur', 'chat-blur');
       document.querySelector('.dash-veil')?.remove();
+      root.removeProperty('--dash-bg');
       return;
     }
     document.body.classList.add('has-bg');
@@ -458,12 +511,12 @@ window.UI = (function () {
     }
   }
 
-  function applyServerName(theme) {
-    const root = document.documentElement.style;
+  function applyServerName(theme, target = document.documentElement) {
+    const root = target.style;
     const col = theme?.name_color;
     root.setProperty('--srv-name-color', /^#[0-9a-fA-F]{6}$/.test(col || '') ? col : '#FFFFFF');
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

@@ -17,11 +17,11 @@ function rootVars(w) {
   for (const sheet of w.document.styleSheets) {
     for (const r of sheet.cssRules || []) {
       if (r.selectorText === ':root') {
-        for (const p of r.style) if (p.startsWith('--')) out[p] = r.style.getPropertyValue(p).trim();
+        for (const p of Array.from(r.style)) if (p.startsWith('--')) out[p] = r.style.getPropertyValue(p).trim();
       }
     }
   }
-  for (const p of w.document.documentElement.style) {
+  for (const p of Array.from(w.document.documentElement.style)) {
     if (p.startsWith('--')) out[p] = w.document.documentElement.style.getPropertyValue(p).trim();
   }
   return out;

@@ -1096,6 +1096,16 @@
     $('srvMembers').textContent = `${n} member${n === 1 ? '' : 's'}`;
     if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
     UI.applyServerName(srv.theme);
+    // Owners may edit appearance in another tab while members stay in chat.
+    // Keep the rendered title in sync instead of freezing it at page load.
+    const appearanceSub = window.db.channel('server-appearance:' + serverId)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${serverId}` }, ({ new: updated }) => {
+        Object.assign(srv, updated);
+        $('srvName').textContent = srv.name;
+        UI.applyServerName(srv.theme);
+        document.documentElement.style.setProperty('--accent', srv.theme?.accent || '#2FBF87');
+      }).subscribe();
+    window.addEventListener('pagehide', () => window.db.removeChannel(appearanceSub), { once: true });
 
     $('meAv').innerHTML = UI.avatar(me, 28, { presence: true });
     $('meName').textContent = me.display_name || me.username;

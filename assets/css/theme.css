@@ -924,12 +924,17 @@ input[type=file]::file-selector-button:hover { background: var(--bg-4); }
    nothing but cost -- it forces the image out of the compositor and makes the
    browser repaint it on every scroll, which is what caused the tearing.
    Promoting it to its own layer keeps it off the repaint path entirely. */
+/* Keep negative wallpaper layers above the body paint, including in the
+   full-height server shell. Isolation does not trap fixed dialogs. */
+body.has-bg { isolation: isolate; }
 body.has-bg::before {
+  pointer-events: none;
   content: ''; position: fixed; inset: 0; z-index: -2;
   background-image: var(--dash-bg); background-size: cover; background-position: center;
   transform: translateZ(0); will-change: transform; backface-visibility: hidden;
 }
 body.has-bg .dash-veil {
+  pointer-events: none;
   position: fixed; inset: 0; z-index: -1;
   background: rgba(13,12,15,var(--dash-dim, .62));
   transform: translateZ(0);
@@ -1460,3 +1465,6 @@ body.is-banned { overflow: hidden; }
   .ban-screen::before, .ban-icon, .ban-title::before, .ban-title::after { animation: none; }
   .ban-title::before, .ban-title::after { opacity: 0; }
 }
+
+/* The settings sidebar shows the same title treatment as the server rail. */
+#navTitle { color: var(--srv-name-color); font-family: var(--srv-name-font); }

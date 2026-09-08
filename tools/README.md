@@ -60,3 +60,14 @@ Two are not jsdom tests:
   regression net: that `is_platform_admin` is never written from the client,
   that the trigger guarding the column is present, and that the last admin
   cannot be demoted.
+
+### Appearance regressions
+
+`node tools/test-appearance.js` runs the real profile/server settings editors
+against mocked persistence and storage. It covers immediate font paste/save,
+colour and uploaded-font round trips, wallpaper key-only persistence, legacy
+expired-URL recovery, failed saves, stale asynchronous results, and switching
+between uploads, presets, external URLs and None. It also guards the wallpaper
+stacking rules used by server chat. No live account or storage credentials are
+needed. Run alongside `test-fonts.js`, `test-srvname.js`, `test-chatbg.js` and
+`test-bgperf.js` (all require `jsdom`).

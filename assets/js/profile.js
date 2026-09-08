@@ -12,6 +12,7 @@
     { n: 'Moss',    v: 'linear-gradient(135deg,#16281B,#101E23 60%,#0D1014)' },
     { n: 'Dusk',    v: 'radial-gradient(120% 100% at 20% 0%,#2B2246,#141222 55%,#0B0A11)' },
   ];
+  let wallpaperKey = '', wallpaperSelection = 0;
   let bgVal = '', bgDim = 0, bgBlur = 0, bgBright = 100, wpFile = null, devMode = false, manualStun = [];
   // Chat-column overlay, defaulted from UI so the slider and the renderer agree.
   let chatBlur = UI.CHAT_BLUR_DEFAULT, chatDim = UI.CHAT_DIM_DEFAULT;
@@ -19,10 +20,10 @@
   // Same applier the rest of the app uses, fed from the in-progress edits so the
   // preview matches exactly what saving will produce.
   function applyBg() {
-    UI.applyBackground({ dash_bg: bgVal, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright, chat_blur: chatBlur, chat_dim: chatDim });
+    UI.applyBackground({ dash_bg: bgVal, dash_wallpaper_key: wallpaperKey, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright, chat_blur: chatBlur, chat_dim: chatDim });
   }
   function paintBgUI() {
-    document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', el.dataset.v === bgVal));
+    document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', !wallpaperKey && !wpFile && el.dataset.v === bgVal));
     $('fBgDim').value = bgDim; $('bgDimV').textContent = bgDim + '%';
     $('fBgBlur').value = bgBlur; $('bgBlurV').textContent = bgBlur + 'px';
     $('fBgBright').value = bgBright; $('bgBrightV').textContent = bgBright + '%';
@@ -94,11 +95,18 @@
   $('bgPresets').innerHTML = BG_PRESETS.map((b) =>
     `<div class="bg-preset" data-v="${b.v}" style="background:${b.v || 'var(--bg-2)'}"><span>${b.n}</span></div>`).join('');
   document.querySelectorAll('.bg-preset').forEach((el) => {
-    el.onclick = () => { bgVal = el.dataset.v; $('fBgUrl').value = ''; paintBgUI(); };
+    el.onclick = () => { clearWallpaper(); bgVal = el.dataset.v; $('fBgUrl').value = ''; paintBgUI(); };
   });
+  function clearWallpaper() {
+    wallpaperSelection++;
+    wallpaperKey = ''; wpFile = null;
+    $('fWallpaper').value = '';
+    $('wpPrev').innerHTML = '<i class="fa-regular fa-image"></i>';
+  }
   $('fBgUrl').oninput = (e) => {
+    clearWallpaper();
     const u = e.target.value.trim();
-    bgVal = u ? `url('${u.replace(/'/g, "%27")}')` : '';
+    bgVal = u ? `url(${UI.cssString(u)})` : '';
     paintBgUI();
   };
   $('fBgDim').oninput = (e) => { bgDim = +e.target.value; paintBgUI(); };
@@ -106,8 +114,11 @@
   $('fWallpaper').onchange = (e) => {
     const f = e.target.files[0]; if (!f) return;
     if (f.size > 10 * 1024 * 1024) { UI.toast('That wallpaper is over 10 MB.', true); e.target.value = ''; return; }
+    clearWallpaper();
     wpFile = f;
+    const selection = wallpaperSelection;
     const preview = (src) => {
+      if (selection !== wallpaperSelection) return;
       $('wpPrev').innerHTML = `<img src="${src}">`;
       bgVal = `url('${src}')`;   // instant local preview; uploads on save
       $('fBgUrl').value = '';
@@ -257,8 +268,8 @@
         theme: { ...(me.theme || {}) },
       };
 
-      // Wallpaper lives in iDrive; Supabase only stores the URL, so the same
-      // background follows this account onto any other device.
+      // Persist the object key, never the temporary S3 signature. Keep it in
+      // editor state too, so a failed profile save can be retried without upload.
       if (wpFile) {
         // TIFF is not renderable as a CSS background; store a PNG instead.
         if (window.Tiff?.isTiff(wpFile.name)) {
@@ -266,13 +277,15 @@
           catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
         }
         const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
-        const up = await window.__nx_tp.put(key, wpFile);
-        bgVal = `url('${up.url}')`;
-        patch.theme.dash_wallpaper_key = key;
+        await window.__nx_tp.put(key, wpFile);
+        wallpaperSelection++;
+        wallpaperKey = key;
+        bgVal = '';
         wpFile = null;
         $('fWallpaper').value = '';
       }
-      patch.theme.dash_bg = bgVal;
+      patch.theme.dash_wallpaper_key = wallpaperKey || null;
+      patch.theme.dash_bg = wallpaperKey ? null : bgVal;
       patch.theme.dash_dim = bgDim;
       patch.theme.dash_blur = bgBlur;
       patch.theme.dash_bright = bgBright;
@@ -303,6 +316,7 @@
       $('avClear').classList.toggle('hidden', !me.avatar_url);
       $('bnClear').classList.toggle('hidden', !me.banner_url);
       UI.toast('Profile saved.');
+      paintBgUI();
       paint();
     } catch (err) {
       UI.toast(err.message || 'Could not save your profile.', true);
@@ -404,7 +418,18 @@
     $('fStatus').value = me.custom_status || '';
     setAccent(me.accent_color || '#2FBF87');
     const th = me.theme || {};
-    bgVal = th.dash_bg || '';
+    clearWallpaper();
+    wallpaperKey = UI.wallpaperKey(th);
+    bgVal = wallpaperKey ? '' : (th.dash_bg || '');
+    $('fBgUrl').value = '';
+    if (wallpaperKey) {
+      const selection = wallpaperSelection;
+      UI.wallpaperUrl(wallpaperKey).then((url) => {
+        if (selection !== wallpaperSelection) return;
+        const img = document.createElement('img'); img.src = url;
+        $('wpPrev').replaceChildren(img);
+      }).catch(() => { /* shared background renderer retries */ });
+    }
     bgDim = th.dash_dim ?? 0;
     bgBlur = th.dash_blur ?? 0;
     bgBright = th.dash_bright ?? 100;
@@ -415,8 +440,8 @@
     wpFile = null;
     if (bgVal.startsWith('url(')) {
       const u = bgVal.slice(5, -2);
-      $('wpPrev').innerHTML = `<img src="${u}">`;
-      if (!th.dash_wallpaper_key) $('fBgUrl').value = u;
+      $('wpPrev').innerHTML = `<img src="${UI.esc(u)}">`;
+      if (!wallpaperKey) $('fBgUrl').value = u;
     } else {
       $('wpPrev').innerHTML = '<i class="fa-regular fa-image"></i>';
     }
