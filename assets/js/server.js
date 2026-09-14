@@ -8,6 +8,103 @@
   const painting = new Set();   // in-flight appendMessage ids (dedupe guard)
   let pending = [];   // files staged in the composer
 
+  /* ================= history paging =================
+     Channels render the latest PAGE messages and only fetch older ones when
+     the user scrolls up. Dumping whole history into the DOM at once is what
+     made busy channels freeze the tab for minutes. */
+  const PAGE = 16;
+  let haveOlder = false;
+  let loadingOlder = false;
+
+  const skeleton = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      ${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
+  const olderBadge = `<div class="msgs-older" hidden><i class="fa-solid fa-circle-notch fa-spin"></i> Loading earlier messages…</div>`;
+
+  const oldestTs = () => {
+    const rows = $('msgs')?.querySelectorAll('.m[data-ts]');
+    return rows?.length ? rows[0].dataset.ts : null;
+  };
+
+  // One page of history, oldest-first. `before` pages backwards from there.
+  async function fetchPage(cid, before) {
+    let q = window.db.from('messages')
+      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
+      .eq('channel_id', cid).order('created_at', { ascending: false }).limit(PAGE);
+    if (before) q = q.lt('created_at', before);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data || []).slice(0, PAGE).reverse();
+  }
+
+  const cacheProfiles = (msgs) => msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
+
+  /* Prepend a page of older messages, keeping the viewport pinned to the row
+     the user was looking at instead of jumping to the top. */
+  async function loadOlder() {
+    const box = $('msgs');
+    if (!box || !active || loadingOlder || !haveOlder) return;
+    loadingOlder = true;
+    const cid = active.id, before = oldestTs();
+    if (!before) { loadingOlder = false; return; }   // nothing rendered to page from
+    const prevH = box.scrollHeight, prevTop = box.scrollTop;
+    const badge = box.querySelector('.msgs-older');
+    if (badge) badge.hidden = false;
+    try {
+      const older = await fetchPage(cid, before);
+      if (!active || active.id !== cid) return;
+      cacheProfiles(older);
+      if (older.length) {
+        const ids = older.map((m) => m.id);
+        const [{ data: rr }, attRes] = await Promise.all([
+          window.db.from('message_reactions').select('*').in('message_id', ids),
+          window.db.from('message_attachments').select('*').in('message_id', ids).order('position', { ascending: true }),
+        ]);
+        let aa = attRes.data;
+        if (attRes.error) {
+          ({ data: aa } = await window.db.from('message_attachments')
+            .select('*').in('message_id', ids).order('created_at', { ascending: true }));
+        }
+        (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
+        (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
+      }
+      if (!active || active.id !== cid) return;
+
+      haveOlder = older.length === PAGE;
+      let html = '', pa = null, pt = null;
+      older.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
+      const first = box.querySelector('.m');
+      if (first) first.insertAdjacentHTML('beforebegin', html);
+      else box.insertAdjacentHTML('afterbegin', html);
+      older.forEach((m) => { paintAtts(m.id); repaintRx(m.id); });
+      if (!haveOlder) {
+        badge?.remove();
+        if (!box.querySelector('.msgs-top')) box.insertAdjacentHTML('afterbegin', intro());
+      }
+      wire(box);
+      regroup();   // the seam row may now group with the batch above it
+
+      // One deliberate correction once the new rows have laid out;
+      // overflow-anchor is off for .msgs so this is not a double adjust.
+      requestAnimationFrame(() => { box.scrollTop = box.scrollHeight - prevH + prevTop; });
+    } catch (err) { UI.toast(err.message, true); }
+    finally {
+      loadingOlder = false;
+      const b = $('msgs')?.querySelector('.msgs-older');
+      if (b) b.hidden = haveOlder ? true : false;
+    }
+  }
+
+  /* If the page doesn't fill the screen there is nothing to scroll, so keep
+     loading history until the view can actually scroll (or history ends). */
+  async function fillView() {
+    const box = $('msgs');
+    if (!box || box.clientHeight <= 0) return;
+    let guard = 0;
+    while (haveOlder && box.scrollHeight <= box.clientHeight + 120 && guard++ < 14) {
+      await loadOlder();
+    }
+  }
+
   const QUICK = ['👍', '🔥', '😂', '❤️', '😮', '🎉'];
 
   async function profileOf(id) {
@@ -131,9 +228,9 @@
         <div class="rx-slot">${rxHtml(m.id)}</div>
       </div>
       <div class="m-acts">
-        <button class="a-rx" title="React"><i class="fa-regular fa-face-smile"></i></button>
-        ${mine ? '<button class="a-ed" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
-        ${mine || canManage ? '<button class="a-del del" title="Delete"><i class="fa-solid fa-trash-can"></i></button>' : ''}
+        ${!m._pending ? '<button class="a-rx" title="React"><i class="fa-regular fa-face-smile"></i></button>' : ''}
+        ${mine && !m._pending ? '<button class="a-ed" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
+        ${(mine || canManage) && !m._pending ? '<button class="a-del del" title="Delete"><i class="fa-solid fa-trash-can"></i></button>' : ''}
       </div>
     </div>`;
   }
@@ -204,16 +301,17 @@
 
   async function loadMessages(cid) {
     const box = $('msgs');
-    box.innerHTML = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
-      ${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
+    box.innerHTML = skeleton;
+    haveOlder = false; loadingOlder = false;
 
-    const { data: msgs, error } = await window.db.from('messages')
-      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
-      .eq('channel_id', cid).order('created_at', { ascending: true }).limit(100);
-    if (error) { box.innerHTML = ''; return UI.toast('Could not load messages: ' + error.message, true); }
-    msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
+    let msgs;
+    try { msgs = await fetchPage(cid); }
+    catch (err) { box.innerHTML = ''; return UI.toast('Could not load messages: ' + err.message, true); }
+    if (!active || active.id !== cid) return;
+    cacheProfiles(msgs);
 
     Object.keys(rx).forEach((k) => delete rx[k]);
+    Object.keys(attCache).forEach((k) => delete attCache[k]);
     if (msgs.length) {
       const ids = msgs.map((m) => m.id);
       const [{ data: rr }, attRes] = await Promise.all([
@@ -228,13 +326,19 @@
       (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
       (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
     }
+    if (!active || active.id !== cid) return;
 
-    let html = intro(), pa = null, pt = 0;
+    // A full page back means there is almost certainly more above it; a short
+    // one means this is the whole channel and the intro belongs at the top.
+    haveOlder = msgs.length === PAGE;
+
+    let html = haveOlder ? olderBadge : intro(), pa = null, pt = 0;
     msgs.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
     box.innerHTML = html;
-    msgs.forEach((m) => paintAtts(m.id));
+    msgs.forEach((m) => { paintAtts(m.id); repaintRx(m.id); });
     wire(box);
     box.scrollTop = box.scrollHeight;
+    fillView();
   }
 
   function addRx(mid, e, uid) {
@@ -416,9 +520,14 @@
     }, d));
   }
 
+  // Pending (not yet inserted) bubbles carry a client clock and no server row,
+  // so they must never feed the catch-up watermark or the delete reconciler.
+  const serverRows = () => [...($('msgs')?.querySelectorAll('.m[data-id]') || [])]
+    .filter((el) => !el.dataset.id.startsWith('tmp-'));
+
   const newestTs = () => {
-    const rows = $('msgs')?.querySelectorAll('.m');
-    return rows?.length ? rows[rows.length - 1].dataset.ts : null;
+    const rows = serverRows();
+    return rows.length ? rows[rows.length - 1].dataset.ts : null;
   };
 
   /* Pulls anything posted since the newest row we already show. This is what
@@ -455,9 +564,10 @@
      text refreshed if the content changed, and any id that does NOT come
      back has been deleted, so its row goes. */
   async function catchUpEdits(cid) {
-    const els = [...document.querySelectorAll('#msgs .m[data-id]')];
-    if (!els.length) return;
-    const ids = els.slice(-60).map((el) => el.dataset.id);
+    // serverRows() skips pending tmp bubbles: they have no row yet, and this
+    // reconciler removes any id the server doesn't know about.
+    const ids = serverRows().slice(-60).map((el) => el.dataset.id);
+    if (!ids.length) return;
     const { data, error } = await window.db.from('messages')
       .select('id,content,edited_at').in('id', ids);
     if (error || !data || !active || active.id !== cid) return;
@@ -506,7 +616,7 @@
      re-read the full set for the visible messages and diff it against what
      we're showing, which picks up adds and removes in one pass. */
   async function catchUpRx(cid) {
-    const ids = [...document.querySelectorAll('#msgs .m[data-id]')].map((el) => el.dataset.id);
+    const ids = serverRows().map((el) => el.dataset.id);
     if (!ids.length) return;
     const { data, error } = await window.db.from('message_reactions')
       .select('message_id,emoji,user_id').in('message_id', ids.slice(-60));
@@ -644,6 +754,12 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
   window.addEventListener('online', () => { if (active) { catchUp(); listen(active.id); } });
 
+  // Scrolling to the top is the signal to page back through history.
+  $('msgs').addEventListener('scroll', () => {
+    if ($('msgs').scrollTop > 140) return;
+    loadOlder();
+  }, { passive: true });
+
   /* ================= composer + uploads ================= */
   function paintTray() {
     const t = $('tray');
@@ -675,21 +791,50 @@
   function composer() {
     const ta = $('input');
 
-    const send = async () => {
+    /* Sends are serialized so two quick Enters can't have their inserts race
+       into each other's order. The input clears instantly either way. */
+    let sendChain = Promise.resolve();
+    const send = () => {
       const v = ta.value.trim();
       const files = pending.slice();
       if (!v && !files.length) return;
       if (!active) return;
-
       ta.value = ''; ta.style.height = 'auto';
       pending = []; paintTray();
+      sendChain = sendChain.then(() => doSend(v, files)).catch(() => {});
+    };
+
+    async function doSend(v, files) {
+      if (!active) return;
+
+      // Paint a pending bubble immediately: sending must never wait on the
+      // network round-trip, let alone on a busy render loop.
+      const box = $('msgs');
+      const tmp = {
+        id: 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+        channel_id: active.id, author_id: me.id,
+        content: v || null, created_at: new Date().toISOString(), _pending: true,
+      };
+      let el = null;
+      if (box && box.querySelector('.m')) {
+        const last = box.querySelector('.m:last-of-type');
+        box.insertAdjacentHTML('beforeend', row(tmp, grouped(last.dataset.au, last.dataset.ts, tmp)));
+        el = box.lastElementChild;
+        el.classList.add('sending');
+        wire(el);
+        box.scrollTop = box.scrollHeight;
+      }
 
       const { data: msg, error } = await window.db.from('messages')
         .insert({ channel_id: active.id, author_id: me.id, content: v || null }).select().single();
-      if (error) { UI.toast(error.message, true); return; }
-
-      // Paint our own message right away. Waiting on the realtime echo meant
-      // that whenever the socket was down you couldn't even see what you sent.
+      if (error) {
+        el?.remove(); regroup();
+        if (!ta.value.trim()) ta.value = v;   // give the text back — nothing was lost
+        return UI.toast(error.message, true);
+      }
+      el?.remove();
+      // Swaps the pending bubble for the real row. Dedupes against the
+      // realtime echo and the catch-up poll, whichever got there first.
       await appendMessage(msg);
 
       if (files.length) {

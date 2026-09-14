@@ -9,7 +9,12 @@ window.Voice = (function () {
   const members = new Map();        // uid -> profile + flags
   let me = null, chan = null, srvId = null;
   let muted = false, deaf = false, cam = false, sharing = false;
-  let targetFps = 60, tick4 = 0;
+  // 720p60 software encode is where CPUs start dropping frames wholesale; 30
+  // is what the encoder can actually sustain, so make that the target.
+  let targetFps = 30, tick4 = 0;
+  // 720p30 stays crisp well under 2.5 Mbps; demanding more only taught the
+  // congestion controller to starve the stream down to a slideshow.
+  const CAM_KBPS = 2500;
   let onChange = () => {}, onSpeak = () => {}, onStats = () => {};
   let actx = null, rafId = null, statTimer = null;
   const meters = new Map();
@@ -144,22 +149,32 @@ window.Voice = (function () {
     rec.ready = true;
   }
 
-  /* Chrome's default is to sacrifice framerate to keep resolution up, which is
-     what pinned us around 25fps. Ask it to do the opposite and give the encoder
-     enough bitrate headroom to actually hit the target. */
+  /* The old tuning asked Chrome to hold resolution and "let fps absorb the
+     hit" (degradationPreference: maintain-resolution). Under the slightest
+     bandwidth or CPU pressure that is exactly what happened: 720p held,
+     framerate cratered to a couple of frames per second. For a call the
+     opposite trade is right — keep it moving, scale the picture if it must.
+     Settings are only written when they actually differ: re-asserting
+     identical parameters makes Chrome reconfigure the encoder, which costs a
+     keyframe and a visible hitch every time. */
   async function tuneSender(sender, fps, kbps) {
     if (!sender) return;
     try {
       const p = sender.getParameters();
-      // maintain-resolution: hold the picture size and let fps absorb the hit,
-      // rather than silently dropping to 480p to chase a frame count.
-      p.degradationPreference = 'maintain-resolution';
       p.encodings = p.encodings && p.encodings.length ? p.encodings : [{}];
-      p.encodings[0].scaleResolutionDownBy = 1;
-      p.encodings[0].maxFramerate = fps;
-      p.encodings[0].maxBitrate = kbps * 1000;
-      p.encodings[0].networkPriority = 'high';
-      p.encodings[0].priority = 'high';
+      const e = p.encodings[0];
+      const want = {
+        scaleResolutionDownBy: 1,
+        maxFramerate: fps,
+        maxBitrate: kbps * 1000,
+        networkPriority: 'high',
+        priority: 'high',
+      };
+      const dirty = p.degradationPreference !== 'maintain-framerate'
+        || Object.entries(want).some(([k, v]) => e[k] !== v);
+      if (!dirty) return;
+      p.degradationPreference = 'maintain-framerate';
+      Object.assign(e, want);
       await sender.setParameters(p);
     } catch {}
   }
@@ -168,7 +183,7 @@ window.Voice = (function () {
     try {
       if (rec.tx.cam) {
         rec.tx.cam.sender.replaceTrack(cam ? camTrack : null);
-        if (cam) tuneSender(rec.tx.cam.sender, targetFps, 4000);
+        if (cam) tuneSender(rec.tx.cam.sender, targetFps, CAM_KBPS);
       }
     } catch {}
   }
@@ -533,11 +548,13 @@ window.Voice = (function () {
       try {
         const s = await navigator.mediaDevices.getUserMedia({
           video: {
-            // Pinned to 720p. Resolution is held no matter what, and framerate
-            // is what gives if the link or CPU can't keep up.
-            width: { min: 1280, ideal: 1280, max: 1280 },
-            height: { min: 720, ideal: 720, max: 720 },
-            frameRate: { ideal: 60 },
+            // Aim for 720p without pinning it: a hard `min` makes the whole
+            // request fail on phones reporting a portrait 720x1280 sensor.
+            // Capture at ~30fps — the encoder is capped there anyway, so
+            // demanding 60 only wastes camera and CPU headroom.
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 60 },
             resizeMode: 'crop-and-scale',
           },
         });
@@ -553,7 +570,10 @@ window.Voice = (function () {
   }
 
   const screenSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
-  let screenQuality = { w: 1920, h: 1080, kbps: 8000 };
+  /* Bitrates sized to what an average uplink can carry alongside the camera
+     and the audio. The old 8 Mbps 1080p preset taught the congestion
+     controller to collapse the whole call into a slideshow. */
+  let screenQuality = { w: 1920, h: 1080, kbps: 5000 };
 
   async function stopShare() {
     if (!sharing) return;
@@ -571,12 +591,12 @@ window.Voice = (function () {
       return;
     }
     const q = opts.quality || '1080';
-    screenQuality = q === '720' ? { w: 1280, h: 720, kbps: 5000 }
-                  : q === 'auto' ? { w: 1920, h: 1080, kbps: 4000 }
-                  : { w: 1920, h: 1080, kbps: 8000 };
+    screenQuality = q === '720' ? { w: 1280, h: 720, kbps: 3000 }
+                  : q === 'auto' ? { w: 1920, h: 1080, kbps: 2500 }
+                  : { w: 1920, h: 1080, kbps: 5000 };
 
     const video = {
-      frameRate: { min: 30, ideal: 60 },
+      frameRate: { ideal: 30, max: 60 },
       width: { ideal: screenQuality.w, max: screenQuality.w },
       height: { ideal: screenQuality.h, max: screenQuality.h },
     };
@@ -598,7 +618,7 @@ window.Voice = (function () {
 
     const st = screen.getVideoTracks()[0];
     try { st.contentHint = 'motion'; } catch {}
-    try { await st.applyConstraints({ frameRate: { min: 30, ideal: 60 } }); } catch {}
+    try { await st.applyConstraints({ frameRate: { ideal: 30, max: 60 } }); } catch {}
     st.onended = () => stopShare();
     sharing = true;
 
@@ -633,11 +653,12 @@ window.Voice = (function () {
     return s && s.getVideoTracks().some((t) => t.readyState === 'live') ? s : null;
   };
 
-  /* Resolution is fixed, so there's nothing to scale — this just re-asserts
-     the encoder settings in case the browser quietly reset them. */
+  /* Periodically re-check the encoder settings in case the browser quietly
+     reset them. tuneSender() only writes when something actually differs, so
+     this no longer reconfigures (and stutters) a healthy encoder every 5s. */
   async function autoTune() {
     if (!cam && !sharing) return;
-    for (const rec of peers.values()) if (cam) await tuneSender(rec.tx.cam?.sender, targetFps, 4000);
+    for (const rec of peers.values()) if (cam) await tuneSender(rec.tx.cam?.sender, targetFps, CAM_KBPS);
     for (const rec of scrOut.values()) {
       await tuneSender(rec.pc.getSenders().find((s) => s.track && s.track.kind === 'video'),
                        targetFps, screenQuality.kbps);

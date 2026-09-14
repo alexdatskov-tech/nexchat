@@ -438,7 +438,11 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
   border-left: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.msgs { flex: 1; overflow-y: auto; padding: 16px 4px 8px; display: flex; flex-direction: column; }
+/* overflow-anchor off: prepending older history adjusts scrollTop itself, and
+   the browser's own anchoring would double-correct and make the view jump. */
+.msgs { flex: 1; overflow-y: auto; padding: 16px 4px 8px; display: flex; flex-direction: column; overflow-anchor: none; }
+.msgs-older { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; font-size: 12.5px; color: var(--txt-3); }
+.msgs-older[hidden] { display: none; }
 .msgs-top { padding: 22px 14px 18px; }
 .msgs-top .big-ico {
   width: 52px; height: 52px; border-radius: 50%; background: var(--bg-2); border: 1px solid var(--line);
@@ -448,6 +452,10 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 5px; }
 .msgs-top p { font-size: 13.5px; color: var(--txt-2); margin: 0; }
 
 .m { display: flex; gap: 11px; padding: 3px 14px; position: relative; }
+/* Bubble still in flight — visible immediately, dimmed until the server
+   acknowledges the insert and the real row replaces it. */
+.m.sending .m-text { opacity: .55; }
+.m.sending .m-time::after { content: ' · sending'; font-style: italic; }
 .m:hover { background: rgba(255,255,255,.018); }
 .m:hover .m-acts { opacity: 1; pointer-events: auto; }
 .m.grp { padding-top: 1px; padding-bottom: 1px; }

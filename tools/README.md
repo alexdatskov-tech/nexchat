@@ -49,6 +49,19 @@ prints one line per assertion and exits non-zero on the first failure.
 
 `runall.sh` runs the lot.
 
+### History paging and optimistic send
+
+`node tools/test-pagination.js` runs the real `server.js` and `dms.js` against
+a mock Supabase that honours `order`/`limit`/`lt`. It pins the behaviour that
+keeps long conversations usable: opening a channel or DM renders only the
+latest 16 messages, scrolling to the top pages older history in one batch at
+a time with the viewport anchored, the "beginning of the conversation" card
+only appears once history is actually exhausted, and no row ever duplicates.
+It also covers sending: a pending bubble must paint before the insert
+resolves, survive a catch-up poll while in flight (the delete reconciler
+skips `tmp-` rows), and be swapped for the real row when the insert lands —
+with exactly one insert per send.
+
 Two are not jsdom tests:
 
 - `test-sql.js` parses every `nexchat_patch*.sql` with the real Postgres
