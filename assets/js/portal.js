@@ -8,20 +8,15 @@
   const DEFAULT_BANNER = 'linear-gradient(135deg,#F2F3F6 0%,#D5D8DF 48%,#BFC3CC 100%)';
   function banner() { return DEFAULT_BANNER; }
 
-  // Applies the saved dashboard background from profiles.theme.
-  function applyDashboardBg(theme) {
-    const t = theme || {};
-    if (!t.dash_bg) { document.body.classList.remove('has-bg'); return; }
-    document.body.classList.add('has-bg');
-    document.documentElement.style.setProperty('--dash-bg', t.dash_bg);
-    document.documentElement.style.setProperty('--dash-dim', (t.dash_dim ?? 0) / 100);
-    document.documentElement.style.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
-    document.documentElement.style.setProperty('--dash-bright', (t.dash_bright ?? 100) / 100);
-    if (!document.querySelector('.dash-veil')) {
-      const v = document.createElement('div');
-      v.className = 'dash-veil';
-      document.body.appendChild(v);
-    }
+  // The wallpaper is shared with DMs and server channels, so the work lives in UI.
+  const applyDashboardBg = (theme) => UI.applyBackground(theme);
+
+  /* Each card carries its own server's name styling, so one global variable
+     cannot be used here the way it is on a single-server page. */
+  function nameStyle(theme) {
+    const col = theme?.name_color;
+    const safe = /^#[0-9a-fA-F]{6}$/.test(col || '') ? col : '#FFFFFF';
+    return `color:${safe};font-family:${UI.resolveNameFont(theme)}`;
   }
 
   function card(s) {
@@ -34,7 +29,7 @@
         <div class="scard-banner" style="${bg};background-size:cover;"></div>
         <div class="scard-ico">${ico}</div>
         <div class="scard-body">
-          <div class="scard-name">
+          <div class="scard-name" style="${UI.esc(nameStyle(s.theme))}">
             <span>${UI.esc(s.name)}</span>
             ${owner ? '<span class="badge badge-owner">Owner</span>' : ''}
           </div>
@@ -96,7 +91,10 @@
     const f = e.target.files[0]; if (!f) return;
     iconFile = f;
     const r = new FileReader();
-    r.onload = (ev) => { $('cIconPrev').innerHTML = `<img src="${ev.target.result}" alt="">`; };
+    r.onload = (ev) => {
+      $('cIconPrev').innerHTML = `<img src="${ev.target.result}" alt="">`;
+      window.Tiff?.hydrateFile($('cIconPrev').querySelector('img'), f);
+    };
     r.readAsDataURL(f);
   };
 
@@ -145,7 +143,8 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me) { UI.toast('Profile missing — try signing out and back in.', true); return; }
-window.Notify?.start(me);
+    window.Notify?.start(me);
+    window.Guard?.start(me);
     applyDashboardBg(me.theme);
     $('meAv').innerHTML = UI.avatar(me, 24);
     $('meName').textContent = me.display_name || me.username;

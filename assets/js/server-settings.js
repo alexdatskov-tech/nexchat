@@ -42,13 +42,106 @@
   $('sAccentHex').oninput = (e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value.trim())) setAccent(e.target.value.trim()); };
   $('sAccentReset').onclick = () => setAccent('#2FBF87');
 
+  /* ---- server name colour + font ---- */
+  const NAME_PRESETS = ['#FFFFFF', '#EDEBEF', '#2FBF87', '#3B9EF5', '#8B7CF6', '#E8659A', '#E8B04B', '#E5484D'];
+  let nameFont = 'display';
+
+  function setNameColor(hex) {
+    $('sNameColor').value = hex;
+    $('sNameHex').value = hex.toUpperCase();
+    document.documentElement.style.setProperty('--srv-name-color', hex);
+    document.querySelectorAll('#sNameSwatches .swatch').forEach((s) => s.classList.toggle('on', s.dataset.c.toLowerCase() === hex.toLowerCase()));
+  }
+  // Custom sources live alongside the built-in keys: 'google' loads a Google
+  // Fonts stylesheet, 'upload' registers an uploaded face via @font-face.
+  let fontUrl = '';        // validated current Google Fonts URL
+  let fontFileUrl = '';    // public URL of an already-uploaded face
+  let fontPreviewUrl = '';
+  let fontFile = null;     // pending upload, flushed on save
+
+  function fontKeyOk(key) {
+    return !!UI.NAME_FONTS[key] || key === 'google' || key === 'upload';
+  }
+
+  // Repaints the preview from whichever source is currently selected.
+  function previewFont() {
+    document.documentElement.style.setProperty('--srv-name-font', UI.resolveNameFont({
+      name_font: nameFont,
+      name_font_url: fontUrl,
+      name_font_file: fontPreviewUrl || fontFileUrl,
+    }));
+  }
+
+  function setNameFont(key) {
+    nameFont = fontKeyOk(key) ? key : 'display';
+    $('sNameFont').value = nameFont;
+    $('sFontGoogle').classList.toggle('hidden', nameFont !== 'google');
+    $('sFontUpload').classList.toggle('hidden', nameFont !== 'upload');
+    previewFont();
+  }
+
+  $('sNameSwatches').innerHTML = NAME_PRESETS.map((c) => `<div class="swatch" data-c="${c}" style="background:${c}"></div>`).join('');
+  document.querySelectorAll('#sNameSwatches .swatch').forEach((s) => { s.onclick = () => setNameColor(s.dataset.c); });
+  $('sNameFont').innerHTML = Object.entries(UI.NAME_FONTS)
+    .map(([k, v]) => `<option value="${k}" style="font-family:${v.stack}">${v.label}</option>`)
+    .concat([
+      '<option value="google">Google Font…</option>',
+      '<option value="upload">Upload a font…</option>',
+    ]).join('');
+  $('sNameColor').oninput = (e) => setNameColor(e.target.value);
+  $('sNameHex').oninput = (e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value.trim())) setNameColor(e.target.value.trim()); };
+  $('sNameFont').onchange = (e) => setNameFont(e.target.value);
+
+  // Debounced so we don't inject a <link> for every keystroke mid-paste.
+  let urlT = null;
+  function readFontUrl() {
+    const input = $('sNameFontUrl');
+    const raw = input.value.trim().replace(/&amp;/g, '&');
+    // Accept a URL, @import, or the link snippet copied from Google Fonts.
+    const m = raw.match(/https:\/\/fonts\.googleapis\.com\/[^\s'"()<>]+/);
+    fontUrl = (m && UI.googleFontHref(m[0])) || '';
+    input.classList.toggle('bad', !!raw && !fontUrl);
+    return fontUrl;
+  }
+  $('sNameFontUrl').oninput = () => {
+    clearTimeout(urlT);
+    urlT = setTimeout(() => { readFontUrl(); previewFont(); }, 350);
+  };
+
+  $('sNameFontFile').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (!/\.(woff2?|ttf|otf)$/i.test(f.name)) { UI.toast('Use a WOFF2, WOFF, TTF or OTF file.', true); e.target.value = ''; return; }
+    if (f.size > 3 * 1024 * 1024) { UI.toast('Font files must be under 3 MB.', true); e.target.value = ''; return; }
+    fontFile = f;
+    $('sFontFileName').textContent = f.name;
+    // Preview straight off the local blob; the real upload happens on save.
+    if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+    fontPreviewUrl = URL.createObjectURL(f);
+    previewFont();
+  };
+
+  $('sNameReset').onclick = () => {
+    clearTimeout(urlT);
+    setNameColor('#FFFFFF');
+    if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+    fontPreviewUrl = '';
+    fontUrl = ''; fontFileUrl = ''; fontFile = null;
+    $('sNameFontUrl').value = ''; $('sNameFontFile').value = ''; $('sFontFileName').textContent = '';
+    setNameFont('display');
+  };
+  $('sName').oninput = (e) => { $('sNamePreview').textContent = e.target.value.trim() || 'Server name'; };
+
   /* ---- uploads ---- */
   function wireUp(inp, prev, cb, maxMb) {
     $(inp).onchange = (e) => {
       const f = e.target.files[0]; if (!f) return;
       if (f.size > maxMb * 1024 * 1024) { UI.toast(`Over ${maxMb} MB.`, true); e.target.value = ''; return; }
       const r = new FileReader();
-      r.onload = (ev) => { $(prev).innerHTML = `<img src="${ev.target.result}">`; cb(f); };
+      r.onload = (ev) => {
+        $(prev).innerHTML = `<img src="${ev.target.result}">`;
+        window.Tiff?.hydrateFile($(prev).querySelector('img'), f);
+        cb(f);
+      };
       r.readAsDataURL(f);
     };
   }
@@ -59,18 +152,40 @@
   $('btnSave').onclick = async () => {
     const b = $('btnSave'); b.disabled = true; b.textContent = 'Saving…';
     try {
+      // Flush pending input before save; clicking immediately after paste must
+      // not save the previous font (or reject a valid new one).
+      clearTimeout(urlT);
+      if (nameFont === 'google') readFontUrl();
+      const color = $('sNameHex').value.trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Enter a six-digit hex title colour.');
+      setNameColor(color);
       const patch = {
         name: $('sName').value.trim(),
         description: $('sDesc').value.trim() || null,
-        theme: { ...(srv.theme || {}), accent: $('sAccent').value },
+        theme: {
+          ...(srv.theme || {}),
+          accent: $('sAccent').value,
+          name_color: $('sNameColor').value,
+          name_font: nameFont,
+        },
       };
       if (patch.name.length < 2) throw new Error('The server needs a name of at least 2 characters.');
+      if (nameFont === 'google' && !fontUrl) throw new Error('Paste a fonts.googleapis.com URL, or pick another typeface.');
+      if (nameFont === 'upload' && !fontFile && !fontFileUrl) throw new Error('Choose a font file, or pick another typeface.');
       if (icoFile) patch.icon_url = await UI.upload('server-icons', icoFile, sid);
       if (banFile) patch.banner_url = await UI.upload('server-banners', banFile, sid);
+      if (fontFile) { fontFileUrl = await UI.upload('server-icons', fontFile, `${sid}/fonts`); fontFile = null; }
+      patch.theme.name_font_url = fontUrl || null;
+      patch.theme.name_font_file = fontFileUrl || null;
 
       const { error } = await window.db.from('servers').update(patch).eq('id', sid);
       if (error) throw error;
       Object.assign(srv, patch);
+      if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+      fontPreviewUrl = '';
+      $('navTitle').textContent = srv.name;
+      document.title = `${srv.name} — Settings`;
+      previewFont();
       icoFile = banFile = null;
       UI.toast('Server updated.');
     } catch (err) { UI.toast(err.message || 'Could not save.', true); }
@@ -262,7 +377,7 @@
   let memCache = [], roleCache = [];
   async function loadMembers() {
     const [{ data: mem }, { data: roles }] = await Promise.all([
-      window.db.from('server_members').select('*, profiles(id,username,display_name,avatar_url,accent_color,is_nitro)').eq('server_id', sid),
+      window.db.from('server_members').select('*, profiles(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)').eq('server_id', sid),
       window.db.from('roles').select('*').eq('server_id', sid),
     ]);
     const { data: mr } = await window.db.from('member_roles').select('*').eq('server_id', sid);
@@ -402,6 +517,9 @@
   };
 
   function hydrate() {
+    clearTimeout(urlT);
+    if (fontPreviewUrl) URL.revokeObjectURL(fontPreviewUrl);
+    fontPreviewUrl = '';
     $('sName').value = srv.name || '';
     $('sDesc').value = srv.description || '';
     $('icoPrev').innerHTML = srv.icon_url ? `<img src="${UI.esc(srv.icon_url)}">` : '<i class="fa-regular fa-image"></i>';
@@ -413,6 +531,16 @@
       $('banPrev').style.background = 'linear-gradient(135deg,#F2F3F6 0%,#D5D8DF 48%,#BFC3CC 100%)';
     }
     setAccent(srv.theme?.accent || '#2FBF87');
+    setNameColor(/^#[0-9a-fA-F]{6}$/.test(srv.theme?.name_color || '') ? srv.theme.name_color : '#FFFFFF');
+    fontUrl = UI.googleFontHref(srv.theme?.name_font_url || '') || '';
+    fontFileUrl = srv.theme?.name_font_file || '';
+    fontFile = null;
+    $('sNameFontUrl').value = fontUrl;
+    $('sNameFontUrl').classList.remove('bad');
+    $('sNameFontFile').value = '';
+    $('sFontFileName').textContent = fontFileUrl ? 'Saved font in use' : '';
+    setNameFont(srv.theme?.name_font || 'display');
+    $('sNamePreview').textContent = srv.name || 'Server name';
     icoFile = banFile = null;
     $('sIcon').value = ''; $('sBanner').value = '';
   }
@@ -427,7 +555,10 @@
     const { data, error } = await window.db.from('servers').select('*').eq('id', sid).single();
     if (error || !data) { UI.toast('Server not found.', true); return; }
     srv = data;
-window.Notify?.start(me);
+    window.Notify?.start(me);
+    window.Guard?.start(me);
+    window.Presence?.start(me);
+    window.Presence?.onChange(() => window.Presence.refreshDots());
     isOwner = srv.owner_id === me.id;
     $('navTitle').textContent = srv.name;
     document.title = `${srv.name} — Settings`;

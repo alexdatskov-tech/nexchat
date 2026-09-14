@@ -5,14 +5,112 @@
   let channels = [], active = null, sub = null, canManage = false;
   let voiceChan = null, voicePoll = null;
   const profiles = {}, rx = {}, attCache = {};
+  const painting = new Set();   // in-flight appendMessage ids (dedupe guard)
   let pending = [];   // files staged in the composer
+
+  /* ================= history paging =================
+     Channels render the latest PAGE messages and only fetch older ones when
+     the user scrolls up. Dumping whole history into the DOM at once is what
+     made busy channels freeze the tab for minutes. */
+  const PAGE = 16;
+  let haveOlder = false;
+  let loadingOlder = false;
+
+  const skeleton = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+      ${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
+  const olderBadge = `<div class="msgs-older" hidden><i class="fa-solid fa-circle-notch fa-spin"></i> Loading earlier messages…</div>`;
+
+  const oldestTs = () => {
+    const rows = $('msgs')?.querySelectorAll('.m[data-ts]');
+    return rows?.length ? rows[0].dataset.ts : null;
+  };
+
+  // One page of history, oldest-first. `before` pages backwards from there.
+  async function fetchPage(cid, before) {
+    let q = window.db.from('messages')
+      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
+      .eq('channel_id', cid).order('created_at', { ascending: false }).limit(PAGE);
+    if (before) q = q.lt('created_at', before);
+    const { data, error } = await q;
+    if (error) throw error;
+    return (data || []).slice(0, PAGE).reverse();
+  }
+
+  const cacheProfiles = (msgs) => msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
+
+  /* Prepend a page of older messages, keeping the viewport pinned to the row
+     the user was looking at instead of jumping to the top. */
+  async function loadOlder() {
+    const box = $('msgs');
+    if (!box || !active || loadingOlder || !haveOlder) return;
+    loadingOlder = true;
+    const cid = active.id, before = oldestTs();
+    if (!before) { loadingOlder = false; return; }   // nothing rendered to page from
+    const prevH = box.scrollHeight, prevTop = box.scrollTop;
+    const badge = box.querySelector('.msgs-older');
+    if (badge) badge.hidden = false;
+    try {
+      const older = await fetchPage(cid, before);
+      if (!active || active.id !== cid) return;
+      cacheProfiles(older);
+      if (older.length) {
+        const ids = older.map((m) => m.id);
+        const [{ data: rr }, attRes] = await Promise.all([
+          window.db.from('message_reactions').select('*').in('message_id', ids),
+          window.db.from('message_attachments').select('*').in('message_id', ids).order('position', { ascending: true }),
+        ]);
+        let aa = attRes.data;
+        if (attRes.error) {
+          ({ data: aa } = await window.db.from('message_attachments')
+            .select('*').in('message_id', ids).order('created_at', { ascending: true }));
+        }
+        (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
+        (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
+      }
+      if (!active || active.id !== cid) return;
+
+      haveOlder = older.length === PAGE;
+      let html = '', pa = null, pt = null;
+      older.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
+      const first = box.querySelector('.m');
+      if (first) first.insertAdjacentHTML('beforebegin', html);
+      else box.insertAdjacentHTML('afterbegin', html);
+      older.forEach((m) => { paintAtts(m.id); repaintRx(m.id); });
+      if (!haveOlder) {
+        badge?.remove();
+        if (!box.querySelector('.msgs-top')) box.insertAdjacentHTML('afterbegin', intro());
+      }
+      wire(box);
+      regroup();   // the seam row may now group with the batch above it
+
+      // One deliberate correction once the new rows have laid out;
+      // overflow-anchor is off for .msgs so this is not a double adjust.
+      requestAnimationFrame(() => { box.scrollTop = box.scrollHeight - prevH + prevTop; });
+    } catch (err) { UI.toast(err.message, true); }
+    finally {
+      loadingOlder = false;
+      const b = $('msgs')?.querySelector('.msgs-older');
+      if (b) b.hidden = haveOlder ? true : false;
+    }
+  }
+
+  /* If the page doesn't fill the screen there is nothing to scroll, so keep
+     loading history until the view can actually scroll (or history ends). */
+  async function fillView() {
+    const box = $('msgs');
+    if (!box || box.clientHeight <= 0) return;
+    let guard = 0;
+    while (haveOlder && box.scrollHeight <= box.clientHeight + 120 && guard++ < 14) {
+      await loadOlder();
+    }
+  }
 
   const QUICK = ['👍', '🔥', '😂', '❤️', '😮', '🎉'];
 
   async function profileOf(id) {
     if (profiles[id]) return profiles[id];
     const { data } = await window.db.from('profiles')
-      .select('id,username,display_name,avatar_url,accent_color,is_nitro').eq('id', id).single();
+      .select('id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', id).single();
     profiles[id] = data || { username: 'unknown', display_name: 'Unknown' };
     return profiles[id];
   }
@@ -130,9 +228,9 @@
         <div class="rx-slot">${rxHtml(m.id)}</div>
       </div>
       <div class="m-acts">
-        <button class="a-rx" title="React"><i class="fa-regular fa-face-smile"></i></button>
-        ${mine ? '<button class="a-ed" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
-        ${mine || canManage ? '<button class="a-del del" title="Delete"><i class="fa-solid fa-trash-can"></i></button>' : ''}
+        ${!m._pending ? '<button class="a-rx" title="React"><i class="fa-regular fa-face-smile"></i></button>' : ''}
+        ${mine && !m._pending ? '<button class="a-ed" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
+        ${(mine || canManage) && !m._pending ? '<button class="a-del del" title="Delete"><i class="fa-solid fa-trash-can"></i></button>' : ''}
       </div>
     </div>`;
   }
@@ -203,16 +301,17 @@
 
   async function loadMessages(cid) {
     const box = $('msgs');
-    box.innerHTML = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
-      ${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
+    box.innerHTML = skeleton;
+    haveOlder = false; loadingOlder = false;
 
-    const { data: msgs, error } = await window.db.from('messages')
-      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro)')
-      .eq('channel_id', cid).order('created_at', { ascending: true }).limit(100);
-    if (error) { box.innerHTML = ''; return UI.toast('Could not load messages: ' + error.message, true); }
-    msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
+    let msgs;
+    try { msgs = await fetchPage(cid); }
+    catch (err) { box.innerHTML = ''; return UI.toast('Could not load messages: ' + err.message, true); }
+    if (!active || active.id !== cid) return;
+    cacheProfiles(msgs);
 
     Object.keys(rx).forEach((k) => delete rx[k]);
+    Object.keys(attCache).forEach((k) => delete attCache[k]);
     if (msgs.length) {
       const ids = msgs.map((m) => m.id);
       const [{ data: rr }, attRes] = await Promise.all([
@@ -227,13 +326,19 @@
       (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
       (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
     }
+    if (!active || active.id !== cid) return;
 
-    let html = intro(), pa = null, pt = 0;
+    // A full page back means there is almost certainly more above it; a short
+    // one means this is the whole channel and the intro belongs at the top.
+    haveOlder = msgs.length === PAGE;
+
+    let html = haveOlder ? olderBadge : intro(), pa = null, pt = 0;
     msgs.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
     box.innerHTML = html;
-    msgs.forEach((m) => paintAtts(m.id));
+    msgs.forEach((m) => { paintAtts(m.id); repaintRx(m.id); });
     wire(box);
     box.scrollTop = box.scrollHeight;
+    fillView();
   }
 
   function addRx(mid, e, uid) {
@@ -306,11 +411,21 @@
     document.querySelectorAll('.picker').forEach((p) => p.remove());
     const p = document.createElement('div');
     p.className = 'picker';
-    p.innerHTML = QUICK.map((e) => `<button data-e="${e}">${e}</button>`).join('');
+    p.innerHTML = QUICK.map((e) => `<button data-e="${e}">${e}</button>`).join('')
+      + '<span class="pk-sep"></span>'
+      + '<button class="pk-more" title="More emoji"><i class="fa-solid fa-plus"></i></button>';
     rowEl.appendChild(p);
-    p.querySelectorAll('button').forEach((b) => {
+    p.querySelectorAll('button[data-e]').forEach((b) => {
       b.onclick = (ev) => { ev.stopPropagation(); toggleRx(mid, b.dataset.e); p.remove(); };
     });
+    // "+" hands off to the full searchable catalogue.
+    p.querySelector('.pk-more').onclick = (ev) => {
+      ev.stopPropagation();
+      p.remove();
+      // Anchor on the message's react button: `p` is gone by now, so a
+      // child of it would measure as a zero-size rect at 0,0.
+      window.EmojiPicker?.open(btn, (emoji) => toggleRx(mid, emoji));
+    };
     setTimeout(() => document.addEventListener('click', function off(ev) {
       if (!p.contains(ev.target) && !btn.contains(ev.target)) { p.remove(); document.removeEventListener('click', off); }
     }), 0);
@@ -364,34 +479,212 @@
     };
   }
 
+  /* ================= message painting + catch-up =================
+     Rendering a message must never depend on the realtime echo coming back.
+     Everything below (realtime, the catch-up poller, and your own send) funnels
+     through appendMessage, so a message shows up even if the socket is down. */
+
+  async function appendMessage(m) {
+    const box = $('msgs');
+    if (!box || !active) return null;
+    if (m.channel_id && m.channel_id !== active.id) return null;
+    if (document.querySelector(`.m[data-id="${m.id}"]`) || painting.has(m.id)) return null;
+    painting.add(m.id);
+    try {
+    await profileOf(m.author_id);
+    if (document.querySelector(`.m[data-id="${m.id}"]`)) return null;
+    const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
+    const last = box.querySelector('.m:last-of-type');
+    box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
+    const el = box.lastElementChild;
+    wire(el);
+    if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
+    return el;
+    } finally { painting.delete(m.id); }
+  }
+
+  async function hydrateAtts(mid, watch) {
+    let { data: aa, error } = await window.db.from('message_attachments')
+      .select('*').eq('message_id', mid).order('position', { ascending: true });
+    if (error) ({ data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', mid));
+    if (aa?.length) { attCache[mid] = aa; paintAtts(mid); }
+    if (!watch) return;
+    // Re-check briefly: uploads finish after the message row is written.
+    [600, 1800, 4000].forEach((d) => setTimeout(async () => {
+      if (!document.querySelector(`.m[data-id="${mid}"]`)) return;
+      const { data: later } = await window.db.from('message_attachments')
+        .select('*').eq('message_id', mid).order('position', { ascending: true });
+      if (later && later.length !== (attCache[mid] || []).length) {
+        attCache[mid] = later; paintAtts(mid);
+      }
+    }, d));
+  }
+
+  // Pending (not yet inserted) bubbles carry a client clock and no server row,
+  // so they must never feed the catch-up watermark or the delete reconciler.
+  const serverRows = () => [...($('msgs')?.querySelectorAll('.m[data-id]') || [])]
+    .filter((el) => !el.dataset.id.startsWith('tmp-'));
+
+  const newestTs = () => {
+    const rows = serverRows();
+    return rows.length ? rows[rows.length - 1].dataset.ts : null;
+  };
+
+  /* Pulls anything posted since the newest row we already show. This is what
+     keeps the channel live when the websocket can't connect. */
+  let catching = false;
+  async function catchUp() {
+    if (catching || !active || document.hidden) return;
+    catching = true;
+    const cid = active.id, since = newestTs();
+    try {
+      let q = window.db.from('messages')
+        .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
+        .eq('channel_id', cid).order('created_at', { ascending: true }).limit(50);
+      if (since) q = q.gt('created_at', since);
+      const { data, error } = await q;
+      if (!error && data?.length) {
+        for (const m of data) {
+          if (!active || active.id !== cid) return;
+          if (m.profiles) profiles[m.author_id] = m.profiles;
+          if (await appendMessage(m)) await hydrateAtts(m.id, false);
+        }
+      }
+      await catchUpEdits(cid);
+      await catchUpRx(cid);
+    } finally { catching = false; }
+  }
+
+  /* Reconciles edits and deletes for the messages currently on screen.
+
+     The watermark query above only ever looks for rows *newer* than the
+     last one shown, so a message that was edited or removed after we
+     rendered it is invisible to it -- which is why those still needed a
+     refresh. Here we re-read the visible ids: whatever comes back gets its
+     text refreshed if the content changed, and any id that does NOT come
+     back has been deleted, so its row goes. */
+  async function catchUpEdits(cid) {
+    // serverRows() skips pending tmp bubbles: they have no row yet, and this
+    // reconciler removes any id the server doesn't know about.
+    const ids = serverRows().slice(-60).map((el) => el.dataset.id);
+    if (!ids.length) return;
+    const { data, error } = await window.db.from('messages')
+      .select('id,content,edited_at').in('id', ids);
+    if (error || !data || !active || active.id !== cid) return;
+
+    const live = new Map(data.map((m) => [m.id, m]));
+    let removed = false;
+
+    for (const id of ids) {
+      const el = document.querySelector(`.m[data-id="${id}"]`);
+      if (!el) continue;
+      const m = live.get(id);
+
+      if (!m) {
+        // Gone from the server -> gone from the screen.
+        el.remove();
+        delete attCache[id];
+        delete rx[id];
+        removed = true;
+        continue;
+      }
+
+      // Don't clobber a message the user is actively editing.
+      if (el.querySelector('.editbox')) continue;
+      const cur = el.querySelector('.m-text');
+      if (!cur) continue;
+
+      // data-raw holds the escaped source, so comparing against it detects
+      // a real content change without re-rendering markdown every poll.
+      const nextRaw = MD.esc(m.content || '');
+      const nextEdited = !!m.edited_at;
+      const wasEdited = !!cur.querySelector('.m-edited');
+      if (cur.dataset.raw === nextRaw && wasEdited === nextEdited) continue;
+
+      cur.dataset.raw = nextRaw;
+      cur.innerHTML = MD.render(m.content) + (nextEdited ? '<span class="m-edited">(edited)</span>' : '');
+      wire(el);
+    }
+
+    if (removed) regroup();
+  }
+
+  /* Reconciles reactions for the messages currently on screen.
+
+     Reactions can't be caught by a `created_at` watermark like messages:
+     they are also *removed*, and an un-react leaves no row to find. So we
+     re-read the full set for the visible messages and diff it against what
+     we're showing, which picks up adds and removes in one pass. */
+  async function catchUpRx(cid) {
+    const ids = serverRows().map((el) => el.dataset.id);
+    if (!ids.length) return;
+    const { data, error } = await window.db.from('message_reactions')
+      .select('message_id,emoji,user_id').in('message_id', ids.slice(-60));
+    if (error || !data || !active || active.id !== cid) return;
+
+    const fresh = {};
+    data.forEach((r) => {
+      ((fresh[r.message_id] = fresh[r.message_id] || {})[r.emoji] =
+        fresh[r.message_id][r.emoji] || []).push(r.user_id);
+    });
+
+    for (const mid of ids) {
+      const now = fresh[mid] || {};
+      const had = rx[mid] || {};
+      // Compare as a stable signature so we only touch the DOM on a change;
+      // repainting every row every few seconds would kill hover states.
+      const sig = (o) => Object.keys(o).sort()
+        .map((e) => e + ':' + [...(o[e].users || o[e])].sort().join(',')).join('|');
+      if (sig(now) === sig(had)) continue;
+      if (!Object.keys(now).length) delete rx[mid];
+      else {
+        rx[mid] = {};
+        for (const [e, users] of Object.entries(now)) {
+          rx[mid][e] = { n: users.length, mine: users.includes(me.id), users: [...users] };
+        }
+      }
+      repaintRx(mid);
+    }
+  }
+
   /* ================= realtime ================= */
+  let rtHealthy = false, rtProven = false, pollTimer = null, pollRate = 0, retryTimer = null, retries = 0;
+
+  /* Polling is never fully switched off.
+
+     A channel can report SUBSCRIBED and still deliver nothing -- e.g.
+     when the table is not in the `supabase_realtime` publication, or
+     the socket is half-open behind a proxy. In that case an
+     error-triggered fallback never fires and messages stop appearing
+     until a refresh. So we always keep a reconcile loop running and
+     merely slow it down while realtime looks healthy. appendMessage()
+     dedupes by message id, so the overlap is free. */
+  const POLL_FAST = 800;    // realtime is down / unproven -- sub-second so it feels live
+  const POLL_IDLE = 8000;   // realtime has actually delivered, this is a safety net
+
+  function setPolling(on) {
+    const want = on ? POLL_FAST : POLL_IDLE;
+    if (pollTimer && pollRate === want) return;
+    if (pollTimer) clearInterval(pollTimer);
+    pollRate = want;
+    pollTimer = setInterval(catchUp, want);
+  }
+
+  function scheduleRetry(cid) {
+    clearTimeout(retryTimer);
+    const wait = Math.min(30000, 1000 * Math.pow(2, retries++));
+    retryTimer = setTimeout(() => { if (active?.id === cid) listen(cid); }, wait);
+  }
+
   function listen(cid) {
     if (sub) window.db.removeChannel(sub);
+    clearTimeout(retryTimer);
+    rtHealthy = false;
     sub = window.db.channel('ch:' + cid)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, async (p) => {
-        const m = p.new;
-        if (document.querySelector(`.m[data-id="${m.id}"]`)) return;
-        await profileOf(m.author_id);
-        const box = $('msgs');
-        const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
-        const last = box.querySelector('.m:last-of-type');
-        box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
-        const el = box.lastElementChild;
-        wire(el);
-        let { data: aa } = await window.db.from('message_attachments')
-          .select('*').eq('message_id', m.id).order('position', { ascending: true });
-        if (!aa) ({ data: aa } = await window.db.from('message_attachments').select('*').eq('message_id', m.id));
-        if (aa?.length) { attCache[m.id] = aa; paintAtts(m.id); }
-        // Re-check briefly: uploads finish after the message row is written.
-        [600, 1800, 4000].forEach((d) => setTimeout(async () => {
-          if (!document.querySelector(`.m[data-id="${m.id}"]`)) return;
-          const { data: later } = await window.db.from('message_attachments')
-            .select('*').eq('message_id', m.id).order('position', { ascending: true });
-          if (later && later.length !== (attCache[m.id] || []).length) {
-            attCache[m.id] = later; paintAtts(m.id);
-          }
-        }, d));
-        if (stick || m.author_id === me.id) box.scrollTop = box.scrollHeight;
+        // A delivered event is the only real proof realtime works.
+        if (!rtProven) { rtProven = true; setPolling(false); }
+        if (await appendMessage(p.new)) await hydrateAtts(p.new.id, true);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `channel_id=eq.${cid}` }, (p) => {
         const m = p.new;
@@ -435,8 +728,37 @@
         attCache[mid] = attCache[mid].filter((x) => x.id !== p.old.id);
         paintAtts(mid);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Socket is live. Poll slowly as a safety net and reconcile once now,
+          // since anything posted while we were connecting was missed.
+          rtHealthy = true; retries = 0;
+          // Only trust it enough to back off once it has really delivered.
+          setPolling(!rtProven);
+          catchUp();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // Realtime is unavailable (bad socket, RLS on the publication, project
+          // paused, blocked WS). Keep the chat working by polling instead.
+          rtHealthy = false;
+          setPolling(true);
+          catchUp();
+          scheduleRetry(cid);
+        }
+      });
+
+    // If the socket never reports SUBSCRIBED at all, start polling anyway.
+    setTimeout(() => { if (!rtHealthy && active?.id === cid) { setPolling(true); catchUp(); } }, 4000);
   }
+
+  // Coming back to the tab should immediately reconcile, not wait for a tick.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
+  window.addEventListener('online', () => { if (active) { catchUp(); listen(active.id); } });
+
+  // Scrolling to the top is the signal to page back through history.
+  $('msgs').addEventListener('scroll', () => {
+    if ($('msgs').scrollTop > 140) return;
+    loadOlder();
+  }, { passive: true });
 
   /* ================= composer + uploads ================= */
   function paintTray() {
@@ -469,18 +791,51 @@
   function composer() {
     const ta = $('input');
 
-    const send = async () => {
+    /* Sends are serialized so two quick Enters can't have their inserts race
+       into each other's order. The input clears instantly either way. */
+    let sendChain = Promise.resolve();
+    const send = () => {
       const v = ta.value.trim();
       const files = pending.slice();
       if (!v && !files.length) return;
       if (!active) return;
-
       ta.value = ''; ta.style.height = 'auto';
       pending = []; paintTray();
+      sendChain = sendChain.then(() => doSend(v, files)).catch(() => {});
+    };
+
+    async function doSend(v, files) {
+      if (!active) return;
+
+      // Paint a pending bubble immediately: sending must never wait on the
+      // network round-trip, let alone on a busy render loop.
+      const box = $('msgs');
+      const tmp = {
+        id: 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+        channel_id: active.id, author_id: me.id,
+        content: v || null, created_at: new Date().toISOString(), _pending: true,
+      };
+      let el = null;
+      if (box && box.querySelector('.m')) {
+        const last = box.querySelector('.m:last-of-type');
+        box.insertAdjacentHTML('beforeend', row(tmp, grouped(last.dataset.au, last.dataset.ts, tmp)));
+        el = box.lastElementChild;
+        el.classList.add('sending');
+        wire(el);
+        box.scrollTop = box.scrollHeight;
+      }
 
       const { data: msg, error } = await window.db.from('messages')
         .insert({ channel_id: active.id, author_id: me.id, content: v || null }).select().single();
-      if (error) { UI.toast(error.message, true); return; }
+      if (error) {
+        el?.remove(); regroup();
+        if (!ta.value.trim()) ta.value = v;   // give the text back — nothing was lost
+        return UI.toast(error.message, true);
+      }
+      el?.remove();
+      // Swaps the pending bubble for the real row. Dedupes against the
+      // realtime echo and the catch-up poll, whichever got there first.
+      await appendMessage(msg);
 
       if (files.length) {
         const bar = $('upbar'); bar.classList.remove('hidden');
@@ -885,12 +1240,28 @@
     const n = srv.server_members?.[0]?.count ?? 0;
     $('srvMembers').textContent = `${n} member${n === 1 ? '' : 's'}`;
     if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
+    UI.applyServerName(srv.theme);
+    // Owners may edit appearance in another tab while members stay in chat.
+    // Keep the rendered title in sync instead of freezing it at page load.
+    const appearanceSub = window.db.channel('server-appearance:' + serverId)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'servers', filter: `id=eq.${serverId}` }, ({ new: updated }) => {
+        Object.assign(srv, updated);
+        $('srvName').textContent = srv.name;
+        UI.applyServerName(srv.theme);
+        document.documentElement.style.setProperty('--accent', srv.theme?.accent || '#2FBF87');
+      }).subscribe();
+    window.addEventListener('pagehide', () => window.db.removeChannel(appearanceSub), { once: true });
 
     $('meAv').innerHTML = UI.avatar(me, 28, { presence: true });
     $('meName').textContent = me.display_name || me.username;
     $('meHandle').textContent = '@' + me.username;
 
-window.Notify?.start(me);
+    UI.applyBackground(me.theme);
+    window.Notify?.start(me);
+    window.Guard?.start(me);
+    window.Presence?.start(me);
+    window.Presence?.onChange(() => window.Presence.refreshDots());
+
     devStats = !!(me.theme && me.theme.dev_mode);
 
     canManage = srv.owner_id === me.id || me.is_platform_admin;

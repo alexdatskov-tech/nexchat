@@ -1,6 +1,16 @@
 /* Global realtime notifier: DM messages, friend requests, incoming calls.
    Loaded on every signed-in page so alerts arrive wherever you are. */
 window.Notify = (function () {
+  /* Logs realtime channel health instead of failing silently. */
+  function chanStatus(label) {
+    return (status, err) => {
+      if (status === 'SUBSCRIBED') return;
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        console.warn(`NexChat realtime: ${label} -> ${status}`, err || '');
+      }
+    };
+  }
+
   let me = null, convIds = new Set(), chans = [];
   const seen = new Set();
 
@@ -31,7 +41,7 @@ window.Notify = (function () {
         seen.add(m.id);
 
         const { data: who } = await window.db.from('profiles')
-          .select('username,display_name,avatar_url,accent_color,is_nitro').eq('id', m.author_id).single();
+          .select('username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', m.author_id).single();
         const name = who?.display_name || who?.username || 'Someone';
         UI.island({
           avatar: who ? UI.avatar(who, 32, { halo: false }) : null,
@@ -40,7 +50,7 @@ window.Notify = (function () {
           action: () => { window.location.href = `dms.html?c=${m.conversation_id}`; },
         });
       })
-      .subscribe());
+      .subscribe(chanStatus('nx-dm-notify')));
 
     // --- friend requests and acceptances ---
     chans.push(window.db.channel('nx-friend-notify')
@@ -48,7 +58,7 @@ window.Notify = (function () {
         const f = p.new;
         if (f.friend_id !== me.id || f.status !== 'pending') return;
         const { data: who } = await window.db.from('profiles')
-          .select('username,display_name,avatar_url,accent_color,is_nitro').eq('id', f.user_id).single();
+          .select('username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', f.user_id).single();
         UI.island({
           avatar: who ? UI.avatar(who, 32, { halo: false }) : null,
           title: who?.display_name || who?.username || 'Someone',
@@ -61,7 +71,7 @@ window.Notify = (function () {
         const f = p.new;
         if (f.user_id !== me.id || f.status !== 'accepted') return;
         const { data: who } = await window.db.from('profiles')
-          .select('username,display_name,avatar_url,accent_color,is_nitro').eq('id', f.friend_id).single();
+          .select('username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme').eq('id', f.friend_id).single();
         UI.island({
           avatar: who ? UI.avatar(who, 32, { halo: false }) : null,
           title: who?.display_name || who?.username || 'Someone',
@@ -70,7 +80,7 @@ window.Notify = (function () {
           action: () => { window.location.href = 'dms.html'; },
         });
       })
-      .subscribe());
+      .subscribe(chanStatus('nx-friend-notify')));
 
     // --- incoming DM calls ---
     chans.push(window.db.channel('nx-call:' + me.id)
@@ -87,7 +97,7 @@ window.Notify = (function () {
           action: () => { window.location.href = `dms.html?c=${payload.conversation}&call=1`; },
         });
       })
-      .subscribe());
+      .subscribe(chanStatus('nx-call')));
   }
 
   /* Rings a specific person's personal channel. */

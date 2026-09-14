@@ -12,24 +12,23 @@
     { n: 'Moss',    v: 'linear-gradient(135deg,#16281B,#101E23 60%,#0D1014)' },
     { n: 'Dusk',    v: 'radial-gradient(120% 100% at 20% 0%,#2B2246,#141222 55%,#0B0A11)' },
   ];
+  let wallpaperKey = '', wallpaperSelection = 0;
   let bgVal = '', bgDim = 0, bgBlur = 0, bgBright = 100, wpFile = null, devMode = false, manualStun = [];
+  // Chat-column overlay, defaulted from UI so the slider and the renderer agree.
+  let chatBlur = UI.CHAT_BLUR_DEFAULT, chatDim = UI.CHAT_DIM_DEFAULT;
 
+  // Same applier the rest of the app uses, fed from the in-progress edits so the
+  // preview matches exactly what saving will produce.
   function applyBg() {
-    if (!bgVal) { document.body.classList.remove('has-bg'); return; }
-    document.body.classList.add('has-bg');
-    document.documentElement.style.setProperty('--dash-bg', bgVal);
-    document.documentElement.style.setProperty('--dash-dim', bgDim / 100);
-    document.documentElement.style.setProperty('--dash-blur', bgBlur + 'px');
-    document.documentElement.style.setProperty('--dash-bright', bgBright / 100);
-    if (!document.querySelector('.dash-veil')) {
-      const v = document.createElement('div'); v.className = 'dash-veil'; document.body.appendChild(v);
-    }
+    UI.applyBackground({ dash_bg: bgVal, dash_wallpaper_key: wallpaperKey, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright, chat_blur: chatBlur, chat_dim: chatDim });
   }
   function paintBgUI() {
-    document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', el.dataset.v === bgVal));
+    document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', !wallpaperKey && !wpFile && el.dataset.v === bgVal));
     $('fBgDim').value = bgDim; $('bgDimV').textContent = bgDim + '%';
     $('fBgBlur').value = bgBlur; $('bgBlurV').textContent = bgBlur + 'px';
     $('fBgBright').value = bgBright; $('bgBrightV').textContent = bgBright + '%';
+    $('fChatBlur').value = chatBlur; $('chatBlurV').textContent = chatBlur + 'px';
+    $('fChatDim').value = chatDim; $('chatDimV').textContent = chatDim + '%';
     applyBg();
   }
 
@@ -64,7 +63,15 @@
     const avUrl = clearAvatar ? null : (avatarFile?._preview || me.avatar_url);
     const bnUrl = clearBanner ? null : (bannerFile?._preview || me.banner_url);
 
-    $('pvAvWrap').className = 'pcard-av' + (me.is_nitro ? ' av-halo' : '');
+    // Preview the halo from the in-progress fields, not just the saved row,
+    // so editing the GIF URL or the custom CSS updates the card live.
+    const haloPreview = { ...me, banner_gif_url: $('fHalo')?.value.trim() || me.banner_gif_url,
+      theme: { ...(me.theme || {}), dev_mode: devMode, halo_css: $('fHaloCss')?.value.trim() || '' } };
+    const wrap = $('pvAvWrap');
+    wrap.className = 'pcard-av' + (me.is_nitro ? ' ' + UI.haloClass(haloPreview) : '');
+    wrap.removeAttribute('style');
+    const haloStyleText = me.is_nitro ? UI.haloStyleText(haloPreview) : '';
+    if (haloStyleText) wrap.setAttribute('style', haloStyleText);
     $('pvAvWrap').innerHTML = avUrl
       ? `<div class="av"><img src="${avUrl}" alt=""></div>`
       : `<div class="av" style="background:${accent};">${UI.initial(display)}</div>`;
@@ -88,11 +95,18 @@
   $('bgPresets').innerHTML = BG_PRESETS.map((b) =>
     `<div class="bg-preset" data-v="${b.v}" style="background:${b.v || 'var(--bg-2)'}"><span>${b.n}</span></div>`).join('');
   document.querySelectorAll('.bg-preset').forEach((el) => {
-    el.onclick = () => { bgVal = el.dataset.v; $('fBgUrl').value = ''; paintBgUI(); };
+    el.onclick = () => { clearWallpaper(); bgVal = el.dataset.v; $('fBgUrl').value = ''; paintBgUI(); };
   });
+  function clearWallpaper() {
+    wallpaperSelection++;
+    wallpaperKey = ''; wpFile = null;
+    $('fWallpaper').value = '';
+    $('wpPrev').innerHTML = '<i class="fa-regular fa-image"></i>';
+  }
   $('fBgUrl').oninput = (e) => {
+    clearWallpaper();
     const u = e.target.value.trim();
-    bgVal = u ? `url('${u.replace(/'/g, "%27")}')` : '';
+    bgVal = u ? `url(${UI.cssString(u)})` : '';
     paintBgUI();
   };
   $('fBgDim').oninput = (e) => { bgDim = +e.target.value; paintBgUI(); };
@@ -100,17 +114,30 @@
   $('fWallpaper').onchange = (e) => {
     const f = e.target.files[0]; if (!f) return;
     if (f.size > 10 * 1024 * 1024) { UI.toast('That wallpaper is over 10 MB.', true); e.target.value = ''; return; }
+    clearWallpaper();
     wpFile = f;
-    const r = new FileReader();
-    r.onload = (ev) => {
-      $('wpPrev').innerHTML = `<img src="${ev.target.result}">`;
-      bgVal = `url('${ev.target.result}')`;   // instant local preview; uploads on save
+    const selection = wallpaperSelection;
+    const preview = (src) => {
+      if (selection !== wallpaperSelection) return;
+      $('wpPrev').innerHTML = `<img src="${src}">`;
+      bgVal = `url('${src}')`;   // instant local preview; uploads on save
       $('fBgUrl').value = '';
       paintBgUI();
     };
+    if (window.Tiff?.isTiff(f.name)) {
+      // CSS cannot paint a TIFF, so decode it before previewing.
+      window.Tiff.toPngUrl(URL.createObjectURL(f))
+        .then(preview)
+        .catch(() => UI.toast('That TIFF could not be read. Try a PNG or JPEG.', true));
+      return;
+    }
+    const r = new FileReader();
+    r.onload = (ev) => preview(ev.target.result);
     r.readAsDataURL(f);
   };
   $('fBgBlur').oninput = (e) => { bgBlur = +e.target.value; paintBgUI(); };
+  $('fChatBlur').oninput = (e) => { chatBlur = +e.target.value; paintBgUI(); };
+  $('fChatDim').oninput = (e) => { chatDim = +e.target.value; paintBgUI(); };
   $('bgClear').onclick = () => {
     bgVal = ''; wpFile = null;
     $('fBgUrl').value = ''; $('fWallpaper').value = '';
@@ -142,8 +169,43 @@
   $('devToggle').onchange = (e) => {
     devMode = e.target.checked;
     $('devPanel').classList.toggle('hidden', !devMode);
+    syncHaloCssField();
+    paint();
     if (devMode) paintIce();
   };
+
+  // The custom-halo box only exists for Nitro members in developer mode.
+  function syncHaloCssField() {
+    $('haloCssField').classList.toggle('hidden', !(devMode && me?.is_nitro));
+  }
+  $('fHalo').oninput = () => paint();
+  $('fHaloCss').oninput = () => paint();
+
+  /* Worked examples for the halo. Custom halo CSS is declarations-only -- no
+     braces means no @keyframes of your own -- which is easy to trip over, so
+     these all stick to the animations theme.css already defines (spin, pulse)
+     and each chip previews the ring it produces. */
+  const HALO_EGS = [
+    { n: 'Prism',  css: 'background: conic-gradient(from 0deg,#F0F,#0FF,#FF0,#F0F); animation: spin 2.4s linear infinite;' },
+    { n: 'Ember',  css: 'background: conic-gradient(from 90deg,#E8B04B,#FFE9A8,#C98A20,#E8B04B); animation: spin 6s linear infinite;' },
+    { n: 'Tide',   css: 'background: linear-gradient(135deg,#2FBF87,#3B9EF5); animation: pulse 2s ease-in-out infinite;' },
+    { n: 'Neon',   css: 'background: #E8659A; box-shadow: 0 0 9px 2px rgba(232,101,154,.8);' },
+    { n: 'Static', css: 'background: linear-gradient(90deg,#8B7CF6,#5AC8D8);' },
+  ];
+  (function paintHaloEgs() {
+    const wrap = $('haloEgs');
+    if (!wrap) return;
+    HALO_EGS.forEach((eg) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'halo-eg';
+      b.title = eg.css;
+      b.innerHTML = `<span class="ring"></span>${UI.esc(eg.n)}`;
+      b.querySelector('.ring').style.cssText = eg.css;
+      b.onclick = () => { $('fHaloCss').value = eg.css; paint(); };
+      wrap.appendChild(b);
+    });
+  })();
   $('iceProbe').onclick = async (e) => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Testing…';
     await ICE.rank(ICE.STUN, true);
@@ -177,6 +239,7 @@
         f._preview = ev.target.result;
         if (kind === 'avatar') { avatarFile = f; clearAvatar = false; } else { bannerFile = f; clearBanner = false; }
         $(prevId).innerHTML = `<img src="${ev.target.result}" alt="">`;
+        window.Tiff?.hydrateFile($(prevId).querySelector('img'), f);
         $(clearId).classList.remove('hidden');
         paint();
       };
@@ -205,23 +268,39 @@
         theme: { ...(me.theme || {}) },
       };
 
-      // Wallpaper lives in iDrive; Supabase only stores the URL, so the same
-      // background follows this account onto any other device.
+      // Persist the object key, never the temporary S3 signature. Keep it in
+      // editor state too, so a failed profile save can be retried without upload.
       if (wpFile) {
+        // TIFF is not renderable as a CSS background; store a PNG instead.
+        if (window.Tiff?.isTiff(wpFile.name)) {
+          try { wpFile = await window.Tiff.toPngFile(wpFile); }
+          catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
+        }
         const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
-        const up = await window.__nx_tp.put(key, wpFile);
-        bgVal = `url('${up.url}')`;
-        patch.theme.dash_wallpaper_key = key;
+        await window.__nx_tp.put(key, wpFile);
+        wallpaperSelection++;
+        wallpaperKey = key;
+        bgVal = '';
         wpFile = null;
         $('fWallpaper').value = '';
       }
-      patch.theme.dash_bg = bgVal;
+      patch.theme.dash_wallpaper_key = wallpaperKey || null;
+      patch.theme.dash_bg = wallpaperKey ? null : bgVal;
       patch.theme.dash_dim = bgDim;
       patch.theme.dash_blur = bgBlur;
       patch.theme.dash_bright = bgBright;
+      patch.theme.chat_blur = chatBlur;
+      patch.theme.chat_dim = chatDim;
       patch.theme.dev_mode = devMode;
       patch.theme.manual_stun = manualStun;
-      if (me.is_nitro) patch.banner_gif_url = $('fHalo').value.trim() || null;
+      if (me.is_nitro) {
+        patch.banner_gif_url = $('fHalo').value.trim() || null;
+        const hc = $('fHaloCss').value.trim();
+        if (hc && !UI.haloCss({ theme: { dev_mode: true, halo_css: hc } })) {
+          throw new Error('That halo CSS is not allowed. Use plain declarations, with no selectors, braces or url().');
+        }
+        patch.theme.halo_css = hc || null;
+      }
 
       if (avatarFile) patch.avatar_url = await UI.upload('avatars', avatarFile, me.id);
       else if (clearAvatar) patch.avatar_url = null;
@@ -237,6 +316,7 @@
       $('avClear').classList.toggle('hidden', !me.avatar_url);
       $('bnClear').classList.toggle('hidden', !me.banner_url);
       UI.toast('Profile saved.');
+      paintBgUI();
       paint();
     } catch (err) {
       UI.toast(err.message || 'Could not save your profile.', true);
@@ -252,6 +332,8 @@
     if (me.is_nitro) {
       $('nitroActive').style.display = '';
       $('fHalo').value = me.banner_gif_url || '';
+      $('fHaloCss').value = me.theme?.halo_css || '';
+      syncHaloCssField();
       $('nitroSince').textContent = me.nitro_since
         ? 'Active since ' + new Date(me.nitro_since).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })
         : 'Active on your account.';
@@ -297,28 +379,76 @@
 
   $('btnOut').onclick = async () => { await window.db.auth.signOut(); window.location.href = 'index.html'; };
 
+  // ---- delete account ----
+  const toAddr = (u) => `${u.trim().toLowerCase()}@users.nexchat-app.com`;
+
+  $('btnDel').onclick = async () => {
+    const pass = $('fDelPass').value;
+    $('delErr').textContent = '';
+    if (!pass) return ($('delErr').textContent = 'Enter your password to continue.');
+
+    const okd = await UI.confirmDialog(
+      'Delete account',
+      'This will permanently remove your account, all your servers, messages, friends and profile data. This cannot be undone.',
+      true, 'Delete my account');
+    if (!okd) return;
+
+    const btn = $('btnDel'); btn.disabled = true; btn.textContent = 'Deleting…';
+    try {
+      // Re-authenticate to verify the password is correct.
+      const { error: signInErr } = await window.db.auth.signInWithPassword({
+        email: toAddr(me.username), password: pass,
+      });
+      if (signInErr) throw new Error('Wrong password.');
+
+      const { error: rpcErr } = await window.db.rpc('delete_my_account');
+      if (rpcErr) throw rpcErr;
+
+      UI.toast('Your account has been deleted.');
+      window.location.href = 'index.html';
+    } catch (err) {
+      $('delErr').textContent = err.message || 'Could not delete account.';
+      btn.disabled = false; btn.textContent = 'Delete my account';
+    }
+  };
+
   function hydrate() {
     $('fDisplay').value = me.display_name || '';
     $('fBio').value = me.bio || '';
     $('fStatus').value = me.custom_status || '';
     setAccent(me.accent_color || '#2FBF87');
     const th = me.theme || {};
-    bgVal = th.dash_bg || '';
+    clearWallpaper();
+    wallpaperKey = UI.wallpaperKey(th);
+    bgVal = wallpaperKey ? '' : (th.dash_bg || '');
+    $('fBgUrl').value = '';
+    if (wallpaperKey) {
+      const selection = wallpaperSelection;
+      UI.wallpaperUrl(wallpaperKey).then((url) => {
+        if (selection !== wallpaperSelection) return;
+        const img = document.createElement('img'); img.src = url;
+        $('wpPrev').replaceChildren(img);
+      }).catch(() => { /* shared background renderer retries */ });
+    }
     bgDim = th.dash_dim ?? 0;
     bgBlur = th.dash_blur ?? 0;
     bgBright = th.dash_bright ?? 100;
+    chatBlur = th.chat_blur ?? UI.CHAT_BLUR_DEFAULT;
+    chatDim = th.chat_dim ?? UI.CHAT_DIM_DEFAULT;
     devMode = !!th.dev_mode;
     manualStun = th.manual_stun || [];
     wpFile = null;
     if (bgVal.startsWith('url(')) {
       const u = bgVal.slice(5, -2);
-      $('wpPrev').innerHTML = `<img src="${u}">`;
-      if (!th.dash_wallpaper_key) $('fBgUrl').value = u;
+      $('wpPrev').innerHTML = `<img src="${UI.esc(u)}">`;
+      if (!wallpaperKey) $('fBgUrl').value = u;
     } else {
       $('wpPrev').innerHTML = '<i class="fa-regular fa-image"></i>';
     }
     $('devToggle').checked = devMode;
     $('devPanel').classList.toggle('hidden', !devMode);
+    $('fHaloCss').value = th.halo_css || '';
+    syncHaloCssField();
     if (devMode) paintIce();
     paintBgUI();
     avatarFile = bannerFile = null; clearAvatar = clearBanner = false;
@@ -334,7 +464,8 @@
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
     if (!me) return UI.toast('Could not load your profile.', true);
-window.Notify?.start(me);
+    window.Notify?.start(me);
+    window.Guard?.start(me);
     $('acUser').textContent = '@' + me.username;
     $('acSince').textContent = new Date(me.created_at).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
     hydrate();

@@ -35,8 +35,91 @@ window.UI = (function () {
     const inner = profile?.avatar_url
       ? `<div class="av" style="width:${size}px;height:${size}px;"><img src="${esc(profile.avatar_url)}" alt=""></div>`
       : `<div class="av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;${bg}">${initial(name)}</div>`;
-    if (profile?.is_nitro && o.halo !== false) return `<span class="av-halo">${inner}</span>`;
+    if (profile?.is_nitro && o.halo !== false) return `<span class="${haloClass(profile)}"${haloStyle(profile)}>${inner}</span>`;
     return inner;
+  }
+
+  /* ---- Nitro halo ----
+     Three tiers, in order of precedence:
+       1. custom CSS   - dev mode only, the ring is whatever the user writes
+       2. a GIF/APNG   - banner_gif_url, spun as an image instead of a gradient
+       3. the default  - the built-in conic-gradient sweep */
+  const IMG_EXT = /\.(gif|apng|png|jpe?g|webp|avif)($|\?)/i;
+
+  // Only same-scheme https images, and only ones that look like images.
+  function haloImage(profile) {
+    const raw = (profile?.banner_gif_url || '').trim();
+    if (!raw) return null;
+    let u;
+    try { u = new URL(raw, location.href); } catch { return null; }
+    if (!['https:', 'http:'].includes(u.protocol)) return null;
+    if (!IMG_EXT.test(u.pathname)) return null;
+    return u.href;
+  }
+
+  /* Custom halo CSS is a dev-mode toy, so it is still fenced in: declarations
+     only (no selectors, no braces, no @rules) and no url()/expression payloads. */
+  function haloCss(profile) {
+    if (!profile?.theme?.dev_mode) return null;
+    const raw = (profile.theme.halo_css || '').trim();
+    if (!raw) return null;
+    if (/[{}<>;]\s*@|[{}<>]/.test(raw)) return null;
+    if (/url\s*\(|expression\s*\(|javascript:|behavior\s*:|@import/i.test(raw)) return null;
+    if (raw.length > 400) return null;
+    return raw;
+  }
+
+  /* Custom CSS has to reach the ring, which is a ::before pseudo-element and so
+     cannot be styled inline. Each distinct snippet therefore becomes one rule in
+     a shared stylesheet, keyed by a hash of its text so repeats are free. */
+  const haloSheetKeys = new Set();
+  let haloSheet = null;
+
+  function haloKey(css) {
+    let h = 0;
+    for (let i = 0; i < css.length; i++) h = (Math.imul(31, h) + css.charCodeAt(i)) | 0;
+    return 'av-halo-c' + (h >>> 0).toString(36);
+  }
+
+  function registerHaloCss(css) {
+    const key = haloKey(css);
+    if (haloSheetKeys.has(key) || typeof document === 'undefined') return key;
+    // The profile editor re-registers on every keystroke, so the sheet is
+    // recycled rather than allowed to grow without bound.
+    if (haloSheet && haloSheetKeys.size >= 64) {
+      haloSheet.textContent = '';
+      haloSheetKeys.clear();
+    }
+    if (!haloSheet) {
+      haloSheet = document.getElementById('nx-halo-styles') || document.createElement('style');
+      haloSheet.id = 'nx-halo-styles';
+      if (!haloSheet.parentNode) (document.head || document.documentElement).appendChild(haloSheet);
+    }
+    haloSheet.appendChild(document.createTextNode(`.${key}::before{${css};}`));
+    haloSheetKeys.add(key);
+    return key;
+  }
+
+  function haloClass(profile) {
+    const custom = haloCss(profile);
+    if (custom) return `av-halo av-halo-custom ${registerHaloCss(custom)}`;
+    if (haloImage(profile)) return 'av-halo av-halo-img';
+    return 'av-halo';
+  }
+
+  // The style text itself, for callers that set it via the DOM. Custom CSS lives
+  // in the stylesheet instead, so only the image tier needs an inline value.
+  function haloStyleText(profile) {
+    if (haloCss(profile)) return '';
+    const img = haloImage(profile);
+    if (img) return `--halo-img:url('${img.replace(/['"\\]/g, '')}')`;
+    return '';
+  }
+
+  // Returns a ready-to-interpolate style attribute, or '' when none is needed.
+  function haloStyle(profile) {
+    const text = haloStyleText(profile);
+    return text ? ` style="${esc(text)}"` : '';
   }
 
   async function requireSession(redirect) {
@@ -53,15 +136,26 @@ window.UI = (function () {
   // Uploads to a Supabase Storage bucket and returns the public URL.
   // Profile buckets are RLS-scoped to a folder named after the user's id.
   async function upload(bucket, file, folder) {
+    // Stored images are shown as plain <img> throughout the app, so a TIFF is
+    // normalised to PNG here rather than needing a decoder at every render site.
+    if (window.Tiff?.isTiff(file.name)) {
+      try { file = await window.Tiff.toPngFile(file); }
+      catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
+    }
     const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await window.db.storage.from(bucket).upload(path, file, { upsert: false });
+    // Browsers leave file.type empty for .tiff and most font files, and Storage
+    // then stores them as octet-stream, which breaks <img> and @font-face.
+    const contentType = file.type || window.__nx_tp?.mimeOf?.(file.name) || 'application/octet-stream';
+    const { error } = await window.db.storage.from(bucket).upload(path, file, { upsert: false, contentType });
     if (error) throw error;
     const { data } = window.db.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   }
 
-  function confirmDialog(title, body, danger) {
+  // `confirm` overrides the action button's label; without it a dangerous
+  // action reads "Delete", which is wrong for anything that is not a deletion.
+  function confirmDialog(title, body, danger, confirmText) {
     return new Promise((resolve) => {
       const ov = document.createElement('div');
       ov.className = 'overlay';
@@ -71,7 +165,7 @@ window.UI = (function () {
           <div class="modal-body"><p style="font-size:13.5px;color:var(--txt-2);margin:0;">${esc(body)}</p></div>
           <div class="modal-foot">
             <button class="btn btn-quiet" data-no>Cancel</button>
-            <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-yes>${danger ? 'Delete' : 'Confirm'}</button>
+            <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-yes>${esc(confirmText || (danger ? 'Delete' : 'Confirm'))}</button>
           </div>
         </div>`;
       document.body.appendChild(ov);
@@ -183,7 +277,7 @@ window.UI = (function () {
     ov.innerHTML = `<div class="upop">
       <div class="upop-banner" style="background:${banner}"></div>
       <div class="upop-body">
-        <div class="upop-av ${p.is_nitro ? 'av-halo' : ''}">${avatar(p, 68, { halo: false })}</div>
+        <div class="upop-av ${p.is_nitro ? haloClass(p) : ''}"${p.is_nitro ? haloStyle(p) : ''}>${avatar(p, 68, { halo: false })}</div>
         <h3>${esc(name)}
           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>' : ''}
           ${p.is_platform_admin ? '<span class="badge badge-admin">Admin</span>' : ''}</h3>
@@ -234,5 +328,195 @@ window.UI = (function () {
     return `<span class="role-emoji">${esc(v)}</span>`;
   }
 
-  return { toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island };
+  /* ---- server name appearance ----
+     A server's theme can override the colour and typeface its name is shown
+     in. Both fall back to the stylesheet defaults (white, display face) so an
+     unset or partially set theme can never render the name invisible. */
+  const NAME_FONTS = {
+    display: { label: 'Display', stack: "'Bricolage Grotesque', sans-serif" },
+    body: { label: 'Sans', stack: "'Instrument Sans', sans-serif" },
+    mono: { label: 'Mono', stack: "'JetBrains Mono', monospace" },
+    serif: { label: 'Serif', stack: "Georgia, 'Times New Roman', serif" },
+    rounded: { label: 'Rounded', stack: "'Trebuchet MS', 'Segoe UI', sans-serif" },
+  };
+
+  function nameFontStack(key) {
+    return NAME_FONTS[key]?.stack || NAME_FONTS.display.stack;
+  }
+
+  /* ---- custom fonts ----
+     A theme may point at a Google Fonts URL or an uploaded font file instead
+     of one of the built-in stacks. Both are loaded on demand and cached, so
+     the same face is never requested twice on one page. */
+  const loadedFonts = new Set();
+
+  // Only ever inject stylesheet links we recognise as Google's font CDN.
+  function googleFontHref(url) {
+    let u;
+    try { u = new URL(String(url).trim()); } catch { return null; }
+    if (u.protocol !== 'https:') return null;
+    if (u.hostname !== 'fonts.googleapis.com' || !/^\/css2?$/.test(u.pathname)) return null;
+    if (!googleFontFamily(u.href)) return null;
+    return u.href;
+  }
+
+  // Pulls the family out of a Google Fonts URL: ...?family=Rubik+Glitch&...
+  function googleFontFamily(url) {
+    try {
+      const fam = new URL(url).searchParams.get('family');
+      if (!fam) return null;
+      return fam.split(':')[0].replace(/\+/g, ' ').trim() || null;
+    } catch { return null; }
+  }
+
+  // Quoted CSS strings need CSS escaping, not HTML escaping.
+  function cssString(value) {
+    return "'" + String(value).replace(/['\\\n\r\f]/g, (c) => '\\' + c.charCodeAt(0).toString(16) + ' ') + "'";
+  }
+
+  function loadGoogleFont(url) {
+    const href = googleFontHref(url);
+    if (!href || loadedFonts.has(href)) return googleFontFamily(href || '');
+    loadedFonts.add(href);
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = href;
+    l.crossOrigin = 'anonymous';
+    document.head.appendChild(l);
+    return googleFontFamily(href);
+  }
+
+  const FONT_FORMATS = { woff2: 'woff2', woff: 'woff', ttf: 'truetype', otf: 'opentype', ttc: 'collection' };
+
+  // Registers an uploaded font file under a generated family name.
+  function loadFontFile(url, family) {
+    if (!url || loadedFonts.has(url)) return family;
+    let u;
+    try { u = new URL(url, location.href); } catch { return null; }
+    if (!['https:', 'http:', 'blob:', 'data:'].includes(u.protocol)) return null;
+    loadedFonts.add(url);
+    const ext = (u.pathname.split('.').pop() || '').toLowerCase();
+    const fmt = FONT_FORMATS[ext];
+    const st = document.createElement('style');
+    st.textContent = `@font-face{font-family:'${family}';src:url(${cssString(u.href)})${fmt ? ` format('${fmt}')` : ''};font-display:swap;}`;
+    document.head.appendChild(st);
+    return family;
+  }
+
+  // Stable per-URL family name, so a page showing several servers (the portal
+  // grid) can register each uploaded face without them overwriting each other.
+  function fontFamilyFor(url) {
+    let h = 0;
+    for (let i = 0; i < url.length; i++) h = ((h << 5) - h + url.charCodeAt(i)) | 0;
+    return `NexFont${(h >>> 0).toString(36)}`;
+  }
+
+  /* Resolves whichever font source a theme specifies down to one CSS stack. */
+  function resolveNameFont(theme) {
+    const t = theme || {};
+    if (t.name_font === 'google' && t.name_font_url) {
+      const fam = loadGoogleFont(t.name_font_url);
+      if (fam) return `${cssString(fam)}, ${NAME_FONTS.display.stack}`;
+    }
+    if (t.name_font === 'upload' && t.name_font_file) {
+      const fam = loadFontFile(t.name_font_file, fontFamilyFor(t.name_font_file));
+      if (fam) return `${cssString(fam)}, ${NAME_FONTS.display.stack}`;
+    }
+    return nameFontStack(t.name_font);
+  }
+
+  /* Defaults for the chat column's extra blur/dim, shared with the profile
+     editor so the sliders and the renderer cannot drift apart. */
+  const CHAT_BLUR_DEFAULT = 12;
+  const CHAT_DIM_DEFAULT = 42;
+
+  // Older profiles contain both a key and a signed URL. Ignore stale keys
+  // left behind when the user subsequently selected a preset or external URL.
+  function wallpaperKey(theme) {
+    const t = theme || {};
+    if (!t.dash_wallpaper_key) return '';
+    if (!t.dash_bg) return t.dash_wallpaper_key;
+    try {
+      if (/^url\(/i.test(t.dash_bg) && decodeURIComponent(t.dash_bg).includes(t.dash_wallpaper_key)) {
+        return t.dash_wallpaper_key;
+      }
+    } catch { /* malformed legacy URL */ }
+    return '';
+  }
+
+  const wallpaperUrls = new Map();
+  function wallpaperUrl(key) {
+    const cached = wallpaperUrls.get(key);
+    if (cached && cached.until > Date.now()) return cached.promise;
+    const entry = { until: Date.now() + 50 * 60 * 1000 };
+    entry.promise = Promise.resolve().then(() => window.__nx_tp.presign(key, 60))
+      .then((url) => {
+        if (!url) throw new Error('Could not load wallpaper.');
+        return url;
+      }).catch((err) => { wallpaperUrls.delete(key); throw err; });
+    wallpaperUrls.set(key, entry);
+    return entry.promise;
+  }
+
+  let backgroundVersion = 0, backgroundTimer = null;
+  /* Applies a user's chosen wallpaper to whatever page is asking. The dashboard
+     grid, the profile editor, DMs and server channels all read the same
+     profiles.theme keys, so the wallpaper follows the user around the app
+     instead of only dressing the portal. */
+  function applyBackground(theme) {
+    const t = { ...(theme || {}) };
+    const version = ++backgroundVersion;
+    clearTimeout(backgroundTimer);
+    const key = wallpaperKey(t);
+    if (key) {
+      // Never paint a persisted signature. Resolve the stable key at runtime.
+      return wallpaperUrl(key).then((url) => {
+        if (version !== backgroundVersion) return;
+        applyBackground({ ...t, dash_wallpaper_key: null, dash_bg: `url(${cssString(url)})` });
+        backgroundTimer = setTimeout(() => applyBackground(t), Math.max(1000, wallpaperUrls.get(key).until - Date.now()));
+        return url;
+      }).catch((err) => {
+        if (version !== backgroundVersion) return;
+        console.warn('Wallpaper could not be loaded', err);
+        // A temporary network failure must not make the setting disappear.
+        backgroundTimer = setTimeout(() => applyBackground(t), 60 * 1000);
+      });
+    }
+    const root = document.documentElement.style;
+    if (!t.dash_bg) {
+      document.body.classList.remove('has-bg', 'bg-blur', 'chat-blur');
+      document.querySelector('.dash-veil')?.remove();
+      root.removeProperty('--dash-bg');
+      return;
+    }
+    document.body.classList.add('has-bg');
+    root.setProperty('--dash-bg', t.dash_bg);
+    root.setProperty('--dash-dim', (t.dash_dim ?? 0) / 100);
+    root.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
+    root.setProperty('--dash-bright', (t.dash_bright ?? 100) / 100);
+    // Blur is only mounted when actually asked for, so a zero-blur wallpaper
+    // costs nothing on the compositor.
+    document.body.classList.toggle('bg-blur', (t.dash_blur ?? 0) > 0);
+    // The chat column's own extra treatment, on top of whatever the wallpaper
+    // already has. Defaults match the CSS fallbacks so a profile saved before
+    // these keys existed looks exactly the same as it did.
+    const cBlur = t.chat_blur ?? CHAT_BLUR_DEFAULT;
+    root.setProperty('--chat-blur', cBlur + 'px');
+    root.setProperty('--chat-dim', (t.chat_dim ?? CHAT_DIM_DEFAULT) / 100);
+    document.body.classList.toggle('chat-blur', cBlur > 0);
+    if (!document.querySelector('.dash-veil')) {
+      const v = document.createElement('div');
+      v.className = 'dash-veil';
+      document.body.appendChild(v);
+    }
+  }
+
+  function applyServerName(theme, target = document.documentElement) {
+    const root = target.style;
+    const col = theme?.name_color;
+    root.setProperty('--srv-name-color', /^#[0-9a-fA-F]{6}$/.test(col || '') ? col : '#FFFFFF');
+    root.setProperty('--srv-name-font', resolveNameFont(theme));
+  }
+
+  return { cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();
