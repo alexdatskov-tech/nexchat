@@ -14,8 +14,8 @@ window.Notify = (function () {
   let me = null, convIds = new Set(), chans = [];
   const seen = new Set();
 
-  const onDmPage = () => /dms\.html/.test(location.pathname);
-  const activeConv = () => new URLSearchParams(location.search).get('c');
+  const onDmPage = () => /dms\.html/.test(window.__NX_SHELL__ ? window.__NX_SHELL__.page : location.pathname);
+  const activeConv = () => UI.params().get('c');
 
   async function refreshConvs() {
     const { data } = await window.db.from('dm_participants')
@@ -47,7 +47,7 @@ window.Notify = (function () {
           avatar: who ? UI.avatar(who, 32, { halo: false }) : null,
           title: name,
           body: m.content ? m.content.slice(0, 60) : 'Sent an attachment',
-          action: () => { window.location.href = `dms.html?c=${m.conversation_id}`; },
+          action: () => { UI.go(`dms.html?c=${m.conversation_id}`); },
         });
       })
       .subscribe(chanStatus('nx-dm-notify')));
@@ -64,7 +64,7 @@ window.Notify = (function () {
           title: who?.display_name || who?.username || 'Someone',
           body: 'Sent you a friend request',
           accent: true,
-          action: () => { window.location.href = 'dms.html#requests'; },
+          action: () => { UI.go('dms.html#requests'); },
         });
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'friendships' }, async (p) => {
@@ -77,7 +77,7 @@ window.Notify = (function () {
           title: who?.display_name || who?.username || 'Someone',
           body: 'Accepted your friend request',
           accent: true,
-          action: () => { window.location.href = 'dms.html'; },
+          action: () => { UI.go('dms.html'); },
         });
       })
       .subscribe(chanStatus('nx-friend-notify')));
@@ -94,7 +94,7 @@ window.Notify = (function () {
           body: 'Tap to join the call',
           accent: true,
           duration: 20000,
-          action: () => { window.location.href = `dms.html?c=${payload.conversation}&call=1`; },
+          action: () => { UI.go(`dms.html?c=${payload.conversation}&call=1`); },
         });
       })
       .subscribe(chanStatus('nx-call')));

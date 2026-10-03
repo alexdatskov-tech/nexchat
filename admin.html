@@ -4,9 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Admin</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=33" />
+<meta name="theme-color" content="#08090D" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=40" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=35" />
+<link rel="stylesheet" href="assets/css/theme.css?v=40" />
 </head>
 <body>
 <div class="hidden" id="denied" style="min-height:100dvh;display:grid;place-items:center;padding:24px;">
@@ -27,6 +28,7 @@
     <button class="on" data-tab="nitro"><i class="fa-solid fa-bolt"></i> Nitro requests <span id="pendCount"></span></button>
     <button data-tab="users"><i class="fa-solid fa-users"></i> Users</button>
     <button data-tab="appeals"><i class="fa-solid fa-gavel"></i> Ban appeals <span id="appealCount"></span></button>
+    <button data-tab="announce"><i class="fa-solid fa-bullhorn"></i> Announcements</button>
   </nav>
 
   <div class="set-main">
@@ -48,18 +50,51 @@
       <div class="sub">Accepting an appeal lifts the ban straight away.</div>
       <div id="appealRows"></div>
     </section>
+
+    <section class="set-inner hidden" data-pane="announce">
+      <h2>Announcements</h2>
+      <div class="sub">Posted to everyone: shown on Home, in the megaphone panel, and popped up live for anyone online.</div>
+      <div id="annSetup" class="hidden"></div>
+      <div class="set-block" id="annComposer">
+        <h4>New announcement</h4>
+        <div class="bsub">Markdown works in the body: **bold**, links, lists, `code`.</div>
+        <div class="ann-compose">
+          <div class="field"><label for="annTitle">Title</label><input id="annTitle" type="text" maxlength="140" placeholder="Voice calls just got a lot smoother" /></div>
+          <div class="field"><label for="annBody">Body</label><textarea id="annBody" rows="5" maxlength="8000" placeholder="What changed, what people should know…"></textarea></div>
+          <div class="row2">
+            <div class="field"><label for="annLevel">Type</label>
+              <select id="annLevel" class="input">
+                <option value="update">Update</option>
+                <option value="info">Info</option>
+                <option value="event">Event</option>
+                <option value="warning">Heads up</option>
+              </select>
+            </div>
+            <label class="perm" style="padding:10px 4px;"><input type="checkbox" id="annPinned"> Pin to top</label>
+          </div>
+          <div class="field"><label>Preview</label><div id="annPreview"></div></div>
+          <p class="err" id="annErr"></p>
+          <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" id="annPost"><i class="fa-solid fa-paper-plane"></i> Post announcement</button></div>
+        </div>
+      </div>
+      <div class="sect-head" style="margin-top:22px;"><h2 style="font-size:16px;">Posted</h2></div>
+      <div id="annRows"></div>
+    </section>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=33"></script>
-<script src="assets/js/supabase-client.js?v=33"></script>
-<script src="assets/js/ui.js?v=34"></script>
-<script src="assets/js/md.js?v=33"></script>
-<script src="assets/js/presence.js?v=33"></script>
-<script src="assets/js/guard.js?v=33"></script>
-<script src="assets/js/notify.js?v=33"></script>
-<script src="assets/js/admin.js?v=33"></script>
+<script src="assets/js/config.js?v=40"></script>
+<script src="assets/js/supabase-client.js?v=40"></script>
+<script src="assets/js/ui.js?v=40"></script>
+<script src="assets/js/md.js?v=40"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=40"></script>
+<script src="assets/js/storage.js?v=40"></script>
+<script src="assets/js/presence.js?v=40"></script>
+<script src="assets/js/guard.js?v=40"></script>
+<script src="assets/js/notify.js?v=40"></script>
+<script src="assets/js/nav.js?v=40"></script>
+<script src="assets/js/admin.js?v=40"></script>
 </body>
 </html>

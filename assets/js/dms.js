@@ -1,51 +1,106 @@
 (function () {
   const $ = (id) => document.getElementById(id);
-  const S3 = () => window.__nx_tp;
-  let me = null, tab = 'friends', convs = [], friends = [], requests = [], outgoing = [];
+  let me = null, tab = 'chats', convs = [], friends = [], requests = [], outgoing = [];
   let active = null, sub = null, pending = [];
   const profiles = {}, attCache = {};
   const painting = new Set();   // in-flight appendMessage ids (dedupe guard)
 
   /* ================== history paging ==================
-     A long conversation must never be dumped into the DOM in one go: that
-     froze the tab for minutes and made the composer feel dead. We render the
-     latest PAGE messages and fetch older ones a page at a time, only when
-     the user scrolls up. */
-  const PAGE = 16;              // newest messages shown when a conversation opens
+     Opening a conversation must feel instant, whatever its length:
+       1. the newest PAGE messages are fetched (one indexed query) and their
+          text is painted immediately -- attachments, which need a second
+          query and signing, stream in afterwards and never block the text;
+       2. the last page of every conversation is kept in a small session
+          cache, so re-opening one paints before the network even answers;
+       3. older history is fetched one page at a time, only when the
+          "earlier messages" marker scrolls into view (or is clicked).
+     Auto-filling a tall screen is capped (MAX_AUTOFILL pages); the previous
+     loop could chain ~14 sequential page loads (~240 messages, 28 round
+     trips) before the conversation became usable. */
+  const PAGE = 15;
+  const MAX_AUTOFILL = 2;
   let haveOlder = false;        // the server still has messages above our page
   let loadingOlder = false;
+  let autofilled = 0;
+  let pinned = true;            // reader is at the bottom: keep them there as media loads
 
-  const skeleton = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
-  const intro = () => `<div class="msgs-top"><div class="big-ico">${convAvatar(active, 52)}</div>
+  const skeleton = `<div class="msgs-skel">${'<div class="sk-row"><div class="skel sk-av"></div><div class="sk-lines"><div class="skel"></div><div class="skel"></div></div></div>'.repeat(5)}</div>`;
+  const intro = () => `<div class="msgs-top"><div class="big-ico">${convAvatar(active, 64)}</div>
       <h2>${MD.esc(convTitle(active))}</h2>
-      <p>${active.is_group ? 'The beginning of this group chat.' : 'This is the beginning of your direct messages.'}</p></div>`;
-  const olderBadge = `<div class="msgs-older" hidden><i class="fa-solid fa-circle-notch fa-spin"></i> Loading earlier messages…</div>`;
+      <p>${active.is_group ? 'This is the very beginning of this group chat.' : 'This is the beginning of your direct messages with <b>' + MD.esc(convTitle(active)) + '</b>.'}</p></div>`;
+  const olderBadge = `<button type="button" class="msgs-older"><i class="fa-solid fa-clock-rotate-left"></i><span>Load earlier messages</span></button>`;
 
   const oldestTs = () => {
-    const rows = $('msgs')?.querySelectorAll('.m[data-ts]');
+    const rows = $('msgs')?.querySelectorAll('.m[data-ts]:not([data-id^="tmp-"])');
     return rows?.length ? rows[0].dataset.ts : null;
   };
 
+  const MSG_SELECT = '*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)';
+
   // One page of history, oldest-first. `before` pages backwards from there.
   async function fetchPage(cid, before) {
-    let q = window.db.from('dm_messages')
-      .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
-      .eq('conversation_id', cid).order('created_at', { ascending: false }).limit(PAGE);
+    let q = window.db.from('dm_messages').select(MSG_SELECT)
+      .eq('conversation_id', cid).order('created_at', { ascending: false }).limit(PAGE + 1);
     if (before) q = q.lt('created_at', before);
     const { data, error } = await q;
     if (error) throw error;
-    return (data || []).slice(0, PAGE).reverse();
+    // One extra row says for certain whether anything older exists, so the
+    // "earlier messages" marker never lingers over an empty history.
+    const rows = data || [];
+    const msgs = rows.slice(0, PAGE).reverse();
+    msgs.more = rows.length > PAGE;
+    return msgs;
   }
 
   const cacheProfiles = (msgs) => msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
 
+  /* ---- per-conversation session cache ---- */
+  const CACHE_KEY = 'nx_dm_pages_v1';
+  const pageCache = (() => { try { return JSON.parse(sessionStorage.getItem(CACHE_KEY) || '{}'); } catch { return {}; } })();
+  function cachePut(cid, msgs) {
+    const atts = {};
+    msgs.forEach((m) => { if (attCache[m.id]?.length) atts[m.id] = attCache[m.id]; });
+    // Profiles are re-fetched with every page anyway; keep the cache light.
+    const slim = msgs.map((m) => ({ ...m, profiles: m.profiles ? { ...m.profiles, theme: null } : null }));
+    pageCache[cid] = { at: Date.now(), msgs: slim, atts, more: !!msgs.more };
+    const ids = Object.keys(pageCache).sort((a, b) => pageCache[b].at - pageCache[a].at);
+    ids.slice(12).forEach((k) => delete pageCache[k]);
+    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(pageCache)); } catch { /* quota: cache is optional */ }
+  }
+
+  // Attachments for a set of messages. Rebuilds each entry, so a re-fetch
+  // never doubles files up; returns the ids whose file list changed.
   async function loadAtts(msgs) {
-    if (!msgs.length) return;
+    if (!msgs.length) return [];
     const ids = msgs.map((m) => m.id);
-    let { data: aa } = await window.db.from('dm_message_attachments')
+    let { data: aa, error } = await window.db.from('dm_message_attachments')
       .select('*').in('message_id', ids).order('position', { ascending: true });
-    if (!aa) ({ data: aa } = await window.db.from('dm_message_attachments').select('*').in('message_id', ids));
-    (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
+    if (error) ({ data: aa } = await window.db.from('dm_message_attachments').select('*').in('message_id', ids));
+    const next = {};
+    (aa || []).forEach((a) => { (next[a.message_id] = next[a.message_id] || []).push(a); });
+    const changed = [];
+    ids.forEach((id) => {
+      const before = (attCache[id] || []).map((a) => a.id).join();
+      const after = (next[id] || []).map((a) => a.id).join();
+      if (next[id]) attCache[id] = next[id]; else delete attCache[id];
+      if (before !== after) changed.push(id);
+    });
+    return changed;
+  }
+
+  function olderMarker() { return $('msgs')?.querySelector('.msgs-older'); }
+
+  function setOlderMarker() {
+    const box = $('msgs');
+    const mk = olderMarker();
+    if (haveOlder) {
+      if (!mk) box.insertAdjacentHTML('afterbegin', olderBadge);
+      box.querySelector('.msgs-top')?.remove();
+      olderIO.observe(olderMarker());
+    } else {
+      if (mk) { olderIO.unobserve(mk); mk.remove(); }
+      if (!box.querySelector('.msgs-top') && active) box.insertAdjacentHTML('afterbegin', intro());
+    }
   }
 
   /* Prepend a page of older messages, keeping the viewport pinned to the row
@@ -53,54 +108,62 @@
   async function loadOlder() {
     const box = $('msgs');
     if (!box || !active || loadingOlder || !haveOlder) return;
-    loadingOlder = true;
     const cid = active.id, before = oldestTs();
-    if (!before) { loadingOlder = false; return; }   // nothing rendered to page from
-    const prevH = box.scrollHeight, prevTop = box.scrollTop;
-    const badge = box.querySelector('.msgs-older');
-    if (badge) badge.hidden = false;
+    if (!before) return;
+    loadingOlder = true;
+    const mk = olderMarker();
+    mk?.classList.add('busy');
     try {
       const older = await fetchPage(cid, before);
       if (!active || active.id !== cid) return;
       cacheProfiles(older);
-      await loadAtts(older);
-      if (!active || active.id !== cid) return;
+      haveOlder = older.more;
 
-      haveOlder = older.length === PAGE;
+      const prevH = box.scrollHeight, prevTop = box.scrollTop;
       let html = '', pa = null, pt = null;
       older.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
       const first = box.querySelector('.m');
       if (first) first.insertAdjacentHTML('beforebegin', html);
-      else box.insertAdjacentHTML('afterbegin', html);
-      older.forEach((m) => paintAtts(m.id));
-      if (!haveOlder) {
-        badge?.remove();
-        if (!box.querySelector('.msgs-top')) box.insertAdjacentHTML('afterbegin', intro());
-      }
+      else box.insertAdjacentHTML('beforeend', html);
+      setOlderMarker();
       wire(box);
       regroup();   // the seam row may now group with the batch above it
+      box.scrollTop = box.scrollHeight - prevH + prevTop;
 
-      // Only correct the scroll once the new rows have laid out. overflow-anchor
-      // is off for .msgs so this is the single adjustment, not a double one.
-      requestAnimationFrame(() => { box.scrollTop = box.scrollHeight - prevH + prevTop; });
+      // Files arrive after the text; prepending them must not jolt the view.
+      loadAtts(older).then((ids) => {
+        if (!active || active.id !== cid) return;
+        const h0 = box.scrollHeight, t0 = box.scrollTop;
+        ids.forEach(paintAtts);
+        if (!pinned) box.scrollTop = t0 + (box.scrollHeight - h0);
+      }).catch(() => {});
     } catch (err) { UI.toast(err.message, true); }
     finally {
       loadingOlder = false;
-      const b = $('msgs')?.querySelector('.msgs-older');
-      if (b) b.hidden = haveOlder ? true : false;
+      olderMarker()?.classList.remove('busy');
+    }
+    maybeAutofill();
+  }
+
+  /* A page that doesn't fill the screen leaves nothing to scroll, so pull a
+     little more -- but only a little. Past MAX_AUTOFILL the marker stays as
+     a button and the reader decides. */
+  function maybeAutofill() {
+    const box = $('msgs');
+    if (!box || !haveOlder || loadingOlder || autofilled >= MAX_AUTOFILL) return;
+    if (box.clientHeight > 0 && box.scrollHeight <= box.clientHeight + 40) {
+      autofilled++;
+      loadOlder();
     }
   }
 
-  /* If a page doesn't fill the screen there is nothing to scroll, so the
-     reader could never reach older history. Keep loading until it can. */
-  async function fillView() {
-    const box = $('msgs');
-    if (!box || box.clientHeight <= 0) return;
-    let guard = 0;
-    while (haveOlder && box.scrollHeight <= box.clientHeight + 120 && guard++ < 14) {
-      await loadOlder();
-    }
-  }
+  // The marker coming into view is the signal to page back through history.
+  // (When the list can't scroll yet, maybeAutofill() owns that decision.)
+  const olderIO = typeof IntersectionObserver === 'undefined' ? { observe() {}, unobserve() {} }
+    : new IntersectionObserver((entries) => {
+      const b = $('msgs');
+      if (entries.some((e) => e.isIntersecting) && b.scrollHeight > b.clientHeight + 40) loadOlder();
+    }, { root: $('msgs'), rootMargin: '120px 0px 0px 0px' });
 
   async function profileOf(id) {
     if (profiles[id]) return profiles[id];
@@ -128,10 +191,12 @@
     const ids = (parts || []).map((p) => p.conversation_id);
     convs = [];
     if (ids.length) {
-      const { data: cs } = await window.db.from('dm_conversations').select('*').in('id', ids);
-      const { data: allParts } = await window.db.from('dm_participants')
-        .select('conversation_id, user_id, profiles(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
-        .in('conversation_id', ids);
+      const [{ data: cs }, { data: allParts }] = await Promise.all([
+        window.db.from('dm_conversations').select('*').in('id', ids),
+        window.db.from('dm_participants')
+          .select('conversation_id, user_id, profiles(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
+          .in('conversation_id', ids),
+      ]);
       (allParts || []).forEach((p) => { if (p.profiles) profiles[p.user_id] = p.profiles; });
       convs = (cs || []).map((c) => ({
         ...c,
@@ -183,7 +248,24 @@
     const q = $('dmFilter').value.trim().toLowerCase();
     const box = $('dmList');
 
-    if (tab === 'groups') {
+    // Every conversation, most recently active first.
+    if (tab === 'chats') {
+      const when = (c) => c.last_message_at || c.updated_at || c.created_at || '';
+      const rows = convs.filter((c) => !q || convTitle(c).toLowerCase().includes(q))
+        .sort((a, b) => (when(b) > when(a) ? 1 : -1));
+      box.innerHTML = rows.length ? rows.map((c) => `
+        <div class="dm-item ${active?.id === c.id ? 'on' : ''}" data-c="${c.id}">
+          ${convAvatar(c, 36)}
+          <div class="nm"><b>${MD.esc(convTitle(c))}</b>
+            <small>${c.is_group ? `${c.people.length + 1} members` : '@' + MD.esc(c.people[0]?.username || '')}</small></div>
+        </div>`).join('')
+        : '<div class="dm-empty">No conversations yet.<br>Message a friend, or use the pencil to start one.</div>';
+      box.querySelectorAll('.dm-item').forEach((el) => {
+        el.onclick = () => openConv(convs.find((c) => c.id === el.dataset.c));
+      });
+    }
+
+    else if (tab === 'groups') {
       const rows = convs.filter((c) => c.is_group && (!q || convTitle(c).toLowerCase().includes(q)));
       box.innerHTML = rows.length ? rows.map((c) => `
         <div class="dm-item ${active?.id === c.id ? 'on' : ''}" data-c="${c.id}">
@@ -284,7 +366,7 @@
   }
 
   /* ================== conversation ================== */
-  async function openConv(c) {
+  async function openConv(c, prefetched) {
     if (!c) return;
     active = c;
     paintList();
@@ -306,9 +388,8 @@
     if (inCall) showCall(false);
     $('input').placeholder = `Message ${convTitle(c)}`;
     $('composer').classList.remove('hidden');
-    $('rail').classList.remove('open');
-    document.querySelector('.rail-scrim')?.remove();
-    await loadMsgs(c.id);
+    window.Nav?.closeDrawer();
+    await loadMsgs(c.id, prefetched);
     listen(c.id);
   }
 
@@ -354,10 +435,7 @@
 
   async function purgeAttachments(mid) {
     for (const a of attCache[mid] || []) {
-      try {
-        const key = decodeURIComponent(new URL(a.url).pathname.replace(/^\/[^/]+\//, ''));
-        if (key) await window.__nx_tp.del(key);
-      } catch {}
+      try { await window.Store.del(a.url); } catch {}
     }
     delete attCache[mid];
   }
@@ -396,31 +474,51 @@
     });
   }
 
-  async function loadMsgs(cid) {
+  function paintPage(msgs) {
     const box = $('msgs');
-    box.innerHTML = skeleton;
-    haveOlder = false; loadingOlder = false;
-    let msgs;
-    try { msgs = await fetchPage(cid); }
-    catch (err) { box.innerHTML = ''; return UI.toast(err.message, true); }
-    if (!active || active.id !== cid) return;
-    cacheProfiles(msgs);
-
-    Object.keys(attCache).forEach((k) => delete attCache[k]);
-    await loadAtts(msgs);
-    if (!active || active.id !== cid) return;
-
-    // A full page back means there is almost certainly more above it; a short
-    // one means this conversation fits and the intro belongs at the top.
-    haveOlder = msgs.length === PAGE;
-
-    let html = haveOlder ? olderBadge : intro(), pa = null, pt = 0;
+    let html = '', pa = null, pt = 0;
     msgs.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
     box.innerHTML = html;
-    msgs.forEach((m) => paintAtts(m.id));
+    setOlderMarker();
+    msgs.forEach((m) => { if (attCache[m.id]) paintAtts(m.id); });
     wire(box);
+    pinned = true;
     box.scrollTop = box.scrollHeight;
-    fillView();
+  }
+
+  async function loadMsgs(cid, prefetched) {
+    const box = $('msgs');
+    haveOlder = false; loadingOlder = false; autofilled = 0;
+    Object.keys(attCache).forEach((k) => delete attCache[k]);
+
+    // Paint the cached last page straight away; the network refresh follows.
+    const cached = pageCache[cid];
+    if (cached?.msgs?.length) {
+      cacheProfiles(cached.msgs.filter((m) => !profiles[m.author_id]));
+      Object.assign(attCache, cached.atts || {});
+      haveOlder = !!cached.more;
+      paintPage(cached.msgs);
+    } else {
+      box.innerHTML = skeleton;
+    }
+
+    let msgs;
+    try { msgs = (prefetched && await prefetched) || await fetchPage(cid); }
+    catch (err) { if (!cached) box.innerHTML = ''; return UI.toast(err.message, true); }
+    if (!active || active.id !== cid) return;
+    cacheProfiles(msgs);
+    haveOlder = msgs.more;
+
+    const sig = (list) => list.map((m) => m.id + ':' + (m.edited_at || '')).join();
+    if (!cached || sig(cached.msgs) !== sig(msgs)) paintPage(msgs);
+    else setOlderMarker();
+
+    const changed = await loadAtts(msgs).catch(() => []);
+    if (!active || active.id !== cid) return;
+    changed.forEach(paintAtts);
+    if (pinned) box.scrollTop = box.scrollHeight;
+    cachePut(cid, msgs);
+    maybeAutofill();
   }
 
   function wire(scope) {
@@ -689,11 +787,17 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
   window.addEventListener('online', () => { if (active) { catchUp(); listen(active.id); } });
 
-  // Scrolling to the top is the signal to page back through history.
+  // Track whether the reader sits at the bottom, so late-loading images and
+  // videos keep the newest message in view instead of pushing it off-screen.
   $('msgs').addEventListener('scroll', () => {
-    if ($('msgs').scrollTop > 140) return;
-    loadOlder();
+    const b = $('msgs');
+    pinned = b.scrollHeight - b.scrollTop - b.clientHeight < 60;
   }, { passive: true });
+  $('msgs').addEventListener('load', () => {
+    const b = $('msgs');
+    if (pinned) b.scrollTop = b.scrollHeight;
+  }, true);
+  $('msgs').addEventListener('click', (e) => { if (e.target.closest('.msgs-older')) loadOlder(); });
 
   /* ================== composer ================== */
   function paintTray() {
@@ -774,7 +878,11 @@
           const f = files[i];
           try {
             const key = `nexchat/dm/${active.id}/${Date.now()}-${i}-${f.name.replace(/[^\w.\-]/g, '_')}`;
-            const up = await S3().put(key, f);
+            // up.url is the permanent object URL -- never a signed link, which
+            // would stop working a week from now.
+            const up = await window.Store.put(key, f, (p) => {
+              fill.style.width = Math.round(((i + p / 100) / files.length) * 100) + '%';
+            });
             const rowBase = {
               message_id: msg.id, url: up.url, file_name: f.name,
               file_size: f.size, mime_type: up.type,
@@ -806,6 +914,15 @@
     ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 168) + 'px'; };
     ta.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
     $('send').onclick = send;
+    $('emojiBtn').onclick = (e) => {
+      e.stopPropagation();
+      window.EmojiPicker?.open($('emojiBtn'), (emoji) => {
+        const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
+        ta.value = ta.value.slice(0, a) + emoji + ta.value.slice(b);
+        ta.focus(); ta.setSelectionRange(a + emoji.length, a + emoji.length);
+        ta.oninput();
+      });
+    };
     $('attachBtn').onclick = () => $('fileIn').click();
     $('fileIn').onchange = (e) => { stage(e.target.files); e.target.value = ''; };
     ta.addEventListener('paste', (e) => {
@@ -854,35 +971,22 @@
   }
 
   /* ================== calls ================== */
-  let inCall = false, speakSet = new Set(), devStats = false;
+  let inCall = false, speakSet = new Set();
 
   function showCall(on) {
     inCall = on;
     $('vroom').classList.toggle('hidden', !on);
     $('msgs').classList.toggle('hidden', on);
     $('composer').classList.toggle('hidden', on || !active);
+    if (!on) $('vstats').classList.add('hidden');
     if (on) paintRoom(Voice.state());
   }
 
-  function feedsFor(p) {
-    const isMe = p.id === me.id;
-    const st = Voice.state();
-    const wantsCam = isMe ? st.cam : !!p.cam;
-    const wantsScreen = isMe ? st.sharing : !!p.sharing;
-    const hasLive = (s) => !!s && s.getVideoTracks().some((t) => t.readyState === 'live');
-    const camS = wantsCam ? (isMe ? Voice.localCam() : Voice.peerCam(p.id)) : null;
-    const scrS = wantsScreen ? (isMe ? Voice.localScreen() : Voice.peerScreen(p.id)) : null;
-    const out = [];
-    if (wantsScreen && hasLive(scrS)) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
-    if (wantsCam && hasLive(camS)) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
-    if (!out.length) out.push({ p, isMe, key: p.id + ':av', stream: null, screen: false });
-    return out;
-  }
-
   function paintRoom(st) {
-    if (!st.active) return;
+    if (!st.active) { if (inCall) showCall(false); return; }
     $('vrName').textContent = active ? convTitle(active) : 'Call';
-    $('vrSub').textContent = `${st.members.size} on the call`;
+    const n = st.members.size;
+    $('vrSub').textContent = n > 1 ? `${n} on the call` : 'Waiting for others to join…';
     const set = (id, cls, cond, icon) => {
       const b = $(id); b.classList.remove('live', 'off');
       if (cond) b.classList.add(cls);
@@ -890,60 +994,29 @@
     };
     set('vrMute', 'off', st.muted, `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`);
     set('vrDeaf', 'off', st.deaf, '<i class="fa-solid fa-headphones-simple"></i>');
-    set('vrCam', 'live', st.cam);
+    set('vrCam', 'live', st.cam, `<i class="fa-solid fa-video${st.cam ? '' : '-slash'}"></i>`);
     set('vrShare', 'live', st.sharing);
-
-    const grid = $('vrStage');
-    const feeds = [...st.members.values()].flatMap(feedsFor);
-    grid.classList.toggle('solo', feeds.length === 1);
-    const seenKeys = new Set();
-    feeds.forEach((f) => {
-      seenKeys.add(f.key);
-      let t = grid.querySelector(`[data-t="${f.key}"]`);
-      if (!t) {
-        t = document.createElement('div');
-        t.className = 'vtile';
-        t.dataset.t = f.key;
-        t.innerHTML = `<video autoplay playsinline ${f.isMe ? 'muted' : ''}></video><div class="vt-av"></div><div class="vt-name"></div>`;
-        grid.appendChild(t);
-      }
-      const v = t.querySelector('video');
-      if (f.stream && v.srcObject !== f.stream) { v.srcObject = f.stream; v.play?.().catch(() => {}); }
-      if (!f.stream) v.srcObject = null;
-      v.style.display = f.stream ? '' : 'none';
-      const av = t.querySelector('.vt-av');
-      av.style.display = f.stream ? 'none' : '';
-      if (!f.stream) av.innerHTML = UI.avatar(f.p, 76, { halo: false });
-      t.querySelector('.vt-name').innerHTML =
-        `${f.p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}<span>${MD.esc(f.p.display_name || f.p.username)}${f.isMe ? ' (you)' : ''}</span>`;
-      t.querySelector('.vt-flag')?.remove();
-      if (f.screen) t.insertAdjacentHTML('beforeend', '<span class="vt-flag">Screen</span>');
-      t.classList.toggle('speaking', speakSet.has(f.p.id) && !f.p.muted);
-    });
-    [...grid.children].forEach((t) => { if (!seenKeys.has(t.dataset.t)) t.remove(); });
+    CallUI.paintStage($('vrStage'), st, { meId: me.id, speakSet, onAvatar: (id) => UI.userCard(id) });
   }
 
+  // The connection panel is for everyone now, and every number in it is
+  // measured by the browser (RTCPeerConnection.getStats), not assumed.
+  let statsOpen = false;
   function paintStats(st) {
-    const bar = $('vstats');
-    if (!inCall || !devStats) { bar.classList.add('hidden'); return; }
-    bar.classList.remove('hidden');
-    const rttCls = st.rtt === 0 ? '' : st.rtt < 60 ? 'good' : st.rtt < 160 ? 'warn' : 'bad';
-    bar.innerHTML = `
-      <span class="st ${st.res ? 'good' : ''}"><i class="fa-solid fa-display"></i> Video <b>${st.res || 'off'}</b></span>
-      <span class="st"><i class="fa-solid fa-film"></i> <b>${st.fps || 0}</b> fps</span>
-      <span class="st"><i class="fa-solid fa-video"></i> <b>${st.vkbps || 0}</b> kbps</span>
-      <span class="st good"><i class="fa-solid fa-waveform-lines"></i> Audio <b>${st.akbps || 0}</b> kbps</span>
-      <span class="spacer"></span>
-      <span class="st ${rttCls}"><i class="fa-solid fa-tower-broadcast"></i> <b>${st.rtt || 0}</b> ms</span>`;
+    const panel = $('vstats');
+    if (!inCall || !statsOpen) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    if (!panel.querySelector('.cs-body')) {
+      panel.innerHTML = CallUI.panelShell();
+      CallUI.wirePanel(panel);
+      panel.querySelector('[data-cs-close]').onclick = () => { statsOpen = false; paintStats(st); };
+    }
+    panel.querySelector('.cs-body').innerHTML = CallUI.statsPanel(st);
   }
 
   function onSpeaking(set) {
     speakSet = set;
-    document.querySelectorAll('.vtile').forEach((t) => {
-      const uid = t.dataset.t.split(':')[0];
-      const p = Voice.state().members.get(uid);
-      t.classList.toggle('speaking', set.has(uid) && !p?.muted);
-    });
+    CallUI.markSpeaking($('vrStage'), set);
   }
 
   async function startCall(withVideo) {
@@ -977,24 +1050,24 @@
     $('vrShare').onclick = () => {
       if (Voice.state().sharing) return Voice.stopShare();
       if (!Voice.screenSupported()) return UI.toast('Screen sharing needs a desktop browser.', true);
-      Voice.startShare({ surface: 'monitor', quality: '1080', audio: true });
+      Voice.startShare({ surface: 'monitor', quality: 'text', audio: true });
     };
     $('vrChat').onclick = () => showCall(false);
+    $('vrStats').onclick = () => { statsOpen = !statsOpen; paintStats(Voice.state().stats); };
     $('vrLeave').onclick = async () => { await Voice.leave(); showCall(false); UI.toast('Call ended.'); };
     window.addEventListener('beforeunload', () => { if (Voice.state().active) Voice.leave(); });
   }
 
-  $('burger').onclick = () => {
-    $('rail').classList.add('open');
-    const s = document.createElement('div');
-    s.className = 'rail-scrim';
-    s.onclick = () => { $('rail').classList.remove('open'); s.remove(); };
-    document.body.appendChild(s);
-  };
-  $('btnOut').onclick = async () => { await window.db.auth.signOut(); window.location.href = 'index.html'; };
+  $('burger').onclick = () => window.Nav?.openDrawer();
+  $('btnOut').onclick = async () => { await window.db.auth.signOut(); UI.go('index.html'); };
 
   (async () => {
     const s = await UI.requireSession(); if (!s) return;
+    // A deep link (?c=) starts fetching its messages right away, in parallel
+    // with the profile + sidebar queries instead of after them.
+    const params = UI.params();
+    const want = params.get('c');
+    const prefetch = want ? fetchPage(want).catch(() => null) : null;
     me = await UI.myProfile(s.user.id);
     if (me) {
       UI.applyBackground(me.theme);
@@ -1002,6 +1075,7 @@
       window.Guard?.start(me);
       window.Presence?.start(me);
       window.Presence?.onChange(() => { window.Presence.refreshDots(); if (tab === 'friends') paintList(); });
+      window.Nav?.mount(me, { active: 'dms' });
     }
     profiles[me.id] = me;
     $('meAv').innerHTML = UI.avatar(me, 28);
@@ -1030,12 +1104,9 @@
       });
 
     await loadAll();
-    if (location.hash === '#requests') { tab = 'requests'; syncTabs(); paintList(); }
-    devStats = !!(me.theme && me.theme.dev_mode);
-    const params = new URLSearchParams(location.search);
-    const want = params.get('c');
+    if (UI.hash() === '#requests') { tab = 'requests'; syncTabs(); paintList(); }
     if (want) {
-      await openConv(convs.find((c) => c.id === want));
+      await openConv(convs.find((c) => c.id === want), prefetch);
       if (params.get('call') === '1') startCall(false);
     }
   })();

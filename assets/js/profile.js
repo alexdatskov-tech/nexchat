@@ -277,7 +277,7 @@
           catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
         }
         const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
-        await window.__nx_tp.put(key, wpFile);
+        await window.Store.put(key, wpFile);
         wallpaperSelection++;
         wallpaperKey = key;
         bgVal = '';
@@ -377,7 +377,7 @@
     UI.toast('Password updated.');
   };
 
-  $('btnOut').onclick = async () => { await window.db.auth.signOut(); window.location.href = 'index.html'; };
+  $('btnOut').onclick = async () => { await window.db.auth.signOut(); UI.go('index.html'); };
 
   // ---- delete account ----
   const toAddr = (u) => `${u.trim().toLowerCase()}@users.nexchat-app.com`;
@@ -405,7 +405,7 @@
       if (rpcErr) throw rpcErr;
 
       UI.toast('Your account has been deleted.');
-      window.location.href = 'index.html';
+      UI.go('index.html');
     } catch (err) {
       $('delErr').textContent = err.message || 'Could not delete account.';
       btn.disabled = false; btn.textContent = 'Delete my account';

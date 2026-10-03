@@ -12,8 +12,13 @@ let fails = 0;
 const ok = (n, c, extra) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${extra ? '  ' + extra : ''}`); if (!c) fails++; };
 
 (async () => {
-  const files = fs.readdirSync(APP).filter((f) => /^nexchat_patch\d+\.sql$/.test(f)).sort();
-  ok('patch files found', files.length >= 4, files.join(', '));
+  // Root-level nexchat_patch*.sql (older patches) and supabase/*.sql.
+  const sup = path.join(APP, 'supabase');
+  const files = [
+    ...fs.readdirSync(APP).filter((f) => /^nexchat_patch\d+\.sql$/.test(f)),
+    ...(fs.existsSync(sup) ? fs.readdirSync(sup).filter((f) => /\.sql$/.test(f)).map((f) => 'supabase/' + f) : []),
+  ].sort();
+  ok('patch files found', files.length >= 1, files.join(', '));
 
   for (const f of files) {
     const sql = fs.readFileSync(path.join(APP, f), 'utf8');
@@ -59,7 +64,9 @@ const ok = (n, c, extra) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${extra ?
   }
 
   /* A completed run has to be distinguishable from a truncated one. */
-  for (const f of ['nexchat_patch5.sql', 'nexchat_patch6.sql']) {
+  // (Patches 1-6 were moved out of the repo; check whichever are present.)
+  for (const f of ['nexchat_patch5.sql', 'nexchat_patch6.sql', 'supabase/announcements.sql']) {
+    if (!fs.existsSync(path.join(APP, f))) continue;
     const sql = fs.readFileSync(path.join(APP, f), 'utf8');
     const stmts = sql.split(';').map((s) => s.trim()).filter((s) => s && !/^--/.test(s.split('\n').pop()));
     const last = stmts[stmts.length - 1] || '';
@@ -67,7 +74,7 @@ const ok = (n, c, extra) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${extra ?
     ok(`  ${f} verification checks realtime publication`, /pg_publication_tables/.test(sql));
   }
 
-  {
+  if (fs.existsSync(path.join(APP, 'nexchat_patch6.sql'))) {
     const sql = fs.readFileSync(path.join(APP, 'nexchat_patch6.sql'), 'utf8');
     ok('patch6 verifies the appeals table', /to_regclass\('public\.ban_appeals'\)/.test(sql));
     ok('patch6 verifies the resolve function', /to_regproc\([^)]*resolve_ban_appeal/.test(sql));

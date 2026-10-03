@@ -9,6 +9,7 @@
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
       if (b.dataset.tab === 'users') loadUsers();
       if (b.dataset.tab === 'appeals') loadAppeals();
+      if (b.dataset.tab === 'announce') loadAnnouncements();
       window.scrollTo(0, 0);
     };
   });
@@ -200,6 +201,74 @@
     });
   }
   $('uSearch').oninput = paintUsers;
+
+  /* ---- announcements ---- */
+  const annMissing = (e) => e && (e.code === 'PGRST205' || e.code === '42P01' || /schema cache|does not exist/i.test(e.message || ''));
+
+  function annDraft() {
+    return {
+      title: $('annTitle').value.trim(), body: $('annBody').value.trim(),
+      level: $('annLevel').value, pinned: $('annPinned').checked,
+      created_at: new Date().toISOString(),
+    };
+  }
+  function annPreview() {
+    const d = annDraft();
+    $('annPreview').innerHTML = Nav.annCard({ ...d, title: d.title || 'Your title here' });
+  }
+  ['annTitle', 'annBody', 'annLevel', 'annPinned'].forEach((id) => { $(id).addEventListener('input', annPreview); $(id).addEventListener('change', annPreview); });
+
+  async function loadAnnouncements() {
+    annPreview();
+    const { data, error } = await window.db.from('announcements').select('*').order('created_at', { ascending: false }).limit(100);
+    const missing = annMissing(error);
+    $('annSetup').classList.toggle('hidden', !missing);
+    $('annComposer').classList.toggle('hidden', missing);
+    if (missing) {
+      $('annSetup').innerHTML = `<div class="empty"><div class="ico"><i class="fa-solid fa-database"></i></div>
+        <h3>Announcements aren't set up yet</h3>
+        <p>Run <code>supabase/announcements.sql</code> in the Supabase SQL editor, then reload this page.</p></div>`;
+      $('annRows').innerHTML = '';
+      return;
+    }
+    if (error) return UI.toast(error.message, true);
+    $('annRows').innerHTML = (data || []).map((a) => `<div class="lrow" data-id="${a.id}" style="align-items:flex-start;">
+        <div class="lmain">${Nav.annCard(a, true)}</div>
+        <div class="lacts" style="flex-direction:column;">
+          <button class="btn btn-quiet btn-sm a-pin">${a.pinned ? 'Unpin' : 'Pin'}</button>
+          <button class="btn btn-danger btn-sm a-del">Delete</button>
+        </div></div>`).join('') || '<div class="empty"><p>Nothing posted yet.</p></div>';
+    $('annRows').querySelectorAll('.lrow').forEach((row) => {
+      const a = data.find((x) => x.id === row.dataset.id);
+      row.querySelector('.a-pin').onclick = async () => {
+        const { error: e } = await window.db.from('announcements').update({ pinned: !a.pinned }).eq('id', a.id);
+        if (e) return UI.toast(e.message, true);
+        loadAnnouncements();
+      };
+      row.querySelector('.a-del').onclick = async () => {
+        if (!await UI.confirmDialog('Delete announcement', `"${a.title}" will disappear for everyone.`, true)) return;
+        const { error: e } = await window.db.from('announcements').delete().eq('id', a.id);
+        if (e) return UI.toast(e.message, true);
+        UI.toast('Announcement deleted.');
+        loadAnnouncements();
+      };
+    });
+  }
+
+  $('annPost').onclick = async () => {
+    const d = annDraft();
+    $('annErr').textContent = '';
+    if (!d.title) return ($('annErr').textContent = 'Give it a title.');
+    const btn = $('annPost'); btn.disabled = true;
+    const { error } = await window.db.from('announcements').insert({
+      title: d.title, body: d.body, level: d.level, pinned: d.pinned, author_id: me.id,
+    });
+    btn.disabled = false;
+    if (error) return ($('annErr').textContent = error.message);
+    $('annTitle').value = ''; $('annBody').value = ''; $('annPinned').checked = false;
+    UI.toast('Announcement posted.');
+    loadAnnouncements();
+  };
 
   (async () => {
     const s = await UI.requireSession(); if (!s) return;

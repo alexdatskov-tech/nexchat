@@ -1,6 +1,5 @@
 (function () {
   const $ = (id) => document.getElementById(id);
-  const S3 = () => window.__nx_tp;
   let me = null, srv = null, serverId = null;
   let channels = [], active = null, sub = null, canManage = false;
   let voiceChan = null, voicePoll = null;
@@ -9,19 +8,22 @@
   let pending = [];   // files staged in the composer
 
   /* ================= history paging =================
-     Channels render the latest PAGE messages and only fetch older ones when
-     the user scrolls up. Dumping whole history into the DOM at once is what
-     made busy channels freeze the tab for minutes. */
-  const PAGE = 16;
+     Same contract as DMs: the newest PAGE messages paint immediately (text
+     first; files and reactions stream in after), the last page of each
+     channel is session-cached for instant re-open, and older history loads
+     a page at a time only when the "earlier messages" marker is reached. */
+  const PAGE = 15;
+  const MAX_AUTOFILL = 2;
   let haveOlder = false;
   let loadingOlder = false;
+  let autofilled = 0;
+  let pinned = true;
 
-  const skeleton = `<div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
-      ${'<div class="skel" style="height:38px;"></div>'.repeat(4)}</div>`;
-  const olderBadge = `<div class="msgs-older" hidden><i class="fa-solid fa-circle-notch fa-spin"></i> Loading earlier messages…</div>`;
+  const skeleton = `<div class="msgs-skel">${'<div class="sk-row"><div class="skel sk-av"></div><div class="sk-lines"><div class="skel"></div><div class="skel"></div></div></div>'.repeat(5)}</div>`;
+  const olderBadge = `<button type="button" class="msgs-older"><i class="fa-solid fa-clock-rotate-left"></i><span>Load earlier messages</span></button>`;
 
   const oldestTs = () => {
-    const rows = $('msgs')?.querySelectorAll('.m[data-ts]');
+    const rows = $('msgs')?.querySelectorAll('.m[data-ts]:not([data-id^="tmp-"])');
     return rows?.length ? rows[0].dataset.ts : null;
   };
 
@@ -29,81 +31,121 @@
   async function fetchPage(cid, before) {
     let q = window.db.from('messages')
       .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
-      .eq('channel_id', cid).order('created_at', { ascending: false }).limit(PAGE);
+      .eq('channel_id', cid).order('created_at', { ascending: false }).limit(PAGE + 1);
     if (before) q = q.lt('created_at', before);
     const { data, error } = await q;
     if (error) throw error;
-    return (data || []).slice(0, PAGE).reverse();
+    // One extra row says for certain whether anything older exists, so the
+    // "earlier messages" marker never lingers over an empty history.
+    const rows = data || [];
+    const msgs = rows.slice(0, PAGE).reverse();
+    msgs.more = rows.length > PAGE;
+    return msgs;
   }
 
   const cacheProfiles = (msgs) => msgs.forEach((m) => { if (m.profiles) profiles[m.author_id] = m.profiles; });
 
-  /* Prepend a page of older messages, keeping the viewport pinned to the row
-     the user was looking at instead of jumping to the top. */
+  const CACHE_KEY = 'nx_ch_pages_v1';
+  const pageCache = (() => { try { return JSON.parse(sessionStorage.getItem(CACHE_KEY) || '{}'); } catch { return {}; } })();
+  function cachePut(cid, msgs) {
+    const atts = {};
+    msgs.forEach((m) => { if (attCache[m.id]?.length) atts[m.id] = attCache[m.id]; });
+    const slim = msgs.map((m) => ({ ...m, profiles: m.profiles ? { ...m.profiles, theme: null } : null }));
+    pageCache[cid] = { at: Date.now(), msgs: slim, atts, more: !!msgs.more };
+    Object.keys(pageCache).sort((a, b) => pageCache[b].at - pageCache[a].at).slice(16).forEach((k) => delete pageCache[k]);
+    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(pageCache)); } catch { /* optional */ }
+  }
+
+  /* Files + reactions for a batch of messages. Entries are rebuilt, never
+     appended, so a refresh can't double anything up. Returns changed ids. */
+  async function loadExtras(msgs) {
+    if (!msgs.length) return [];
+    const ids = msgs.map((m) => m.id);
+    const [{ data: rr }, attRes] = await Promise.all([
+      window.db.from('message_reactions').select('*').in('message_id', ids),
+      window.db.from('message_attachments').select('*').in('message_id', ids).order('position', { ascending: true }),
+    ]);
+    let aa = attRes.data;
+    if (attRes.error) {
+      ({ data: aa } = await window.db.from('message_attachments')
+        .select('*').in('message_id', ids).order('created_at', { ascending: true }));
+    }
+    const next = {};
+    (aa || []).forEach((a) => { (next[a.message_id] = next[a.message_id] || []).push(a); });
+    const changed = [];
+    ids.forEach((id) => {
+      const before = (attCache[id] || []).map((a) => a.id).join();
+      if (next[id]) attCache[id] = next[id]; else delete attCache[id];
+      if (before !== (next[id] || []).map((a) => a.id).join()) changed.push(id);
+      delete rx[id];
+    });
+    (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
+    return changed;
+  }
+
+  const olderMarker = () => $('msgs')?.querySelector('.msgs-older');
+  function setOlderMarker() {
+    const box = $('msgs');
+    if (haveOlder) {
+      if (!olderMarker()) box.insertAdjacentHTML('afterbegin', olderBadge);
+      box.querySelector('.msgs-top')?.remove();
+      olderIO.observe(olderMarker());
+    } else {
+      const mk = olderMarker();
+      if (mk) { olderIO.unobserve(mk); mk.remove(); }
+      if (!box.querySelector('.msgs-top') && active) box.insertAdjacentHTML('afterbegin', intro());
+    }
+  }
+
   async function loadOlder() {
     const box = $('msgs');
     if (!box || !active || loadingOlder || !haveOlder) return;
-    loadingOlder = true;
     const cid = active.id, before = oldestTs();
-    if (!before) { loadingOlder = false; return; }   // nothing rendered to page from
-    const prevH = box.scrollHeight, prevTop = box.scrollTop;
-    const badge = box.querySelector('.msgs-older');
-    if (badge) badge.hidden = false;
+    if (!before) return;
+    loadingOlder = true;
+    olderMarker()?.classList.add('busy');
     try {
       const older = await fetchPage(cid, before);
       if (!active || active.id !== cid) return;
       cacheProfiles(older);
-      if (older.length) {
-        const ids = older.map((m) => m.id);
-        const [{ data: rr }, attRes] = await Promise.all([
-          window.db.from('message_reactions').select('*').in('message_id', ids),
-          window.db.from('message_attachments').select('*').in('message_id', ids).order('position', { ascending: true }),
-        ]);
-        let aa = attRes.data;
-        if (attRes.error) {
-          ({ data: aa } = await window.db.from('message_attachments')
-            .select('*').in('message_id', ids).order('created_at', { ascending: true }));
-        }
-        (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
-        (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
-      }
-      if (!active || active.id !== cid) return;
-
-      haveOlder = older.length === PAGE;
+      haveOlder = older.more;
+      const prevH = box.scrollHeight, prevTop = box.scrollTop;
       let html = '', pa = null, pt = null;
       older.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
       const first = box.querySelector('.m');
       if (first) first.insertAdjacentHTML('beforebegin', html);
-      else box.insertAdjacentHTML('afterbegin', html);
-      older.forEach((m) => { paintAtts(m.id); repaintRx(m.id); });
-      if (!haveOlder) {
-        badge?.remove();
-        if (!box.querySelector('.msgs-top')) box.insertAdjacentHTML('afterbegin', intro());
-      }
+      else box.insertAdjacentHTML('beforeend', html);
+      setOlderMarker();
       wire(box);
-      regroup();   // the seam row may now group with the batch above it
+      regroup();
+      box.scrollTop = box.scrollHeight - prevH + prevTop;
 
-      // One deliberate correction once the new rows have laid out;
-      // overflow-anchor is off for .msgs so this is not a double adjust.
-      requestAnimationFrame(() => { box.scrollTop = box.scrollHeight - prevH + prevTop; });
+      loadExtras(older).then((ids) => {
+        if (!active || active.id !== cid) return;
+        const h0 = box.scrollHeight, t0 = box.scrollTop;
+        ids.forEach(paintAtts);
+        older.forEach((m) => repaintRx(m.id));
+        if (!pinned) box.scrollTop = t0 + (box.scrollHeight - h0);
+      }).catch(() => {});
     } catch (err) { UI.toast(err.message, true); }
     finally {
       loadingOlder = false;
-      const b = $('msgs')?.querySelector('.msgs-older');
-      if (b) b.hidden = haveOlder ? true : false;
+      olderMarker()?.classList.remove('busy');
     }
+    maybeAutofill();
   }
 
-  /* If the page doesn't fill the screen there is nothing to scroll, so keep
-     loading history until the view can actually scroll (or history ends). */
-  async function fillView() {
+  function maybeAutofill() {
     const box = $('msgs');
-    if (!box || box.clientHeight <= 0) return;
-    let guard = 0;
-    while (haveOlder && box.scrollHeight <= box.clientHeight + 120 && guard++ < 14) {
-      await loadOlder();
-    }
+    if (!box || !haveOlder || loadingOlder || autofilled >= MAX_AUTOFILL) return;
+    if (box.clientHeight > 0 && box.scrollHeight <= box.clientHeight + 40) { autofilled++; loadOlder(); }
   }
+
+  const olderIO = typeof IntersectionObserver === 'undefined' ? { observe() {}, unobserve() {} }
+    : new IntersectionObserver((entries) => {
+      const b = $('msgs');
+      if (entries.some((e) => e.isIntersecting) && b.scrollHeight > b.clientHeight + 40) loadOlder();
+    }, { root: $('msgs'), rootMargin: '120px 0px 0px 0px' });
 
   const QUICK = ['👍', '🔥', '😂', '❤️', '😮', '🎉'];
 
@@ -162,8 +204,7 @@
         if (!c) return;
         if (el.dataset.voice === 'true') return joinVoice(c);
         open(c);
-        $('rail').classList.remove('open');
-        document.querySelector('.rail-scrim')?.remove();
+        window.Nav?.closeDrawer();
       };
     });
   }
@@ -291,54 +332,55 @@
   async function purgeAttachments(mid) {
     const list = attCache[mid] || [];
     for (const a of list) {
-      try {
-        const key = decodeURIComponent(new URL(a.url).pathname.replace(/^\/[^/]+\//, ''));
-        if (key) await window.__nx_tp.del(key);
-      } catch {}
+      try { await window.Store.del(a.url); } catch {}
     }
     delete attCache[mid];
   }
 
+  function paintPage(msgs) {
+    const box = $('msgs');
+    let html = '', pa = null, pt = 0;
+    msgs.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
+    box.innerHTML = html;
+    setOlderMarker();
+    msgs.forEach((m) => { if (attCache[m.id]) paintAtts(m.id); });
+    wire(box);
+    pinned = true;
+    box.scrollTop = box.scrollHeight;
+  }
+
   async function loadMessages(cid) {
     const box = $('msgs');
-    box.innerHTML = skeleton;
-    haveOlder = false; loadingOlder = false;
+    haveOlder = false; loadingOlder = false; autofilled = 0;
+    Object.keys(rx).forEach((k) => delete rx[k]);
+    Object.keys(attCache).forEach((k) => delete attCache[k]);
+
+    const cached = pageCache[cid];
+    if (cached?.msgs?.length) {
+      cacheProfiles(cached.msgs.filter((m) => !profiles[m.author_id]));
+      Object.assign(attCache, cached.atts || {});
+      haveOlder = !!cached.more;
+      paintPage(cached.msgs);
+    } else box.innerHTML = skeleton;
 
     let msgs;
     try { msgs = await fetchPage(cid); }
-    catch (err) { box.innerHTML = ''; return UI.toast('Could not load messages: ' + err.message, true); }
+    catch (err) { if (!cached) box.innerHTML = ''; return UI.toast('Could not load messages: ' + err.message, true); }
     if (!active || active.id !== cid) return;
     cacheProfiles(msgs);
+    haveOlder = msgs.more;
 
-    Object.keys(rx).forEach((k) => delete rx[k]);
-    Object.keys(attCache).forEach((k) => delete attCache[k]);
-    if (msgs.length) {
-      const ids = msgs.map((m) => m.id);
-      const [{ data: rr }, attRes] = await Promise.all([
-        window.db.from('message_reactions').select('*').in('message_id', ids),
-        window.db.from('message_attachments').select('*').in('message_id', ids).order('position', { ascending: true }),
-      ]);
-      let aa = attRes.data;
-      if (attRes.error) {
-        ({ data: aa } = await window.db.from('message_attachments')
-          .select('*').in('message_id', ids).order('created_at', { ascending: true }));
-      }
-      (rr || []).forEach((r) => addRx(r.message_id, r.emoji, r.user_id));
-      (aa || []).forEach((a) => { (attCache[a.message_id] = attCache[a.message_id] || []).push(a); });
-    }
+    const sig = (list) => list.map((m) => m.id + ':' + (m.edited_at || '')).join();
+    if (!cached || sig(cached.msgs) !== sig(msgs)) paintPage(msgs);
+    else setOlderMarker();
+
+    const changed = await loadExtras(msgs).catch(() => []);
     if (!active || active.id !== cid) return;
-
-    // A full page back means there is almost certainly more above it; a short
-    // one means this is the whole channel and the intro belongs at the top.
-    haveOlder = msgs.length === PAGE;
-
-    let html = haveOlder ? olderBadge : intro(), pa = null, pt = 0;
-    msgs.forEach((m) => { html += row(m, grouped(pa, pt, m)); pa = m.author_id; pt = m.created_at; });
-    box.innerHTML = html;
-    msgs.forEach((m) => { paintAtts(m.id); repaintRx(m.id); });
-    wire(box);
-    box.scrollTop = box.scrollHeight;
-    fillView();
+    changed.forEach(paintAtts);
+    msgs.forEach((m) => repaintRx(m.id));
+    if (pinned) box.scrollTop = box.scrollHeight;
+    cachePut(cid, msgs);
+    maybeAutofill();
   }
 
   function addRx(mid, e, uid) {
@@ -754,11 +796,13 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
   window.addEventListener('online', () => { if (active) { catchUp(); listen(active.id); } });
 
-  // Scrolling to the top is the signal to page back through history.
   $('msgs').addEventListener('scroll', () => {
-    if ($('msgs').scrollTop > 140) return;
-    loadOlder();
+    const b = $('msgs');
+    pinned = b.scrollHeight - b.scrollTop - b.clientHeight < 60;
   }, { passive: true });
+  // Late-loading media must not push the newest message off-screen.
+  $('msgs').addEventListener('load', () => { const b = $('msgs'); if (pinned) b.scrollTop = b.scrollHeight; }, true);
+  $('msgs').addEventListener('click', (e) => { if (e.target.closest('.msgs-older')) loadOlder(); });
 
   /* ================= composer + uploads ================= */
   function paintTray() {
@@ -844,7 +888,8 @@
         for (const f of files) {
           try {
             const key = `nexchat/${serverId}/${active.id}/${Date.now()}-${f.name.replace(/[^\w.\-]/g, '_')}`;
-            const up = await S3().put(key, f, (p) => {
+            // up.url is the permanent object URL, signed again whenever shown.
+            const up = await window.Store.put(key, f, (p) => {
               fill.style.width = Math.round(((done + p / 100) / files.length) * 100) + '%';
             });
             // position preserves the order files were attached, so an
@@ -887,6 +932,15 @@
     ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 168) + 'px'; };
     ta.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
     $('send').onclick = send;
+    $('emojiBtn').onclick = (e) => {
+      e.stopPropagation();
+      window.EmojiPicker?.open($('emojiBtn'), (emoji) => {
+        const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
+        ta.value = ta.value.slice(0, a) + emoji + ta.value.slice(b);
+        ta.focus(); ta.setSelectionRange(a + emoji.length, a + emoji.length);
+        ta.oninput();
+      });
+    };
     $('attachBtn').onclick = () => $('fileIn').click();
     $('fileIn').onchange = (e) => { stage(e.target.files); e.target.value = ''; };
 
@@ -901,13 +955,11 @@
 
   /* ================= voice ================= */
   let vrOpen = false, speakSet = new Set();
-  // Connection readouts are a developer-mode feature, off for everyone else.
-  let devStats = false;
 
   function showVoiceRoom(on) {
     vrOpen = on;
     $('vroom').classList.toggle('hidden', !on);
-    $('vstats').classList.toggle('hidden', !on || !devStats);
+    if (!on) $('vstats').classList.add('hidden');
     $('msgs').classList.toggle('hidden', on);
     $('chatHead').classList.toggle('hidden', on);
     $('composer').classList.toggle('hidden', on || !active);
@@ -919,26 +971,6 @@
       if (first) open(first);
     }
     renderChannels();
-  }
-
-  // Every participant can contribute two feeds: their camera and their screen.
-  function feedsFor(p) {
-    const isMe = p.id === me.id;
-    const st = Voice.state();
-    // Gate on what the peer says it is sending. Track-level `muted` isn't
-    // dependable in Chrome, so an idle transceiver could still slip through as
-    // an empty black tile — the broadcast flags are authoritative.
-    const wantsCam = isMe ? st.cam : !!p.cam;
-    const wantsScreen = isMe ? st.sharing : !!p.sharing;
-    const hasLive = (s) => !!s && s.getVideoTracks().some((t) => t.readyState === 'live');
-    const camS = wantsCam ? (isMe ? Voice.localCam() : Voice.peerCam(p.id)) : null;
-    const scrS = wantsScreen ? (isMe ? Voice.localScreen() : Voice.peerScreen(p.id)) : null;
-
-    const out = [];
-    if (wantsScreen && hasLive(scrS)) out.push({ p, isMe, key: p.id + ':screen', stream: scrS, screen: true });
-    if (wantsCam && hasLive(camS)) out.push({ p, isMe, key: p.id + ':cam', stream: camS, screen: false });
-    if (!out.length) out.push({ p, isMe, key: p.id + ':av', stream: null, screen: false });
-    return out;
   }
 
   function paintRoom(st) {
@@ -953,61 +985,33 @@
       if (icon) b.innerHTML = icon;
     };
     set('vrMute', 'off', st.muted, `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`);
-    set('vrDeaf', 'off', st.deaf, `<i class="fa-solid fa-headphones-simple${st.deaf ? '' : ''}"></i>`);
-    set('vrCam', 'live', st.cam);
+    set('vrDeaf', 'off', st.deaf, '<i class="fa-solid fa-headphones-simple"></i>');
+    set('vrCam', 'live', st.cam, `<i class="fa-solid fa-video${st.cam ? '' : '-slash'}"></i>`);
     set('vrShare', 'live', st.sharing);
+    syncDock(st);
+    CallUI.paintStage($('vrStage'), st, { meId: me.id, speakSet, onAvatar: (id) => UI.userCard(id, { serverId }) });
+  }
+
+  function syncDock(st) {
     $('vcMute').classList.toggle('on', st.muted);
     $('vcMute').innerHTML = `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`;
     $('vcDeaf').classList.toggle('on', st.deaf);
     $('vcCam').classList.toggle('on', st.cam);
     $('vcShare').classList.toggle('on', st.sharing);
-
-    const grid = $('vrStage');
-    const feeds = [...st.members.values()].flatMap(feedsFor);
-    grid.classList.toggle('solo', feeds.length === 1);
-
-    const seen = new Set();
-    feeds.forEach((f) => {
-      seen.add(f.key);
-      let t = grid.querySelector(`[data-t="${f.key}"]`);
-      if (!t) {
-        t = document.createElement('div');
-        t.className = 'vtile';
-        t.dataset.t = f.key;
-        t.innerHTML = `<video autoplay playsinline ${f.isMe ? 'muted' : ''}></video>
-          <div class="vt-av"></div><div class="vt-name"></div>`;
-        t.querySelector('.vt-av').onclick = () => UI.userCard(f.p.id, { serverId });
-        grid.appendChild(t);
-      }
-      const v = t.querySelector('video');
-      if (f.stream && v.srcObject !== f.stream) { v.srcObject = f.stream; v.play?.().catch(() => {}); }
-      if (!f.stream) v.srcObject = null;
-      v.style.display = f.stream ? '' : 'none';
-      const avBox = t.querySelector('.vt-av');
-      avBox.style.display = f.stream ? 'none' : '';
-      if (!f.stream) avBox.innerHTML = UI.avatar(f.p, 76, { halo: false });
-      t.querySelector('.vt-name').innerHTML =
-        `${f.p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}<span>${MD.esc(f.p.display_name || f.p.username)}${f.isMe ? ' (you)' : ''}</span>`;
-      t.querySelector('.vt-flag')?.remove();
-      if (f.screen) t.insertAdjacentHTML('beforeend', '<span class="vt-flag">Screen</span>');
-      t.classList.toggle('speaking', speakSet.has(f.p.id) && !f.p.muted);
-    });
-    [...grid.children].forEach((t) => { if (!seen.has(t.dataset.t)) t.remove(); });
   }
 
+  // Measured values only (RTCPeerConnection.getStats), for everyone.
+  let statsOpen = false;
   function paintStats(st) {
-    const bar = $('vstats');
-    if (!vrOpen || !devStats) { bar.classList.add('hidden'); return; }
-    bar.classList.remove('hidden');
-    const rttCls = st.rtt === 0 ? '' : st.rtt < 60 ? 'good' : st.rtt < 160 ? 'warn' : 'bad';
-    bar.innerHTML = `
-      <span class="st ${st.res ? 'good' : ''}"><i class="fa-solid fa-display"></i> Video <b>${st.res || 'off'}</b></span>
-      <span class="st"><i class="fa-solid fa-film"></i> <b>${st.fps || 0}</b> fps</span>
-      <span class="st"><i class="fa-solid fa-video"></i> <b>${st.vkbps || 0}</b> kbps</span>
-      <span class="st good"><i class="fa-solid fa-waveform-lines"></i> Audio <b>${st.akbps || 0}</b> kbps</span>
-      <span class="st"><i class="fa-solid fa-music"></i> <b>${MD.esc(st.codec || 'Opus stereo 48kHz')}</b></span>
-      <span class="spacer"></span>
-      <span class="st ${rttCls}"><i class="fa-solid fa-tower-broadcast"></i> <b>${st.rtt || 0}</b> ms</span>`;
+    const panel = $('vstats');
+    if (!vrOpen || !statsOpen) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    if (!panel.querySelector('.cs-body')) {
+      panel.innerHTML = CallUI.panelShell();
+      CallUI.wirePanel(panel);
+      panel.querySelector('[data-cs-close]').onclick = () => { statsOpen = false; paintStats(st); };
+    }
+    panel.querySelector('.cs-body').innerHTML = CallUI.statsPanel(st);
   }
 
   function paintVoice(st) {
@@ -1023,23 +1027,12 @@
     $('vcName').textContent = st.channel.name;
     $('vcCount').textContent = `${st.members.size} connected · ${srv.name}`;
     if (vrOpen) paintRoom(st);
-    else {
-      $('vcMute').classList.toggle('on', st.muted);
-      $('vcMute').innerHTML = `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`;
-      $('vcDeaf').classList.toggle('on', st.deaf);
-      $('vcCam').classList.toggle('on', st.cam);
-      $('vcShare').classList.toggle('on', st.sharing);
-    }
+    else syncDock(st);
   }
 
   function onSpeaking(set) {
     speakSet = set;
-    if (vrOpen) {
-      document.querySelectorAll('.vtile').forEach((t) => {
-        const p = Voice.state().members.get(t.dataset.t);
-        t.classList.toggle('speaking', set.has(t.dataset.t) && !p?.muted);
-      });
-    }
+    if (vrOpen) CallUI.markSpeaking($('vrStage'), set);
     document.querySelectorAll('.vc-user').forEach((u) => u.classList.toggle('speaking', set.has(u.dataset.u)));
   }
 
@@ -1087,7 +1080,7 @@
 
     $('shareGo').onclick = async () => {
       const surface = $('shareOpts').querySelector('.share-opt.on')?.dataset.s || 'monitor';
-      const quality = $('shareQ').querySelector('button.on')?.dataset.q || '1080';
+      const quality = $('shareQ').querySelector('button.on')?.dataset.q || 'text';
       const audio = $('shareAudio').checked;
       m.classList.add('hidden');
       await Voice.startShare({ surface, quality, audio });
@@ -1103,6 +1096,7 @@
     $('vrShare').onclick = () => openSharePicker();
     $('vrLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
     $('vrChat').onclick = () => showVoiceRoom(false);
+    $('vrStats').onclick = () => { statsOpen = !statsOpen; paintStats(Voice.state().stats); };
     $('vcDock').addEventListener('click', (e) => {
       // Tapping the dock status area re-opens the full room view.
       if (e.target.closest('.vc-status') && Voice.state().active) showVoiceRoom(true);
@@ -1144,7 +1138,7 @@
       const { data, error } = await window.db.from('invites').insert(rowIn).select().single();
       if (error) return UI.toast(error.message, true);
       $('invCode').value = data.code;
-      $('invOut').value = `${location.origin}${location.pathname.replace(/server\.html$/, 'portal.html')}?invite=${data.code}`;
+      $('invOut').value = UI.pageUrl(`portal.html?invite=${data.code}`);
       $('invResult').classList.remove('hidden');
       $('invCode').select();
     };
@@ -1198,7 +1192,7 @@
 
     $('miSettings').onclick = () => {
       if (!canManage) return UI.toast('Only people who can manage this server can open settings.', true);
-      window.location.href = `server-settings.html?id=${serverId}`;
+      UI.go(`server-settings.html?id=${serverId}`);
     };
 
     $('miLeave').onclick = async () => {
@@ -1208,17 +1202,11 @@
       await Voice.leave();
       const { error } = await window.db.from('server_members').delete().eq('server_id', serverId).eq('user_id', me.id);
       if (error) return UI.toast(error.message, true);
-      window.location.href = 'portal.html';
+      UI.go('portal.html');
     };
 
-    $('burger').onclick = () => {
-      $('rail').classList.add('open');
-      const s = document.createElement('div');
-      s.className = 'rail-scrim';
-      s.onclick = () => { $('rail').classList.remove('open'); s.remove(); };
-      document.body.appendChild(s);
-    };
-    $('btnOut').onclick = async () => { await Voice.leave(); await window.db.auth.signOut(); window.location.href = 'index.html'; };
+    $('burger').onclick = () => window.Nav?.openDrawer();
+    $('btnOut').onclick = async () => { await Voice.leave(); await window.db.auth.signOut(); UI.go('index.html'); };
   }
 
   /* ================= boot ================= */
@@ -1227,8 +1215,8 @@
     me = await UI.myProfile(s.user.id);
     profiles[me.id] = me;
 
-    serverId = new URLSearchParams(location.search).get('id');
-    if (!serverId) return (window.location.href = 'portal.html');
+    serverId = UI.params().get('id');
+    if (!serverId) return UI.go('portal.html');
 
     const { data, error } = await window.db.from('servers')
       .select('*, server_members(count)').eq('id', serverId).single();
@@ -1248,7 +1236,8 @@
         Object.assign(srv, updated);
         $('srvName').textContent = srv.name;
         UI.applyServerName(srv.theme);
-        document.documentElement.style.setProperty('--accent', srv.theme?.accent || '#2FBF87');
+        if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
+        else document.documentElement.style.removeProperty('--accent');
       }).subscribe();
     window.addEventListener('pagehide', () => window.db.removeChannel(appearanceSub), { once: true });
 
@@ -1261,8 +1250,8 @@
     window.Guard?.start(me);
     window.Presence?.start(me);
     window.Presence?.onChange(() => window.Presence.refreshDots());
+    window.Nav?.mount(me, { active: serverId });
 
-    devStats = !!(me.theme && me.theme.dev_mode);
 
     canManage = srv.owner_id === me.id || me.is_platform_admin;
     if (!canManage) {

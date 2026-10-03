@@ -156,17 +156,21 @@ function boot(htmlFile, url, db, extraScripts = []) {
   window.Notify = { start() {}, ring() {} };
   window.__nx_tp = { put: async () => ({ url: '', type: '' }), del: async () => {} };
   window.db = db;
-  for (const f of ['ui.js', 'md.js', 'viewer.js', ...extraScripts]) {
+  for (const f of ['ui.js', 'md.js', 'storage.js', 'viewer.js', ...extraScripts]) {
     window.eval(fs.readFileSync(`${REPO}/assets/js/${f}`, 'utf8'));
   }
   return { dom, window };
 }
 
 const ids = (window) => [...window.document.querySelectorAll('#msgs .m[data-id]')].map((el) => el.dataset.id);
+/* Reaching the top: the "earlier messages" marker is what pages history
+   (an IntersectionObserver in a browser, which jsdom lacks; it is also a
+   button). At the true beginning there is no marker, so this is a no-op. */
 const scrollUp = (window) => {
   const box = window.document.getElementById('msgs');
   box.scrollTop = 0;
   box.dispatchEvent(new window.Event('scroll'));
+  box.querySelector('.msgs-older')?.click();
 };
 
 /* Seed n messages into a table, alternating authors, one second apart. */
@@ -194,15 +198,15 @@ function seed(table, n, cid, key) {
 
     const all = db.state.messages.map((m) => m.id);
     let shown = ids(window);
-    ok(shown.length === 16, `opens with exactly 16 messages (got ${shown.length})`);
-    ok(shown[0] === all[44] && shown[15] === all[59], 'shows the LATEST 16, newest at the bottom');
+    ok(shown.length === 15, `opens with exactly 15 messages (got ${shown.length})`);
+    ok(shown[0] === all[45] && shown[14] === all[59], 'shows the LATEST 15, newest at the bottom');
     ok(!window.document.querySelector('#msgs .msgs-top'), 'intro hidden while older pages exist');
     ok(!!window.document.querySelector('#msgs .msgs-older'), 'older-history badge present');
 
     scrollUp(window); await sleep(200);
     shown = ids(window);
-    ok(shown.length === 32, `scroll up prepends one page (got ${shown.length})`);
-    ok(shown[0] === all[28], 'older batch lands above, order preserved');
+    ok(shown.length === 30, `scroll up prepends one page (got ${shown.length})`);
+    ok(shown[0] === all[30], 'older batch lands above, order preserved');
     ok(shown[shown.length - 1] === all[59], 'newest still at the bottom');
 
     let guard = 0;
@@ -252,14 +256,14 @@ function seed(table, n, cid, key) {
 
     const all = db.state.dm_messages.map((m) => m.id);
     let shown = ids(window);
-    ok(shown.length === 16, `opens with exactly 16 messages (got ${shown.length})`);
-    ok(shown[15] === all[39], 'latest message at the bottom');
+    ok(shown.length === 15, `opens with exactly 15 messages (got ${shown.length})`);
+    ok(shown[14] === all[39], 'latest message at the bottom');
     ok(!window.document.querySelector('#msgs .msgs-top'), 'intro hidden while older pages exist');
 
     scrollUp(window); await sleep(200);
     shown = ids(window);
-    ok(shown.length === 32, `scroll up prepends one page (got ${shown.length})`);
-    ok(shown[0] === all[8], 'order preserved above');
+    ok(shown.length === 30, `scroll up prepends one page (got ${shown.length})`);
+    ok(shown[0] === all[10], 'order preserved above');
 
     let guard = 0;
     while (ids(window).length < 40 && guard++ < 10) { scrollUp(window); await sleep(200); }

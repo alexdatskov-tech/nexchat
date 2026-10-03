@@ -2,11 +2,15 @@
   const $ = (id) => document.getElementById(id);
   let me = null;
 
-  // Deterministic banner per server, drawn from the accent's own hue family so
-  // the grid stays cohesive instead of turning into random neon.
-  // Default banner is a clean light neutral until an owner uploads one.
-  const DEFAULT_BANNER = 'linear-gradient(135deg,#F2F3F6 0%,#D5D8DF 48%,#BFC3CC 100%)';
-  function banner() { return DEFAULT_BANNER; }
+  // Deterministic banner per server until an owner uploads one: a deep
+  // two-tone gradient whose hue comes from the server id, so every card is
+  // distinct but they all sit in the same dark, low-saturation family.
+  function banner(s) {
+    let h = 0;
+    for (const ch of String(s.id || s.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const a = Math.round((h * 137.508) % 360), b = (a + 48) % 360;   // golden-angle spread
+    return `radial-gradient(120% 140% at 0% 0%, hsl(${a} 62% 42%) 0%, transparent 60%), linear-gradient(135deg, hsl(${b} 45% 24%), hsl(${a} 30% 12%))`;
+  }
 
   // The wallpaper is shared with DMs and server channels, so the work lives in UI.
   const applyDashboardBg = (theme) => UI.applyBackground(theme);
@@ -22,8 +26,8 @@
   function card(s) {
     const count = s.server_members?.[0]?.count ?? 0;
     const owner = s.owner_id === me.id;
-    const bg = s.banner_url ? `background-image:url('${UI.esc(s.banner_url)}')` : `background:${banner()}`;
-    const ico = s.icon_url ? `<img src="${UI.esc(s.icon_url)}" alt="">` : UI.initial(s.name);
+    const bg = s.banner_url ? `background-image:url('${UI.esc(s.banner_url)}')` : `background:${banner(s)}`;
+    const ico = s.icon_url ? `<img ${window.Store ? Store.imgAttr(s.icon_url) : `src="${UI.esc(s.icon_url)}"`} alt="">` : UI.initial(s.name);
     return `
       <button class="scard" data-id="${s.id}">
         <div class="scard-banner" style="${bg};background-size:cover;"></div>
@@ -34,7 +38,7 @@
             ${owner ? '<span class="badge badge-owner">Owner</span>' : ''}
           </div>
           <div class="scard-desc">${UI.esc(s.description || 'No description.')}</div>
-          <div class="scard-meta"><i class="fa-solid fa-user-group"></i> ${count} member${count === 1 ? '' : 's'}</div>
+          <div class="scard-meta"><i class="fa-solid fa-circle"></i> ${count} member${count === 1 ? '' : 's'}</div>
         </div>
       </button>`;
   }
@@ -58,10 +62,24 @@
 
     $('serverCount').textContent = `${servers.length} server${servers.length === 1 ? '' : 's'}`;
     const grid = $('grid');
-    grid.innerHTML = servers.map(card).join('');
+    grid.innerHTML = servers.map(card).join('')
+      + '<button class="scard add" id="addCard"><i class="fa-solid fa-plus"></i><b>Create or join</b></button>';
     grid.classList.remove('hidden');
-    grid.querySelectorAll('.scard').forEach((el) => {
-      el.onclick = () => { window.location.href = `server.html?id=${el.dataset.id}`; };
+    grid.querySelectorAll('.scard[data-id]').forEach((el) => {
+      el.onclick = () => { UI.go(`server.html?id=${el.dataset.id}`); };
+    });
+    $('addCard').onclick = openCreate;
+  }
+
+  /* Latest announcements from the team; the full list lives in the panel. */
+  function announcements() {
+    if (!window.Nav) return;
+    $('annAll').onclick = () => Nav.openAnnouncements();
+    Nav.onAnnouncements((list, ok) => {
+      $('annSection').classList.toggle('hidden', !ok);
+      $('annFeed').innerHTML = list.length
+        ? list.slice(0, 4).map((a) => Nav.annCard(a, true)).join('')
+        : '<div class="ann-empty"><i class="fa-solid fa-bullhorn"></i>&nbsp; No announcements right now.</div>';
     });
   }
 
@@ -114,7 +132,7 @@
           await window.db.from('servers').update({ icon_url: url }).eq('id', srv.id);
         } catch (_) { /* icon is optional — never block server creation on it */ }
       }
-      window.location.href = `server.html?id=${srv.id}`;
+      UI.go(`server.html?id=${srv.id}`);
     } catch (err) {
       $('cErr').textContent = err.message || 'Could not create that server.';
       btn.disabled = false; btn.textContent = 'Create server';
@@ -130,14 +148,14 @@
     try {
       const { data: id, error } = await window.db.rpc('join_server_by_invite', { p_code: code });
       if (error) throw error;
-      window.location.href = `server.html?id=${id}`;
+      UI.go(`server.html?id=${id}`);
     } catch (err) {
       $('jErr').textContent = err.message || 'That code didn\u2019t work.';
       btn.disabled = false; btn.textContent = 'Join';
     }
   };
 
-  $('btnOut').onclick = async () => { await window.db.auth.signOut(); window.location.href = 'index.html'; };
+  $('btnOut').onclick = async () => { await window.db.auth.signOut(); UI.go('index.html'); };
 
   (async () => {
     const s = await UI.requireSession(); if (!s) return;
@@ -145,14 +163,22 @@
     if (!me) { UI.toast('Profile missing — try signing out and back in.', true); return; }
     window.Notify?.start(me);
     window.Guard?.start(me);
+    window.Presence?.start(me);
     applyDashboardBg(me.theme);
-    $('meAv').innerHTML = UI.avatar(me, 24);
+    window.Nav?.mount(me, { active: 'home', onAdd: openCreate });
+    $('meAv').innerHTML = UI.avatar(me, 22, { halo: false });
     $('meName').textContent = me.display_name || me.username;
+    const h = new Date().getHours();
+    $('greet').textContent = h < 5 ? 'Up late?' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     if (me.is_platform_admin) $('adminLink').style.display = '';
+    $('homeBurger').onclick = () => window.Nav?.openDrawer();
+    announcements();
 
-    // Deep link: portal.html?invite=CODE opens the join box pre-filled.
-    const inv = new URLSearchParams(location.search).get('invite');
+    // Deep links: ?invite=CODE opens the join box pre-filled; ?new=1 (the "+"
+    // in the left bar on other pages) opens create.
+    const inv = UI.params().get('invite');
     if (inv) { openJoin(); $('jCode').value = inv; }
+    else if (UI.params().get('new')) openCreate();
 
     await load();
   })();

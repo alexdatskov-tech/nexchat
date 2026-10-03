@@ -54,7 +54,7 @@ prints one line per assertion and exits non-zero on the first failure.
 `node tools/test-pagination.js` runs the real `server.js` and `dms.js` against
 a mock Supabase that honours `order`/`limit`/`lt`. It pins the behaviour that
 keeps long conversations usable: opening a channel or DM renders only the
-latest 16 messages, scrolling to the top pages older history in one batch at
+latest 15 messages, scrolling to the top pages older history in one batch at
 a time with the viewport anchored, the "beginning of the conversation" card
 only appears once history is actually exhausted, and no row ever duplicates.
 It also covers sending: a pending bubble must paint before the insert
@@ -84,3 +84,19 @@ between uploads, presets, external URLs and None. It also guards the wallpaper
 stacking rules used by server chat. No live account or storage credentials are
 needed. Run alongside `test-fonts.js`, `test-srvname.js`, `test-chatbg.js` and
 `test-bgperf.js` (all require `jsdom`).
+
+### Storage links
+
+`node tools/test-storage.js` pins the "files never expire" contract: uploads
+persist a permanent object URL (no signature in the database), every stored
+URL — including old rows holding an expired presigned link — is re-signed at
+render time from the key in its path, signatures are anchored to the start of
+the UTC day so a file's URL is stable and cacheable, and role icons rendered
+from markup (`<img data-nx-src>`) are hydrated the same way.
+
+### History paging
+
+`test-pagination.js` now expects 15 messages per page, and pages through the
+"Load earlier messages" marker (an IntersectionObserver in browsers, a button
+too). The page query fetches `PAGE + 1` rows so the end of history is known
+exactly, with no dead marker over a history that divides evenly into pages.

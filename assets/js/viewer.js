@@ -89,7 +89,7 @@ window.Viewer = (function () {
         <button class="pv-out" title="Zoom out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
         <button class="pv-in" title="Zoom in"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
         <button class="pv-fit" title="Fit width">Fit</button>
-        <a class="pv-dl" href="${att.url}" download title="Download"><i class="fa-solid fa-download"></i></a>
+        <a class="pv-dl" href="${MD.esc(att.url)}" download title="Download"><i class="fa-solid fa-download"></i></a>
       </div>
       <div class="pv-wrap">
         <div class="pv-load"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading PDF…</div>
@@ -131,7 +131,7 @@ window.Viewer = (function () {
         await draw();
       } catch {
         load.innerHTML = `<span style="color:#FF8085"><i class="fa-solid fa-circle-exclamation"></i> Couldn't render this PDF.</span>
-          <a href="${att.url}" target="_blank" class="btn btn-ghost btn-sm" style="margin-left:8px;">Open</a>`;
+          <a href="${MD.esc(att.url)}" target="_blank" class="btn btn-ghost btn-sm" style="margin-left:8px;">Open</a>`;
       }
     })();
 
@@ -158,9 +158,9 @@ window.Viewer = (function () {
       <div class="ap-right">
         <button class="ap-rate">1×</button>
         <button class="ap-mute"><i class="fa-solid fa-volume-high"></i></button>
-        <a class="ap-dl" href="${att.url}" download title="Download"><i class="fa-solid fa-download"></i></a>
+        <a class="ap-dl" href="${MD.esc(att.url)}" download title="Download"><i class="fa-solid fa-download"></i></a>
       </div>
-      <audio preload="metadata" src="${att.url}"></audio>`;
+      <audio preload="metadata" src="${MD.esc(att.url)}"></audio>`;
 
     const a = el.querySelector('audio'), play = el.querySelector('.ap-play');
     const seek = el.querySelector('input'), fill = el.querySelector('.ap-fill');
@@ -200,7 +200,7 @@ window.Viewer = (function () {
     const el = document.createElement('div');
     el.className = 'vplayer';
     el.innerHTML = `
-      <video preload="metadata" src="${att.url}" playsinline></video>
+      <video preload="metadata" src="${MD.esc(att.url)}" playsinline></video>
       <div class="vp-center"><button class="vp-big"><i class="fa-solid fa-play"></i></button></div>
       <div class="vp-bar">
         <div class="vp-seek"><div class="vp-buf"></div><div class="vp-fill"></div><input type="range" min="0" max="1000" value="0"></div>
@@ -276,7 +276,7 @@ window.Viewer = (function () {
         <span style="flex:1"></span>
         <span class="cb-size">${human(att.file_size)}</span>
         <button class="cb-copy" title="Copy"><i class="fa-regular fa-copy"></i></button>
-        <a class="cb-dl" href="${att.url}" download title="Download"><i class="fa-solid fa-download"></i></a>
+        <a class="cb-dl" href="${MD.esc(att.url)}" download title="Download"><i class="fa-solid fa-download"></i></a>
         <button class="cb-toggle" title="Collapse"><i class="fa-solid fa-chevron-up"></i></button>
       </div>
       <div class="cb-body"><div class="cb-editor">Loading…</div></div>`;
@@ -286,11 +286,10 @@ window.Viewer = (function () {
 
     (async () => {
       try {
-        text = await window.__nx_tp.getText(att.storage_key || att.url_key || att.file_name);
-      } catch {
-        try { text = await (await fetch(att.url)).text(); }
-        catch { host.textContent = 'Could not load this file.'; return; }
-      }
+        const r = await fetch(att.url);
+        if (!r.ok) throw new Error(r.status);
+        text = await r.text();
+      } catch { host.textContent = 'Could not load this file.'; return; }
       try {
         await loadAce();
         host.textContent = '';
@@ -330,9 +329,9 @@ window.Viewer = (function () {
   function lightbox(url, name) {
     const ov = document.createElement('div');
     ov.className = 'lightbox';
-    ov.innerHTML = `<img src="${url}" alt="${MD.esc(name)}">
+    ov.innerHTML = `<img src="${MD.esc(url)}" alt="${MD.esc(name)}">
       <div class="lb-bar"><span>${MD.esc(name)}</span>
-      <a href="${url}" download class="btn btn-ghost btn-sm"><i class="fa-solid fa-download"></i> Download</a>
+      <a href="${MD.esc(url)}" download class="btn btn-ghost btn-sm"><i class="fa-solid fa-download"></i> Download</a>
       <button class="btn btn-ghost btn-sm lb-x"><i class="fa-solid fa-xmark"></i></button></div>`;
     document.body.appendChild(ov);
     window.Tiff?.hydrate(ov.querySelector('img'), url);
@@ -346,24 +345,51 @@ window.Viewer = (function () {
 
   /* Deletes one attachment: removes the object from storage, then the row. */
   async function removeAttachment(att) {
-    try {
-      const key = decodeURIComponent(new URL(att.url).pathname.replace(/^\/[^/]+\//, ''));
-      if (key) await window.__nx_tp.del(key);
-    } catch {}
+    try { await window.Store.del(att.url); } catch {}
     const table = att._dm ? 'dm_message_attachments' : 'message_attachments';
     const { error } = await window.db.from(table).delete().eq('id', att.id);
     if (error) throw new Error(error.message);
   }
 
-  /* Renders one attachment into a DOM node. */
+  /* Renders one attachment into a DOM node.
+
+     `att.url` is whatever the database holds: a permanent object URL (new
+     rows) or an old presigned link whose signature has long expired. Either
+     way Store.sign() turns it into a link that loads now. When a signature is
+     already cached this is synchronous; otherwise a sized placeholder holds
+     the slot and is swapped for the real player once signed. */
   function render(att, opts = {}) {
+    if (!window.Store || !window.Store.isManaged(att.url)) return renderResolved(att, opts);
+    const now = window.Store.signedNow(att.url);
+    if (now) return renderResolved({ ...att, url: now, stored_url: att.url }, opts);
+    const kind = kindOf(att.file_name);
+    const slot = document.createElement('div');
+    slot.className = 'att-slot k-' + kind;
+    slot.innerHTML = `<div class="skel att-skel"></div>`;
+    window.Store.sign(att.url).then((u) => {
+      slot.replaceChildren(renderResolved({ ...att, url: u, stored_url: att.url }, opts));
+    }).catch(() => {
+      slot.innerHTML = `<div class="att-file att-missing"><div class="af-ico"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div class="af-mid"><b>${MD.esc(att.file_name)}</b><small>This file couldn't be loaded</small></div></div>`;
+    });
+    return slot;
+  }
+
+  function renderResolved(att, opts = {}) {
     const kind = kindOf(att.file_name);
     if (kind === 'image') {
       const w = document.createElement('div');
       w.className = 'att-img';
-      w.innerHTML = `<img src="${att.url}" alt="${MD.esc(att.file_name)}" loading="lazy">`;
+      w.innerHTML = `<img src="${MD.esc(att.url)}" alt="${MD.esc(att.file_name)}" loading="lazy">`;
       const im = w.querySelector('img');
       im.onclick = () => lightbox(att.url, att.file_name);
+      // A tab left open for days can outlive even a fresh signature: re-sign once.
+      if (att.stored_url) {
+        im.addEventListener('error', function retry() {
+          im.removeEventListener('error', retry);
+          window.Store.sign(att.stored_url, { force: true }).then((u) => { if (u !== im.src) im.src = u; }).catch(() => {});
+        });
+      }
       // TIFF needs a client-side decode before most browsers will show it.
       window.Tiff?.hydrate(im, att.url);
       return w;

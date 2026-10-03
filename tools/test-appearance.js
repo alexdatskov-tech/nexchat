@@ -10,6 +10,7 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 function page(file) {
   const w = new JSDOM(source(file), { url: `https://nexchat.test/${file}?id=srv`, runScripts: 'outside-only' }).window;
   w.eval(source('assets/js/ui.js'));
+  w.eval(source('assets/js/storage.js'));   // signs stored keys at render time
   w.UI.toast = () => {};
   return w;
 }
@@ -38,7 +39,8 @@ function mockDb(w, row) {
       const key = 'nexchat/users/me/wallpaper-photo.png';
       let calls = 0;
       w.__nx_tp = { presign: async (got, mins) => {
-        assert.equal(got, key); assert.equal(mins, 60); calls++;
+        // Signed for the full 7-day SigV4 window, anchored to the start of the day.
+        assert.equal(got, key); assert.equal(mins, 7 * 24 * 60); calls++;
         return 'https://storage.test/photo.png?X-Amz-Signature=fresh';
       } };
       const theme = { dash_wallpaper_key: key, dash_bg: `url('https://storage.test/bucket/${key}?X-Amz-Signature=expired')`, chat_blur: 0, chat_dim: 0 };

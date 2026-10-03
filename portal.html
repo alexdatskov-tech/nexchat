@@ -3,118 +3,143 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>NexChat</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=33" />
+<meta name="theme-color" content="#08090D" />
+<title>NexChat — Home</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=40" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=35" />
+<link rel="stylesheet" href="assets/css/theme.css?v=40" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <img src="assets/img/logo.svg?v=33" alt="" />
-      <span>NexChat</span>
-    </div>
-    <div class="right">
+<div class="app">
+  <nav class="spaces" id="spaces"></nav>
+
+  <main class="home">
+    <div class="home-top">
+      <button class="btn btn-quiet btn-icon" id="homeBurger" title="Menu"><i class="fa-solid fa-bars"></i></button>
+      <img src="assets/img/logo.svg?v=40" alt="" /><b>NexChat</b>
+      <span style="flex:1"></span>
       <a class="btn btn-quiet btn-icon" href="dms.html" title="Messages"><i class="fa-solid fa-comment-dots"></i></a>
-      <a class="btn btn-quiet btn-icon" href="admin.html" id="adminLink" title="Admin" style="display:none;"><i class="fa-solid fa-shield-halved"></i></a>
-      <a class="userchip" href="profile.html" id="meChip">
-        <span id="meAv"></span>
-        <span id="meName">…</span>
-      </a>
-      <button class="btn btn-quiet btn-icon" id="btnOut" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
-    </div>
-  </header>
-
-  <main class="portal">
-    <div class="portal-head">
-      <div>
-        <h2>Your servers</h2>
-        <div class="sub" id="serverCount">Loading…</div>
-      </div>
-      <div class="acts">
-        <button class="btn btn-ghost" id="btnJoin"><i class="fa-solid fa-right-to-bracket"></i> Join</button>
-        <button class="btn btn-primary" id="btnCreate"><i class="fa-solid fa-plus"></i> Create server</button>
-      </div>
     </div>
 
-    <div class="grid" id="skeleton">
-      <div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>
-    </div>
-
-    <div class="surface hidden" id="empty">
-      <div class="empty">
-        <div class="ico"><i class="fa-regular fa-compass"></i></div>
-        <h3>Nothing here yet</h3>
-        <p>Start a server for your people, or paste an invite code to join one.</p>
-        <div style="display:flex;gap:9px;justify-content:center;margin-top:16px;">
-          <button class="btn btn-ghost" id="btnJoin2">Join with a code</button>
-          <button class="btn btn-primary" id="btnCreate2">Create a server</button>
+    <div class="home-inner">
+      <section class="hero">
+        <div>
+          <div class="hello"><span id="meAv"></span><span id="greet">Welcome back</span></div>
+          <h1>Hey, <span id="meName">…</span></h1>
+          <p>Jump back into your servers, catch up on messages, or start something new.</p>
         </div>
-      </div>
-    </div>
+        <div class="acts">
+          <a class="btn btn-ghost" href="dms.html"><i class="fa-solid fa-comment-dots"></i> Messages</a>
+          <button class="btn btn-ghost" id="btnJoin"><i class="fa-solid fa-right-to-bracket"></i> Join</button>
+          <button class="btn btn-primary" id="btnCreate"><i class="fa-solid fa-plus"></i> Create server</button>
+          <a class="btn btn-quiet btn-icon" href="admin.html" id="adminLink" title="Admin" style="display:none;"><i class="fa-solid fa-shield-halved"></i></a>
+          <button class="btn btn-quiet btn-icon" id="btnOut" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+        </div>
+      </section>
 
-    <div class="grid hidden" id="grid"></div>
-  </main>
-
-  <!-- Create -->
-  <div class="overlay hidden" id="mCreate">
-    <div class="modal">
-      <div class="modal-head"><h3>Create a server</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
-      <div class="modal-body">
-        <div class="upload-row">
-          <div class="upload-prev" id="cIconPrev"><i class="fa-solid fa-image"></i></div>
-          <div class="field" style="flex:1;">
-            <label>Server icon</label>
-            <input type="file" id="cIcon" accept="image/*,.tif,.tiff" />
+      <div class="home-grid">
+        <section>
+          <div class="portal-head">
+            <div><h2>Your servers</h2><div class="sub" id="serverCount">Loading…</div></div>
           </div>
-        </div>
-        <div class="field">
-          <label for="cName">Name</label>
-          <input id="cName" type="text" maxlength="100" placeholder="Late Night Coders ☕" />
-        </div>
-        <div class="field">
-          <label for="cDesc">Description</label>
-          <textarea id="cDesc" rows="2" placeholder="What happens here?"></textarea>
-        </div>
-        <p class="err" id="cErr"></p>
-      </div>
-      <div class="modal-foot">
-        <button class="btn btn-quiet" data-close>Cancel</button>
-        <button class="btn btn-primary" id="cGo">Create server</button>
+
+          <div class="grid" id="skeleton">
+            <div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>
+          </div>
+
+          <div class="surface hidden" id="empty">
+            <div class="empty">
+              <div class="ico"><i class="fa-regular fa-compass"></i></div>
+              <h3>Nothing here yet</h3>
+              <p>Start a server for your people, or paste an invite code to join one.</p>
+              <div style="display:flex;gap:9px;justify-content:center;margin-top:18px;">
+                <button class="btn btn-ghost" id="btnJoin2">Join with a code</button>
+                <button class="btn btn-primary" id="btnCreate2">Create a server</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid hidden" id="grid"></div>
+        </section>
+
+        <aside id="annSection">
+          <div class="sect-head">
+            <h2>Announcements</h2>
+            <button class="btn btn-quiet btn-sm" id="annAll">View all <i class="fa-solid fa-arrow-right"></i></button>
+          </div>
+          <div class="ann-feed" id="annFeed">
+            <div class="skel" style="height:96px;border-radius:18px"></div>
+            <div class="skel" style="height:96px;border-radius:18px"></div>
+          </div>
+        </aside>
       </div>
     </div>
-  </div>
+  </main>
+</div>
 
-  <!-- Join -->
-  <div class="overlay hidden" id="mJoin">
-    <div class="modal" style="max-width:390px;">
-      <div class="modal-head"><h3>Join a server</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
-      <div class="modal-body">
-        <div class="field">
-          <label for="jCode">Invite code</label>
-          <input id="jCode" type="text" class="mono" placeholder="a1b2c3d4" />
-          <span class="hint">Ask a member for a code, or paste a full invite link.</span>
+<!-- Create -->
+<div class="overlay hidden" id="mCreate">
+  <div class="modal">
+    <div class="modal-head"><h3>Create a server</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <p style="margin:0;color:var(--txt-2);font-size:13.5px;">Your server is where you and your friends hang out. Make it yours.</p>
+      <div class="upload-row">
+        <div class="upload-prev" id="cIconPrev"><i class="fa-solid fa-image"></i></div>
+        <div class="field" style="flex:1;">
+          <label>Server icon</label>
+          <input type="file" id="cIcon" accept="image/*,.tif,.tiff" />
         </div>
-        <p class="err" id="jErr"></p>
       </div>
-      <div class="modal-foot">
-        <button class="btn btn-quiet" data-close>Cancel</button>
-        <button class="btn btn-primary" id="jGo">Join</button>
+      <div class="field">
+        <label for="cName">Name</label>
+        <input id="cName" type="text" maxlength="100" placeholder="Late Night Coders ☕" />
       </div>
+      <div class="field">
+        <label for="cDesc">Description</label>
+        <textarea id="cDesc" rows="2" placeholder="What happens here?"></textarea>
+      </div>
+      <p class="err" id="cErr"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-quiet" data-close>Cancel</button>
+      <button class="btn btn-primary" id="cGo">Create server</button>
     </div>
   </div>
+</div>
 
-  <div class="toast" id="toast"></div>
+<!-- Join -->
+<div class="overlay hidden" id="mJoin">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head"><h3>Join a server</h3><button class="x-btn" data-close><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="jCode">Invite code</label>
+        <input id="jCode" type="text" class="mono" placeholder="a1b2c3d4" />
+        <span class="hint">Ask a member for a code, or paste a full invite link.</span>
+      </div>
+      <p class="err" id="jErr"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-quiet" data-close>Cancel</button>
+      <button class="btn btn-primary" id="jGo">Join</button>
+    </div>
+  </div>
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js?v=33"></script>
-  <script src="assets/js/supabase-client.js?v=33"></script>
-  <script src="assets/js/ui.js?v=34"></script>
-  <script src="assets/js/tiff.js?v=33"></script>
-<script src="assets/js/md.js?v=33"></script>
-  <script src="assets/js/presence.js?v=33"></script>
-<script src="assets/js/guard.js?v=33"></script>
-<script src="assets/js/notify.js?v=33"></script>
-<script src="assets/js/portal.js?v=34"></script>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js?v=40"></script>
+<script src="assets/js/supabase-client.js?v=40"></script>
+<script src="assets/js/ui.js?v=40"></script>
+<script src="assets/js/md.js?v=40"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=40"></script>
+<script src="assets/js/storage.js?v=40"></script>
+<script src="assets/js/tiff.js?v=40"></script>
+<script src="assets/js/presence.js?v=40"></script>
+<script src="assets/js/guard.js?v=40"></script>
+<script src="assets/js/notify.js?v=40"></script>
+<script src="assets/js/nav.js?v=40"></script>
+<script src="assets/js/portal.js?v=40"></script>
 </body>
 </html>

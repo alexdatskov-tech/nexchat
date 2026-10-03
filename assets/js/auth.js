@@ -44,7 +44,7 @@
       });
       if (error) throw error;
 
-      if (data.session) window.location.href = 'portal.html';
+      if (data.session) UI.go('portal.html');
       else { UI.toast('Account created — sign in to continue.'); showTab('in'); }
     } catch (err) {
       setErr('errUp', err.message || 'Could not create that account.');
@@ -78,11 +78,11 @@
         });
         return;
       }
-      window.location.href = 'portal.html';
+      UI.go('portal.html');
     } catch (err) {
       setErr('errIn', err.message || 'Could not sign in.');
     } finally { busy(btn, false, 'Sign in'); }
   };
 
-  window.db?.auth.getSession().then(({ data }) => { if (data.session) window.location.href = 'portal.html'; });
+  window.db?.auth.getSession().then(({ data }) => { if (data.session) UI.go('portal.html'); });
 })();

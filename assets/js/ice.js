@@ -19,11 +19,11 @@ window.ICE = (function () {
     'stun:stun.cope.es:3478',
   ];
 
+  // Free public relay (shared, rate-limited). UDP first, then TCP/443 for
+  // networks that block everything else.
   const TURN = [
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'], username: 'openrelayproject', credential: 'openrelayproject' },
     { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
   ];
 
   const CACHE_KEY = 'nx_ice_probe';
@@ -71,16 +71,28 @@ window.ICE = (function () {
 
   /* Builds the iceServers array actually handed to RTCPeerConnection.
      Honours a manual override when developer mode is on. */
+  /* Two STUN servers are all ICE needs to learn your public address; every
+     extra server only slows candidate gathering (Chrome warns past four).
+     TURN is a last resort -- ICE always prefers a direct path -- but without
+     one, people on strict NATs (schools, offices, some mobile carriers)
+     can't connect at all. Your own TURN from config.js beats the free public
+     relay, which is shared and throttled: a call forced through it is the
+     one that crawls. */
+  function turn() {
+    const own = window.NEXCHAT_CONFIG?.TURN_SERVERS;
+    return Array.isArray(own) && own.length ? own : TURN.slice(0, 2);
+  }
+
   async function build(opts = {}) {
     const manual = opts.manual && opts.manual.length ? opts.manual : null;
     let chosen;
     if (manual) {
-      chosen = manual.slice(0, 6);
+      chosen = manual.slice(0, 3);
     } else {
       const ranked = await rank(STUN, opts.force);
-      chosen = ranked.slice(0, 5).map((r) => r.url);
+      chosen = ranked.slice(0, 2).map((r) => r.url);
     }
-    return [{ urls: chosen }, ...TURN];
+    return [{ urls: chosen }, ...turn()];
   }
 
   /* Fastest Google STUN specifically — used for the dedicated screen-share
@@ -92,9 +104,7 @@ window.ICE = (function () {
     return hit ? hit.url : g[0];
   }
 
-  async function buildScreen() {
-    return [{ urls: await bestGoogle() }, ...TURN];
-  }
+  async function buildScreen() { return build(); }
 
   function lastProbe() {
     try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null')?.list || []; } catch { return []; }

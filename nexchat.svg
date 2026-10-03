@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NexChat launcher — a single SVG file that boots the whole app.
+
+  Open it directly in a browser tab (double-click the downloaded file, or
+  visit it on GitHub Pages). It:
+    1. works out where the app's files live: next to this SVG when it is
+       served by GitHub Pages, otherwise straight from the GitHub repository
+       (jsDelivr's GitHub CDN pinned to the latest commit, then
+       raw.githubusercontent.com as a fallback);
+    2. fetches the page's HTML, CSS and JavaScript and inlines them;
+    3. renders the result in an <iframe> inside a <foreignObject>, with the
+       loader script kept in a CDATA section so the file stays valid XML.
+  Navigation between pages is handled here too, so the app never leaves the
+  SVG. Overrides (query string): ?ref=<branch|tag|sha>  ?base=<url ending in />
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xhtml="http://www.w3.org/1999/xhtml"
+     width="100%" height="100%" style="display:block;background:#08090D">
+  <title>NexChat</title>
+  <defs>
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B7CFF"/>
+      <stop offset="1" stop-color="#2DD4BF"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0.15" cy="0.1" r="0.7">
+      <stop offset="0" stop-color="#7C6CFF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#7C6CFF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0.9" cy="0.95" r="0.6">
+      <stop offset="0" stop-color="#2DD4BF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#2DD4BF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <style><![CDATA[
+    :root, svg { margin: 0; overflow: hidden; }
+    #splash text { font-family: 'Geist', 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    #title { font-size: 30px; font-weight: 800; fill: #EEF0F6; letter-spacing: -0.5px; }
+    #status { font-size: 13px; fill: #A6ABBC; }
+    #detail { font-size: 11px; fill: #6D7386; }
+    #bar { transition: width .25s ease; }
+    #mark { transform-origin: 0 0; animation: bob 2.4s ease-in-out infinite; }
+    @keyframes bob { 50% { transform: translateY(-5px); } }
+    #splash.fail #bar { fill: #F2555A; }
+    #retry { cursor: pointer; display: none; }
+    #splash.fail #retry { display: inline; }
+    #retry rect { fill: #7C6CFF; }
+    #retry text { font-size: 13px; font-weight: 600; fill: #fff; }
+  ]]></style>
+
+  <!-- Splash: drawn in SVG so it shows instantly, before anything is fetched. -->
+  <g id="splash">
+    <rect width="100%" height="100%" fill="#08090D"/>
+    <rect width="100%" height="100%" fill="url(#glowA)"/>
+    <rect width="100%" height="100%" fill="url(#glowB)"/>
+    <svg x="50%" y="50%" overflow="visible">
+      <g transform="translate(-36,-110)">
+        <g id="mark">
+          <rect x="0" y="0" width="72" height="72" rx="23" fill="url(#lg)"/>
+          <path d="M18 52V20l36 32V20" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </g>
+      <text id="title" x="0" y="2" text-anchor="middle">NexChat</text>
+      <text id="status" x="0" y="34" text-anchor="middle">Starting…</text>
+      <rect x="-120" y="52" width="240" height="4" rx="2" fill="#1C2029"/>
+      <rect id="bar" x="-120" y="52" width="0" height="4" rx="2" fill="url(#lg)"/>
+      <text id="detail" x="0" y="80" text-anchor="middle"> </text>
+      <g id="retry" transform="translate(-48,98)">
+        <rect width="96" height="34" rx="17"/>
+        <text x="48" y="22" text-anchor="middle">Try again</text>
+      </g>
+    </svg>
+  </g>
+
+  <!-- The app itself. -->
+  <foreignObject id="fo" x="0" y="0" width="100%" height="100%" visibility="hidden">
+    <xhtml:div style="width:100%;height:100%;margin:0;background:#08090D;">
+      <xhtml:iframe id="app" title="NexChat"
+        allow="camera; microphone; display-capture; autoplay; clipboard-read; clipboard-write; fullscreen; picture-in-picture"
+        allowfullscreen="true"
+        style="border:0;width:100%;height:100%;display:block;background:#08090D;"></xhtml:iframe>
+    </xhtml:div>
+  </foreignObject>
+
+  <script type="text/javascript"><![CDATA[
+  (function () {
+    'use strict';
+    var OWNER = 'alexdatskov-tech', REPO = 'nexchat';
+    // Tried in order when resolving which commit to load.
+    var REFS = ['claude/dm-files-ui-overhaul-mf661d', 'main'];
+    var HOME = 'index.html';
+
+    var $ = function (id) { return document.getElementById(id); };
+    var frame = $('app'), splash = $('splash');
+    var qs = new URLSearchParams(location.search);
+    var base = null, current = HOME, siteUrl = null;
+    var cache = new Map();   // absolute url -> Promise<text>
+    var done = 0, total = 1;
+
+    function status(msg, detail) {
+      $('status').textContent = msg;
+      if (detail != null) $('detail').textContent = detail;
+    }
+    function progress() {
+      var w = Math.max(6, Math.min(240, Math.round((done / Math.max(total, 1)) * 240)));
+      $('bar').setAttribute('width', w);
+    }
+    function fail(msg, detail) {
+      splash.style.display = '';
+      splash.classList.add('fail');
+      status(msg, detail || '');
+    }
+    $('retry').addEventListener('click', function () { location.reload(); });
+
+    /* ---------------- where do the files live? ---------------- */
+    function ok(r) { if (!r.ok) throw new Error(r.status + ' ' + r.url); return r; }
+
+    async function probe(b) {
+      var r = await fetch(b + HOME, { cache: 'no-cache' });
+      if (!r.ok) return false;
+      var t = await r.text();
+      return /NexChat/.test(t) && /assets\/js\/ui\.js/.test(t);
+    }
+
+    async function latestSha(ref) {
+      var r = await fetch('https://api.github.com/repos/' + OWNER + '/' + REPO + '/commits/' + encodeURIComponent(ref),
+        { headers: { Accept: 'application/vnd.github.sha' } });
+      if (!r.ok) return null;
+      var sha = (await r.text()).trim();
+      return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+    }
+
+    async function locate() {
+      if (qs.get('base')) return qs.get('base').replace(/\/?$/, '/');
+
+      // Served next to the app (GitHub Pages, any static host)?
+      if (/^https?:$/.test(location.protocol)) {
+        var here = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
+        try { if (await probe(here)) return here; } catch (e) { /* fall through */ }
+      }
+
+      // Straight from the repository. Pinning jsDelivr to an exact commit
+      // means fresh files (branch URLs are cached for hours there).
+      var refs = qs.get('ref') ? [qs.get('ref')] : REFS;
+      for (var i = 0; i < refs.length; i++) {
+        status('Finding the latest version…', OWNER + '/' + REPO + '@' + refs[i]);
+        var sha = null;
+        try { sha = await latestSha(refs[i]); } catch (e) { /* rate-limited or offline */ }
+        var candidates = [];
+        if (sha) candidates.push('https://cdn.jsdelivr.net/gh/' + OWNER + '/' + REPO + '@' + sha + '/');
+        candidates.push('https://cdn.jsdelivr.net/gh/' + OWNER + '/' + REPO + '@' + refs[i] + '/');
+        candidates.push('https://raw.githubusercontent.com/' + OWNER + '/' + REPO + '/' + (sha || refs[i]) + '/');
+        for (var j = 0; j < candidates.length; j++) {
+          try { if (await probe(candidates[j])) return candidates[j]; } catch (e) { /* next */ }
+        }
+      }
+      throw new Error('Could not reach the NexChat files on GitHub.');
+    }
+
+    /* ---------------- fetching + inlining ---------------- */
+    function text(url) {
+      var clean = url.replace(/\?v=\d+$/, '');
+      if (!cache.has(clean)) {
+        total++; progress();
+        cache.set(clean, fetch(clean).then(ok).then(function (r) { return r.text(); })
+          .then(function (t) { done++; progress(); return t; })
+          .catch(function (e) { cache.delete(clean); throw e; }));
+      }
+      return cache.get(clean);
+    }
+
+    var isLocal = function (u) { return u && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(u); };
+
+    // Relative url(...) inside a stylesheet must point back at the repository.
+    function fixCss(css, cssUrl) {
+      return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, function (m, q, u) {
+        return isLocal(u) ? 'url(' + q + new URL(u, cssUrl).href + q + ')' : m;
+      });
+    }
+
+    function shellScript(page) {
+      var u = new URL(page, 'https://nexchat.invalid/');
+      var cfg = {
+        page: u.pathname.replace(/^\//, ''), search: u.search, hash: u.hash,
+        site: siteUrl, base: base,
+      };
+      // Runs first inside the app frame: exposes the virtual URL to UI.params()
+      // / UI.go(), and routes in-app links back through the launcher.
+      return '(function(){var c=' + JSON.stringify(cfg) + ';' +
+        'c.go=function(u){parent.postMessage({nxGo:String(u)},"*");};' +
+        'window.__NX_SHELL__=c;' +
+        'document.addEventListener("click",function(e){' +
+          'var a=e.target&&e.target.closest&&e.target.closest("a[href]");' +
+          'if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey)return;' +
+          'var h=a.getAttribute("href");' +
+          'if(!h||a.target==="_blank"||a.hasAttribute("download")||/^(?:[a-z][a-z0-9+.-]*:|\\/\\/|#)/i.test(h))return;' +
+          'e.preventDefault();c.go(h);' +
+        '},true);' +
+      '})();';
+    }
+
+    async function build(page) {
+      var path = page.replace(/[?#].*$/, '') || HOME;
+      var html = await text(base + path);
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+
+      var links = Array.prototype.slice.call(doc.querySelectorAll('link[rel="stylesheet"][href]'));
+      var scripts = Array.prototype.slice.call(doc.querySelectorAll('script[src]'));
+      links.filter(function (l) { return isLocal(l.getAttribute('href')); }).forEach(function (l) { text(base + l.getAttribute('href')); });
+      scripts.filter(function (s) { return isLocal(s.getAttribute('src')); }).forEach(function (s) { text(base + s.getAttribute('src')); });
+
+      for (var i = 0; i < links.length; i++) {
+        var href = links[i].getAttribute('href');
+        if (!isLocal(href)) continue;
+        var cssUrl = new URL(href, base).href.replace(/\?v=\d+$/, '');
+        var st = doc.createElement('style');
+        st.textContent = fixCss(await text(base + href), cssUrl);
+        links[i].replaceWith(st);
+      }
+      for (var k = 0; k < scripts.length; k++) {
+        var src = scripts[k].getAttribute('src');
+        if (!isLocal(src)) continue;
+        var js = await text(base + src);
+        var s = doc.createElement('script');
+        // A literal "</script" inside the code would end the inline tag early.
+        s.textContent = js.replace(/<\/(script)/gi, '<\\/$1') + '\n//# sourceURL=' + base + src.replace(/\?v=\d+$/, '');
+        scripts[k].replaceWith(s);
+      }
+
+      var head = doc.head;
+      var b = doc.createElement('base');
+      b.setAttribute('href', base);
+      head.insertBefore(b, head.firstChild);
+      var boot = doc.createElement('script');
+      boot.textContent = shellScript(page);
+      head.insertBefore(boot, b.nextSibling);
+      return { html: '<!DOCTYPE html>\n' + doc.documentElement.outerHTML, title: doc.title };
+    }
+
+    /* ---------------- navigation ---------------- */
+    var navSeq = 0;
+    async function go(page, replace) {
+      var seq = ++navSeq;
+      var target = new URL(page, 'https://nexchat.invalid/' + current);
+      var rel = target.pathname.replace(/^\//, '') + target.search + target.hash;
+      try {
+        var out = await build(rel);
+        if (seq !== navSeq) return;
+        current = rel;
+        frame.srcdoc = out.html;
+        document.title = out.title || 'NexChat';
+        try { history[replace ? 'replaceState' : 'pushState']({ page: rel }, '', '#/' + rel); } catch (e) { location.hash = '/' + rel; }
+      } catch (e) {
+        fail('Could not open that page.', String(e.message || e));
+      }
+    }
+
+    window.addEventListener('message', function (e) {
+      if (e.source === frame.contentWindow && e.data && typeof e.data.nxGo === 'string') go(e.data.nxGo);
+    });
+    window.addEventListener('popstate', function (e) {
+      var p = (e.state && e.state.page) || location.hash.replace(/^#\/?/, '') || HOME;
+      current = HOME;
+      go(p, true);
+    });
+
+    frame.addEventListener('load', function () {
+      if (!frame.srcdoc) return;
+      $('fo').setAttribute('visibility', 'visible');
+      splash.style.display = 'none';
+    });
+
+    (async function start() {
+      try {
+        status('Connecting…', '');
+        base = await locate();
+        siteUrl = /^https?:/.test(location.protocol) && base.indexOf(location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '')) === 0
+          ? base : 'https://' + OWNER + '.github.io/' + REPO + '/';
+        status('Loading NexChat…', base.replace(/^https?:\/\//, '').replace(/\/$/, ''));
+        var first = location.hash.replace(/^#\/?/, '') || HOME;
+        await go(first, true);
+      } catch (e) {
+        fail('NexChat could not load.', String(e.message || e));
+      }
+    })();
+  })();
+  ]]></script>
+</svg>

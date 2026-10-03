@@ -4,9 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=33" />
+<meta name="theme-color" content="#08090D" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=40" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=35" />
+<link rel="stylesheet" href="assets/css/theme.css?v=40" />
 </head>
 <body>
 
@@ -21,11 +22,11 @@
   </div>
 </div>
 
+<div class="app">
+<nav class="spaces" id="spaces"></nav>
 <div class="shell hidden" id="shell">
   <aside class="rail" id="rail">
     <div class="rail-head">
-      <a class="home" href="portal.html" title="All servers"><i class="fa-solid fa-arrow-left"></i></a>
-      <a class="home" href="dms.html" title="Direct messages"><i class="fa-solid fa-comment-dots"></i></a>
       <div class="meta">
         <b id="srvName">…</b>
         <small id="srvMembers"></small>
@@ -68,7 +69,7 @@
 
   <main class="chat">
     <header class="chat-head" id="chatHead">
-      <button class="btn btn-quiet btn-icon m-burger" id="burger" style="display:none;"><i class="fa-solid fa-bars"></i></button>
+      <button class="btn btn-quiet btn-icon m-burger" id="burger" title="Menu"><i class="fa-solid fa-bars"></i></button>
       <span class="hico" id="chIco"><i class="fa-solid fa-hashtag"></i></span>
       <b id="chName">—</b>
       <span class="topic hidden" id="chTopic"></span>
@@ -83,12 +84,14 @@
         </div>
       </div>
       <div class="vroom-stage" id="vrStage"></div>
-      <div class="vstats" id="vstats"></div>
+      <div class="vstats hidden" id="vstats"></div>
       <div class="vroom-bar">
         <button class="vbtn" id="vrMute" title="Mute"><i class="fa-solid fa-microphone"></i></button>
         <button class="vbtn" id="vrDeaf" title="Deafen"><i class="fa-solid fa-headphones-simple"></i></button>
-        <button class="vbtn" id="vrCam" title="Camera"><i class="fa-solid fa-video"></i></button>
+        <button class="vbtn" id="vrCam" title="Camera"><i class="fa-solid fa-video-slash"></i></button>
         <button class="vbtn" id="vrShare" title="Share screen"><i class="fa-solid fa-display"></i></button>
+        <button class="vbtn sm" id="vrStats" title="Connection info"><i class="fa-solid fa-signal"></i></button>
+        <span class="vbar-sep"></span>
         <button class="vbtn hang" id="vrLeave" title="Disconnect"><i class="fa-solid fa-phone-slash"></i></button>
       </div>
     </div>
@@ -101,14 +104,16 @@
       <div class="upbar hidden" id="upbar"><i style="width:0"></i></div>
       <div class="tray hidden" id="tray"></div>
       <div class="composer-inner">
-        <button class="attach-btn" id="attachBtn" title="Attach files"><i class="fa-solid fa-paperclip"></i></button>
+        <button class="attach-btn" id="attachBtn" title="Attach files"><i class="fa-solid fa-circle-plus"></i></button>
         <textarea id="input" rows="1" placeholder="Message"></textarea>
+        <button class="emoji-btn" id="emojiBtn" title="Emoji"><i class="fa-regular fa-face-smile"></i></button>
         <button class="btn btn-primary send" id="send" title="Send"><i class="fa-solid fa-arrow-up"></i></button>
       </div>
       <input type="file" id="fileIn" multiple class="hidden" />
     </div>
 
   </main>
+</div>
 </div>
 
 <!-- Invite -->
@@ -165,11 +170,11 @@
       <div class="field">
         <label>Quality</label>
         <div class="seg-pick" id="shareQ">
-          <button class="on" data-q="1080">1080p · 60fps</button>
-          <button data-q="720">720p · 60fps</button>
+          <button class="on" data-q="text">Sharp text · 1080p</button>
+          <button data-q="motion">Smooth · 720p30</button>
           <button data-q="auto">Auto</button>
         </div>
-        <span class="hint">Runs on a dedicated connection over the fastest STUN server, and scales itself down if the link can't keep up.</span>
+        <span class="hint">Sharp keeps text readable and lets the frame rate drop first; Smooth keeps motion fluid for video and games. Either adapts to your upload speed.</span>
       </div>
       <label class="perm" style="padding:0;"><input type="checkbox" id="shareAudio" checked> Share audio too</label>
       <p class="err" id="shareErr"></p>
@@ -214,20 +219,23 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=33"></script>
-<script src="assets/js/supabase-client.js?v=33"></script>
-<script src="assets/js/ui.js?v=34"></script>
-<script src="assets/js/md.js?v=33"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=33"></script>
-<script src="assets/js/tiff.js?v=33"></script>
-<script src="assets/js/viewer.js?v=33"></script>
-<script src="assets/js/ice.js?v=33"></script>
-<script src="assets/js/voice.js?v=35"></script>
-<script src="assets/js/presence.js?v=33"></script>
-<script src="assets/js/guard.js?v=33"></script>
-<script src="assets/js/notify.js?v=33"></script>
-<script src="assets/js/emoji-data.js?v=33"></script>
-<script src="assets/js/emoji-picker.js?v=33"></script>
-<script src="assets/js/server.js?v=35"></script>
+<script src="assets/js/config.js?v=40"></script>
+<script src="assets/js/supabase-client.js?v=40"></script>
+<script src="assets/js/ui.js?v=40"></script>
+<script src="assets/js/md.js?v=40"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=40"></script>
+<script src="assets/js/storage.js?v=40"></script>
+<script src="assets/js/tiff.js?v=40"></script>
+<script src="assets/js/viewer.js?v=40"></script>
+<script src="assets/js/ice.js?v=40"></script>
+<script src="assets/js/voice.js?v=40"></script>
+<script src="assets/js/callui.js?v=40"></script>
+<script src="assets/js/presence.js?v=40"></script>
+<script src="assets/js/guard.js?v=40"></script>
+<script src="assets/js/notify.js?v=40"></script>
+<script src="assets/js/emoji-data.js?v=40"></script>
+<script src="assets/js/emoji-picker.js?v=40"></script>
+<script src="assets/js/nav.js?v=40"></script>
+<script src="assets/js/server.js?v=40"></script>
 </body>
 </html>
