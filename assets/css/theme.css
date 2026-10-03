@@ -305,7 +305,7 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 
 .auth-panel {
   position: relative; padding: 18px; border-radius: 26px;
-  background: rgba(10,10,15,.72); border: 1px solid rgba(255,255,255,.06);
+  background: rgba(10,10,15,.88); border: 1px solid rgba(255,255,255,.06);
   box-shadow: 0 40px 80px -30px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.05);
   transform: perspective(900px) rotateX(var(--rx, 0)) rotateY(var(--ry, 0)); transition: transform .4s var(--ease);
 }
@@ -1629,3 +1629,5 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 .md-empty { color: var(--txt-3); }
 .md-count { font-size: 12px; color: var(--txt-3); }
 @media (max-width: 700px) { .md-split { grid-template-columns: 1fr; } .md-src { min-height: 180px; } }
+.hint { font-size: 12px; color: var(--txt-3); line-height: 1.5; }
+.up-pick { align-self: flex-start; }
