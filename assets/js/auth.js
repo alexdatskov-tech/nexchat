@@ -36,7 +36,7 @@
     busy(btn, true, 'Create account');
     try {
       const { data: free } = await window.db.rpc('is_username_available', { p_username: username });
-      if (free === false) { setErr('errUser', 'That username is taken.'); busy(btn, false, 'Create account'); return; }
+      if (free === false) { setErr('errUser', 'That username is taken.'); busy(btn, false, 'Create my account'); return; }
 
       const { data, error } = await window.db.auth.signUp({
         email: toAddr(username), password: pass,
@@ -44,11 +44,11 @@
       });
       if (error) throw error;
 
-      if (data.session) window.location.href = 'portal.html';
+      if (data.session) UI.go('portal.html');
       else { UI.toast('Account created — sign in to continue.'); showTab('in'); }
     } catch (err) {
       setErr('errUp', err.message || 'Could not create that account.');
-    } finally { busy(btn, false, 'Create account'); }
+    } finally { busy(btn, false, 'Create my account'); }
   };
 
   formIn.onsubmit = async (e) => {
@@ -78,11 +78,11 @@
         });
         return;
       }
-      window.location.href = 'portal.html';
+      UI.go('portal.html');
     } catch (err) {
       setErr('errIn', err.message || 'Could not sign in.');
-    } finally { busy(btn, false, 'Sign in'); }
+    } finally { busy(btn, false, 'Let me in'); }
   };
 
-  window.db?.auth.getSession().then(({ data }) => { if (data.session) window.location.href = 'portal.html'; });
+  window.db?.auth.getSession().then(({ data }) => { if (data.session) UI.go('portal.html'); });
 })();

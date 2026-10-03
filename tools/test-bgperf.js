@@ -51,9 +51,11 @@ ok('  opacity raised to stay legible without blur', /rgba\([^)]*0?\.8\d?\)/.test
 const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
 const bfCount = (bare.match(/backdrop-filter\s*:/g) || []).length;
 ok('backdrop-filter use is bounded', bfCount <= 14, `${bfCount} declarations`);
-const topbar = rule('body.has-bg .topbar');
-ok('topbar keeps its blur (it does not scroll)', /backdrop-filter/.test(topbar || ''));
-ok('  topbar promoted', /translateZ\(0\)/.test(topbar || ''));
+// The old portal topbar is gone; the chat header is the frosted chrome now.
+// It sits above the message list (not over it), so its backdrop never scrolls.
+const chatHead = rule('.chat-head');
+ok('chat header keeps its blur (it does not scroll)', /backdrop-filter/.test(chatHead || ''));
+ok('  chat header promoted', /translateZ\(0\)/.test(chatHead || ''));
 
 /* ---- 5. the duplicate frosted block is gone ---- */
 const trio = bare.match(/body\.has-bg\s+\.surface\s*\{[^}]*\}/g) || [];

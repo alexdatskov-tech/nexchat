@@ -4,42 +4,37 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Your profile</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=33" />
+<meta name="theme-color" content="#08090D" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=41" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=35" />
+<link rel="stylesheet" href="assets/css/theme.css?v=41" />
 </head>
 <body>
 <div class="set-wrap">
+  <div class="set-bg" aria-hidden="true"><i></i><i></i></div>
   <nav class="set-nav">
-    <a class="back" href="portal.html"><i class="fa-solid fa-arrow-left"></i> <span>Back</span></a>
+    <a class="back" href="portal.html"><i class="fa-solid fa-arrow-left"></i> <span>Back to NexChat</span></a>
+    <div class="nav-id">
+      <div class="ni-banner" id="niBanner"></div>
+      <span class="ni-av" id="niAv"></span>
+      <div class="ni-t"><b id="niName">…</b><small id="niHandle"></small></div>
+    </div>
     <div class="grp-label">Account</div>
-    <button class="on" data-tab="profile"><i class="fa-regular fa-user"></i> Profile</button>
-    <button data-tab="appearance"><i class="fa-solid fa-palette"></i> Appearance</button>
-    <button data-tab="nitro"><i class="fa-solid fa-bolt"></i> Nitro</button>
-    <button data-tab="account"><i class="fa-solid fa-key"></i> Account</button>
-    <button data-tab="dev"><i class="fa-solid fa-code"></i> Developer</button>
+    <button class="on" data-tab="profile"><span class="ni-ico c1"><i class="fa-solid fa-user"></i></span><span class="nt"><b>Profile</b><small>Name, bio, avatar</small></span></button>
+    <button data-tab="appearance"><span class="ni-ico c2"><i class="fa-solid fa-palette"></i></span><span class="nt"><b>Appearance</b><small>Glass, wallpaper, colour</small></span></button>
+    <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro</b><small>Halo &amp; extras</small></span></button>
+    <div class="grp-label">Security</div>
+    <button data-tab="account"><span class="ni-ico c4"><i class="fa-solid fa-key"></i></span><span class="nt"><b>Account</b><small>Password &amp; session</small></span></button>
+    <button data-tab="dev"><span class="ni-ico c5"><i class="fa-solid fa-code"></i></span><span class="nt"><b>Developer</b><small>Connection tools</small></span></button>
   </nav>
 
   <div class="set-main">
     <!-- PROFILE -->
     <section class="set-inner" data-pane="profile">
-      <h2>Profile</h2>
-      <div class="sub">How you appear to everyone else on NexChat.</div>
+      <header class="pane-head"><span class="ph-ico c1"><i class="fa-solid fa-user"></i></span><div><h2>Profile</h2><div class="sub">How you appear to everyone else on NexChat.</div></div></header>
 
-      <div class="set-block">
-        <h4>Preview</h4>
-        <div class="bsub">Updates live as you edit.</div>
-        <div class="pcard" id="pcard">
-          <div class="pcard-banner" id="pvBanner"></div>
-          <div class="pcard-body">
-            <div class="pcard-av" id="pvAvWrap"></div>
-            <h3><span id="pvName">—</span><span id="pvBadges"></span></h3>
-            <div class="handle" id="pvHandle">@—</div>
-            <div class="bio hidden" id="pvBio"></div>
-          </div>
-        </div>
-      </div>
-
+      <div class="pane-grid">
+      <div class="pane-col">
       <div class="set-block">
         <h4>Identity</h4>
         <div class="bsub">Your username is permanent; the display name is not.</div>
@@ -83,14 +78,44 @@
           </div>
         </div>
       </div>
+      </div>
+      <aside class="pane-aside"><div class="set-block preview-block">
+        <h4>Preview</h4>
+        <div class="bsub">Updates live as you edit.</div>
+        <div class="pcard" id="pcard">
+          <div class="pcard-banner" id="pvBanner"></div>
+          <div class="pcard-body">
+            <div class="pcard-av" id="pvAvWrap"></div>
+            <h3><span id="pvName">—</span><span id="pvBadges"></span></h3>
+            <div class="handle" id="pvHandle">@—</div>
+            <div class="bio hidden" id="pvBio"></div>
+          </div>
+        </div>
+      </div></aside>
+      </div>
     </section>
 
     <!-- APPEARANCE -->
     <section class="set-inner hidden" data-pane="appearance">
-      <h2>Appearance</h2>
-      <div class="sub">Your accent colour follows you across servers.</div>
+      <header class="pane-head"><span class="ph-ico c2"><i class="fa-solid fa-palette"></i></span><div><h2>Appearance</h2><div class="sub">Make NexChat look the way you like. It follows you to every device.</div></div></header>
       <div class="set-block">
-        <h4>Dashboard background</h4>
+        <h4>Style</h4>
+        <div class="bsub">How panels are drawn everywhere in NexChat.</div>
+        <div class="style-opts" id="styleOpts">
+          <button type="button" class="style-opt on" data-style="solid">
+            <span class="so-prev so-solid"><i></i><i></i><i></i></span>
+            <b>Midnight</b><small>Solid, dark and crisp. Easiest on battery.</small>
+          </button>
+          <button type="button" class="style-opt" data-style="glass">
+            <span class="so-prev so-glass"><i></i><i></i><i></i></span>
+            <b>Liquid glass</b><small>Clear, refractive glass panels that tilt toward your cursor.</small>
+          </button>
+        </div>
+        <span class="hint" style="display:block;margin-top:10px;">Liquid glass looks best with a wallpaper. Refraction is drawn by Chromium browsers (Chrome, Edge, Brave, Arc); others get clear glass without the bend.</span>
+      </div>
+
+      <div class="set-block">
+        <h4>Background</h4>
         <div class="bsub">Shows behind your server cards. Pick a preset or paste any image URL.</div>
         <div class="bg-presets" id="bgPresets"></div>
         <div class="upload-row" style="margin-top:14px;">
@@ -147,8 +172,7 @@
 
     <!-- NITRO -->
     <section class="set-inner hidden" data-pane="nitro">
-      <h2>Nitro</h2>
-      <div class="sub">Animated avatar halo and profile extras. Granted by an admin.</div>
+      <header class="pane-head"><span class="ph-ico c3"><i class="fa-solid fa-bolt"></i></span><div><h2>Nitro</h2><div class="sub">Animated avatar halo and profile extras. Granted by an admin.</div></div></header>
 
       <div class="set-block" id="nitroActive" style="display:none;">
         <h4 style="color:var(--nitro);"><i class="fa-solid fa-bolt"></i> Nitro is active</h4>
@@ -199,9 +223,8 @@
     </section>
 
     <!-- ACCOUNT -->
-    <section class="set-inner hidden" data-pane="account">
-      <h2>Account</h2>
-      <div class="sub">Sign-in details and session.</div>
+    <section class="set-inner hidden" data-pane="account" data-nosave>
+      <header class="pane-head"><span class="ph-ico c4"><i class="fa-solid fa-key"></i></span><div><h2>Account</h2><div class="sub">Sign-in details and session.</div></div></header>
       <div class="set-block">
         <div class="set-row">
           <div class="info"><b>Username</b><small id="acUser">—</small></div>
@@ -249,14 +272,13 @@
     </section>
 
     <!-- DEVELOPER -->
-    <section class="set-inner hidden" data-pane="dev">
-      <h2>Developer</h2>
-      <div class="sub">Low-level connection controls. Leave off unless you know why you need them.</div>
+    <section class="set-inner hidden" data-pane="dev" data-nosave>
+      <header class="pane-head"><span class="ph-ico c5"><i class="fa-solid fa-code"></i></span><div><h2>Developer</h2><div class="sub">Low-level connection controls. Leave off unless you know why you need them.</div></div></header>
 
       <div class="set-block">
         <div class="set-row">
           <div class="info"><b>Developer mode</b><small>Shows the connection readout during calls (resolution, framerate, bitrate, codec, ping) and unlocks manual STUN selection.</small></div>
-          <label class="perm" style="padding:0;"><input type="checkbox" id="devToggle"></label>
+          <input type="checkbox" id="devToggle" class="switch" aria-label="Developer mode">
         </div>
       </div>
 
@@ -273,7 +295,7 @@
     </section>
 
     <div class="save-bar" id="saveBar">
-      <button class="btn btn-quiet" id="btnReset">Reset</button>
+      <button class="btn btn-quiet" id="btnReset">Undo</button>
       <button class="btn btn-primary" id="btnSave">Save changes</button>
     </div>
   </div>
@@ -281,16 +303,19 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=33"></script>
-<script src="assets/js/supabase-client.js?v=33"></script>
-<script src="assets/js/ui.js?v=34"></script>
-<script src="assets/js/tiff.js?v=33"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=33"></script>
-<script src="assets/js/ice.js?v=33"></script>
-<script src="assets/js/md.js?v=33"></script>
-<script src="assets/js/presence.js?v=33"></script>
-<script src="assets/js/guard.js?v=33"></script>
-<script src="assets/js/notify.js?v=33"></script>
-<script src="assets/js/profile.js?v=34"></script>
+<script src="assets/js/config.js?v=41"></script>
+<script src="assets/js/supabase-client.js?v=41"></script>
+<script src="assets/js/ui.js?v=41"></script>
+<script src="assets/js/glass.js?v=41"></script>
+<script src="assets/js/tiff.js?v=41"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=41"></script>
+<script src="assets/js/storage.js?v=41"></script>
+<script src="assets/js/ice.js?v=41"></script>
+<script src="assets/js/md.js?v=41"></script>
+<script src="assets/js/presence.js?v=41"></script>
+<script src="assets/js/guard.js?v=41"></script>
+<script src="assets/js/notify.js?v=41"></script>
+<script src="assets/js/settings-ui.js?v=41"></script>
+<script src="assets/js/profile.js?v=41"></script>
 </body>
 </html>

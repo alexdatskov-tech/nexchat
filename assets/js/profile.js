@@ -14,13 +14,14 @@
   ];
   let wallpaperKey = '', wallpaperSelection = 0;
   let bgVal = '', bgDim = 0, bgBlur = 0, bgBright = 100, wpFile = null, devMode = false, manualStun = [];
+  let uiStyle = 'solid';   // 'solid' (Midnight) or 'glass' (Liquid glass)
   // Chat-column overlay, defaulted from UI so the slider and the renderer agree.
   let chatBlur = UI.CHAT_BLUR_DEFAULT, chatDim = UI.CHAT_DIM_DEFAULT;
 
   // Same applier the rest of the app uses, fed from the in-progress edits so the
   // preview matches exactly what saving will produce.
   function applyBg() {
-    UI.applyBackground({ dash_bg: bgVal, dash_wallpaper_key: wallpaperKey, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright, chat_blur: chatBlur, chat_dim: chatDim });
+    UI.applyBackground({ dash_bg: bgVal, dash_wallpaper_key: wallpaperKey, dash_dim: bgDim, dash_blur: bgBlur, dash_bright: bgBright, chat_blur: chatBlur, chat_dim: chatDim, ui_style: uiStyle });
   }
   function paintBgUI() {
     document.querySelectorAll('.bg-preset').forEach((el) => el.classList.toggle('on', !wallpaperKey && !wpFile && el.dataset.v === bgVal));
@@ -40,7 +41,7 @@
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
       // Only the editable panes need the save bar.
       $('saveBar').classList.toggle('hidden', b.dataset.tab === 'account' || b.dataset.tab === 'dev');
-      window.scrollTo(0, 0);
+      document.querySelector('.set-main')?.scrollTo({ top: 0 });
     };
   });
 
@@ -79,6 +80,12 @@
     $('pvBanner').style.background = bnUrl
       ? `url('${bnUrl}') center/cover`
       : `linear-gradient(120deg, ${accent}, ${accent}22)`;
+
+    // Sidebar identity card mirrors the preview.
+    $('niName').textContent = display;
+    $('niHandle').textContent = '@' + me.username;
+    $('niAv').innerHTML = avUrl ? `<div class="av" style="width:44px;height:44px"><img src="${avUrl}" alt=""></div>` : UI.avatar({ ...me, display_name: display, accent_color: accent, avatar_url: null }, 44, { halo: false });
+    $('niBanner').style.background = $('pvBanner').style.background;
 
     $('bioCount').textContent = bio.length;
   }
@@ -220,6 +227,15 @@
     UI.toast('Server selection is automatic again.');
   };
 
+  /* ---- style: Midnight or Liquid glass (previewed live, saved with the profile) ---- */
+  function paintStyle() {
+    document.querySelectorAll('.style-opt').forEach((b) => b.classList.toggle('on', b.dataset.style === uiStyle));
+    applyBg();
+  }
+  document.querySelectorAll('.style-opt').forEach((b) => {
+    b.onclick = () => { uiStyle = b.dataset.style; paintStyle(); };
+  });
+
   $('swatches').innerHTML = PRESETS.map((c) => `<div class="swatch" data-c="${c}" style="background:${c}" title="${c}"></div>`).join('');
   document.querySelectorAll('.swatch').forEach((s) => { s.onclick = () => setAccent(s.dataset.c); });
   $('fAccent').oninput = (e) => setAccent(e.target.value);
@@ -277,7 +293,7 @@
           catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
         }
         const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
-        await window.__nx_tp.put(key, wpFile);
+        await window.Store.put(key, wpFile);
         wallpaperSelection++;
         wallpaperKey = key;
         bgVal = '';
@@ -291,6 +307,7 @@
       patch.theme.dash_bright = bgBright;
       patch.theme.chat_blur = chatBlur;
       patch.theme.chat_dim = chatDim;
+      patch.theme.ui_style = uiStyle;
       patch.theme.dev_mode = devMode;
       patch.theme.manual_stun = manualStun;
       if (me.is_nitro) {
@@ -316,6 +333,7 @@
       $('avClear').classList.toggle('hidden', !me.avatar_url);
       $('bnClear').classList.toggle('hidden', !me.banner_url);
       UI.toast('Profile saved.');
+      window.SettingsUI?.clean();
       paintBgUI();
       paint();
     } catch (err) {
@@ -377,7 +395,7 @@
     UI.toast('Password updated.');
   };
 
-  $('btnOut').onclick = async () => { await window.db.auth.signOut(); window.location.href = 'index.html'; };
+  $('btnOut').onclick = async () => { await window.db.auth.signOut(); UI.go('index.html'); };
 
   // ---- delete account ----
   const toAddr = (u) => `${u.trim().toLowerCase()}@users.nexchat-app.com`;
@@ -405,7 +423,7 @@
       if (rpcErr) throw rpcErr;
 
       UI.toast('Your account has been deleted.');
-      window.location.href = 'index.html';
+      UI.go('index.html');
     } catch (err) {
       $('delErr').textContent = err.message || 'Could not delete account.';
       btn.disabled = false; btn.textContent = 'Delete my account';
@@ -436,6 +454,8 @@
     chatBlur = th.chat_blur ?? UI.CHAT_BLUR_DEFAULT;
     chatDim = th.chat_dim ?? UI.CHAT_DIM_DEFAULT;
     devMode = !!th.dev_mode;
+    uiStyle = th.ui_style === 'glass' ? 'glass' : 'solid';
+    document.querySelectorAll('.style-opt').forEach((b) => b.classList.toggle('on', b.dataset.style === uiStyle));
     manualStun = th.manual_stun || [];
     wpFile = null;
     if (bgVal.startsWith('url(')) {
@@ -458,6 +478,7 @@
     $('avClear').classList.toggle('hidden', !me.avatar_url);
     $('bnClear').classList.toggle('hidden', !me.banner_url);
     paint();
+    window.SettingsUI?.clean();
   }
 
   (async () => {

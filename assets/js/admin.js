@@ -9,7 +9,10 @@
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
       if (b.dataset.tab === 'users') loadUsers();
       if (b.dataset.tab === 'appeals') loadAppeals();
-      window.scrollTo(0, 0);
+      if (b.dataset.tab === 'announce') loadAnnouncements();
+      if (b.dataset.tab === 'overview') loadOverview();
+      if (b.dataset.tab === 'nitro') loadRequests();
+      document.querySelector('.set-main')?.scrollTo({ top: 0 });
     };
   });
 
@@ -120,7 +123,7 @@
 
   async function loadUsers() {
     if (!users.length) {
-      const { data, error } = await window.db.from('profiles').select('*').order('created_at', { ascending: false }).limit(300);
+      const { data, error } = await window.db.from('profiles').select('*').order('created_at', { ascending: false }).limit(1000);
       if (error) return UI.toast(error.message, true);
       users = data || [];
     }
@@ -139,9 +142,20 @@
     return hit ? m.replace(/^.*?:\s*/, '') : (m || 'Could not change admin access.');
   }
 
+  let uFilter = 'all';
+  const FILTERS = { all: () => true, admin: (u) => u.is_platform_admin, nitro: (u) => u.is_nitro, banned: (u) => u.is_banned };
+  document.querySelectorAll('#uFilter button').forEach((b) => {
+    b.onclick = () => {
+      uFilter = b.dataset.f;
+      document.querySelectorAll('#uFilter button').forEach((x) => x.classList.toggle('on', x === b));
+      paintUsers();
+    };
+  });
+
   function paintUsers() {
     const q = $('uSearch').value.trim().toLowerCase();
-    const rows = users.filter((u) => !q || u.username.toLowerCase().includes(q) || (u.display_name || '').toLowerCase().includes(q));
+    document.querySelectorAll('#uFilter button').forEach((b) => { b.querySelector('span').textContent = users.filter(FILTERS[b.dataset.f]).length; });
+    const rows = users.filter(FILTERS[uFilter]).filter((u) => !q || u.username.toLowerCase().includes(q) || (u.display_name || '').toLowerCase().includes(q));
     $('userRows').innerHTML = rows.map((u) => `
       <div class="lrow" data-u="${u.id}">
         ${UI.avatar(u, 32, { presence: true })}
@@ -201,6 +215,152 @@
   }
   $('uSearch').oninput = paintUsers;
 
+  /* ---- overview dashboard ---- */
+  const countUp = (el, to) => {
+    const t0 = performance.now(), dur = 800;
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))).toLocaleString();
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  async function headCount(table, filter) {
+    let q = window.db.from(table).select('id', { count: 'exact', head: true });
+    if (filter) q = filter(q);
+    const { count, error } = await q;
+    return error ? null : (count ?? 0);
+  }
+
+  async function loadOverview() {
+    users = [];
+    await loadUsers();
+    const day = 86400000, now = Date.now();
+    const week = users.filter((u) => now - new Date(u.created_at) < 7 * day).length;
+    const online = window.Presence?.online ? (window.Presence.online.size ?? Object.keys(window.Presence.online).length) : 0;
+    const [servers, pendNitro, pendAppeals, anns] = await Promise.all([
+      headCount('servers'),
+      headCount('nitro_requests', (q) => q.eq('status', 'pending')),
+      headCount('ban_appeals', (q) => q.eq('status', 'pending')),
+      headCount('announcements'),
+    ]);
+    const kpis = [
+      { k: 'Members', v: users.length, ic: 'fa-users', c: 'c4', sub: `+${week} this week` },
+      { k: 'Online now', v: online, ic: 'fa-signal', c: 'c6', sub: 'live presence' },
+      { k: 'Servers', v: servers, ic: 'fa-server', c: 'c1', sub: 'across the platform' },
+      { k: 'Nitro', v: users.filter((u) => u.is_nitro).length, ic: 'fa-bolt', c: 'c3', sub: `${pendNitro ?? 0} pending` },
+      { k: 'Banned', v: users.filter((u) => u.is_banned).length, ic: 'fa-ban', c: 'c8', sub: `${pendAppeals ?? 0} appeals open` },
+      { k: 'Admins', v: users.filter((u) => u.is_platform_admin).length, ic: 'fa-shield-halved', c: 'c2', sub: anns == null ? 'announcements not set up' : `${anns} announcements` },
+    ];
+    $('kpis').innerHTML = kpis.map((x, i) => `<div class="kpi" style="--i:${i}">
+        <span class="ph-ico ${x.c}"><i class="fa-solid ${x.ic}"></i></span>
+        <div class="kv" data-v="${x.v ?? ''}">${x.v == null ? '—' : '0'}</div>
+        <div class="kk">${x.k}</div><div class="ks">${UI.esc(x.sub)}</div></div>`).join('');
+    $('kpis').querySelectorAll('.kv[data-v]').forEach((el) => { if (el.dataset.v !== '') countUp(el, +el.dataset.v); });
+
+    const queue = [];
+    if (pendNitro) queue.push(`<button class="q-item" data-goto="nitro"><span class="ph-ico c3"><i class="fa-solid fa-bolt"></i></span><span><b>${pendNitro} Nitro request${pendNitro === 1 ? '' : 's'}</b><small>Waiting for a decision</small></span><i class="fa-solid fa-chevron-right"></i></button>`);
+    if (pendAppeals) queue.push(`<button class="q-item" data-goto="appeals"><span class="ph-ico c8"><i class="fa-solid fa-gavel"></i></span><span><b>${pendAppeals} ban appeal${pendAppeals === 1 ? '' : 's'}</b><small>Someone wants back in</small></span><i class="fa-solid fa-chevron-right"></i></button>`);
+    if (anns == null) queue.push(`<button class="q-item" data-goto="announce"><span class="ph-ico c2"><i class="fa-solid fa-database"></i></span><span><b>Announcements not set up</b><small>Run supabase/announcements.sql</small></span><i class="fa-solid fa-chevron-right"></i></button>`);
+    $('ovQueue').innerHTML = queue.join('') || '<div class="ov-clear"><i class="fa-solid fa-circle-check"></i> All clear. Nothing waiting on you.</div>';
+
+    $('ovRecent').innerHTML = users.slice(0, 6).map((u) => `<div class="mini-row">${UI.avatar(u, 30, { presence: true })}
+      <div><b>${UI.esc(u.display_name || u.username)}</b><small>@${UI.esc(u.username)}</small></div>
+      <span class="mr-t">${UI.timeLabel(u.created_at).replace(' at ', ' · ')}</span></div>`).join('') || '<p class="bsub">No members yet.</p>';
+
+    // Sign-ups per day: one series, so one hue, a hover label per bar, no legend.
+    const days = [...Array(14)].map((_, i) => {
+      const d = new Date(now - (13 - i) * day); d.setHours(0, 0, 0, 0);
+      return { d, n: 0 };
+    });
+    users.forEach((u) => {
+      const t = new Date(u.created_at); t.setHours(0, 0, 0, 0);
+      const hit = days.find((x) => x.d.getTime() === t.getTime());
+      if (hit) hit.n++;
+    });
+    const max = Math.max(1, ...days.map((x) => x.n));
+    const total = days.reduce((a, x) => a + x.n, 0);
+    $('ovSpark').textContent = `${total} in total`;
+    $('ovBars').innerHTML = days.map((x, i) => {
+      const label = x.d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return `<div class="bar-col" data-tip="${label}: ${x.n} sign-up${x.n === 1 ? '' : 's'}">
+        <div class="bar" style="--h:${(x.n / max) * 100}%;--i:${i}">${x.n === max && x.n ? `<span class="bar-v">${x.n}</span>` : ''}</div>
+        <span class="bar-x">${i % 2 === 1 || i === 13 ? label : ''}</span></div>`;
+    }).join('');
+
+    document.querySelectorAll('#ovQueue [data-goto]').forEach((b) => {
+      b.onclick = () => document.querySelector(`.set-nav button[data-tab="${b.dataset.goto}"]`)?.click();
+    });
+  }
+
+  /* ---- announcements ---- */
+  const annMissing = (e) => e && (e.code === 'PGRST205' || e.code === '42P01' || /schema cache|does not exist/i.test(e.message || ''));
+
+  function annDraft() {
+    return {
+      title: $('annTitle').value.trim(), body: $('annBody').value.trim(),
+      level: $('annLevel').value, pinned: $('annPinned').checked,
+      created_at: new Date().toISOString(),
+    };
+  }
+  function annPreview() {
+    const d = annDraft();
+    $('annPreview').innerHTML = Nav.annCard({ ...d, title: d.title || 'Your title here' });
+  }
+  ['annTitle', 'annBody', 'annLevel', 'annPinned'].forEach((id) => { $(id).addEventListener('input', annPreview); $(id).addEventListener('change', annPreview); });
+
+  async function loadAnnouncements() {
+    annPreview();
+    const { data, error } = await window.db.from('announcements').select('*').order('created_at', { ascending: false }).limit(100);
+    const missing = annMissing(error);
+    $('annSetup').classList.toggle('hidden', !missing);
+    $('annComposer').classList.toggle('hidden', missing);
+    if (missing) {
+      $('annSetup').innerHTML = `<div class="empty"><div class="ico"><i class="fa-solid fa-database"></i></div>
+        <h3>Announcements aren't set up yet</h3>
+        <p>Run <code>supabase/announcements.sql</code> in the Supabase SQL editor, then reload this page.</p></div>`;
+      $('annRows').innerHTML = '';
+      return;
+    }
+    if (error) return UI.toast(error.message, true);
+    $('annRows').innerHTML = (data || []).map((a) => `<div class="lrow" data-id="${a.id}" style="align-items:flex-start;">
+        <div class="lmain">${Nav.annCard(a, true)}</div>
+        <div class="lacts" style="flex-direction:column;">
+          <button class="btn btn-quiet btn-sm a-pin">${a.pinned ? 'Unpin' : 'Pin'}</button>
+          <button class="btn btn-danger btn-sm a-del">Delete</button>
+        </div></div>`).join('') || '<div class="empty"><p>Nothing posted yet.</p></div>';
+    $('annRows').querySelectorAll('.lrow').forEach((row) => {
+      const a = data.find((x) => x.id === row.dataset.id);
+      row.querySelector('.a-pin').onclick = async () => {
+        const { error: e } = await window.db.from('announcements').update({ pinned: !a.pinned }).eq('id', a.id);
+        if (e) return UI.toast(e.message, true);
+        loadAnnouncements();
+      };
+      row.querySelector('.a-del').onclick = async () => {
+        if (!await UI.confirmDialog('Delete announcement', `"${a.title}" will disappear for everyone.`, true)) return;
+        const { error: e } = await window.db.from('announcements').delete().eq('id', a.id);
+        if (e) return UI.toast(e.message, true);
+        UI.toast('Announcement deleted.');
+        loadAnnouncements();
+      };
+    });
+  }
+
+  $('annPost').onclick = async () => {
+    const d = annDraft();
+    $('annErr').textContent = '';
+    if (!d.title) return ($('annErr').textContent = 'Give it a title.');
+    const btn = $('annPost'); btn.disabled = true;
+    const { error } = await window.db.from('announcements').insert({
+      title: d.title, body: d.body, level: d.level, pinned: d.pinned, author_id: me.id,
+    });
+    btn.disabled = false;
+    if (error) return ($('annErr').textContent = error.message);
+    $('annTitle').value = ''; $('annBody').value = ''; $('annPinned').checked = false;
+    UI.toast('Announcement posted.');
+    loadAnnouncements();
+  };
+
   (async () => {
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
@@ -210,6 +370,14 @@
     window.Presence?.start(me);
     window.Presence?.onChange(() => window.Presence.refreshDots());
     $('wrap').classList.remove('hidden');
+    UI.applyBackground(me.theme);
+    $('admWho').textContent = 'Signed in as @' + me.username;
+    document.querySelectorAll('[data-goto]').forEach((b) => {
+      b.onclick = () => document.querySelector(`.set-nav button[data-tab="${b.dataset.goto}"]`)?.click();
+    });
+    loadOverview();
+    // Presence arrives a moment after boot; keep the live tile honest.
+    window.Presence?.onChange((set) => { const el = $('kpis').querySelector('.kpi:nth-child(2) .kv'); if (el && set) el.textContent = set.size; });
     loadRequests();
     loadAppeals({ quiet: true });
   })();

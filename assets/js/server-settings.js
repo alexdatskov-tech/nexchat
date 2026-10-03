@@ -25,7 +25,7 @@
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== t));
       $('saveBar').classList.toggle('hidden', NO_SAVE.includes(t));
       ({ channels: loadChannels, roles: loadRoles, members: loadMembers, invites: loadInvites, bans: loadBans }[t] || (() => {}))();
-      window.scrollTo(0, 0);
+      document.querySelector('.set-main')?.scrollTo({ top: 0 });
     };
   });
 
@@ -188,10 +188,11 @@
       previewFont();
       icoFile = banFile = null;
       UI.toast('Server updated.');
+      window.SettingsUI?.clean();
     } catch (err) { UI.toast(err.message || 'Could not save.', true); }
     finally { b.disabled = false; b.textContent = 'Save changes'; }
   };
-  $('btnReset').onclick = () => hydrate();
+  $('btnReset').onclick = () => { hydrate(); window.SettingsUI?.clean(); };
 
   /* ---- channels ---- */
   async function loadChannels() {
@@ -360,7 +361,8 @@
         let icon = ov.querySelector('#riEmoji').value.trim() || null;
         if (file) {
           const key = `nexchat/roles/${sid}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`;
-          icon = (await window.__nx_tp.put(key, file)).url;
+          // The permanent object URL: Store signs it whenever it is shown.
+          icon = (await window.Store.put(key, file)).url;
         }
         const { error } = await window.db.from('roles').update({ icon_url: icon }).eq('id', r.id);
         if (error) throw error;
@@ -475,7 +477,7 @@
     $('invRows').querySelectorAll('.lrow').forEach((r) => {
       const inv = data.find((x) => x.id === r.dataset.id);
       r.querySelector('.i-cp').onclick = () => {
-        navigator.clipboard.writeText(`${location.origin}${location.pathname.replace(/server-settings\.html$/, 'portal.html')}?invite=${inv.code}`);
+        navigator.clipboard.writeText(UI.pageUrl(`portal.html?invite=${inv.code}`));
         UI.toast('Invite link copied.');
       };
       r.querySelector('.i-rm').onclick = async () => {
@@ -513,7 +515,7 @@
     if (!await UI.confirmDialog('Delete server', `"${srv.name}" and everything in it will be gone permanently.`, true)) return;
     const { error } = await window.db.from('servers').delete().eq('id', sid);
     if (error) return UI.toast(error.message, true);
-    window.location.href = 'portal.html';
+    UI.go('portal.html');
   };
 
   function hydrate() {
@@ -548,8 +550,8 @@
   (async () => {
     const s = await UI.requireSession(); if (!s) return;
     me = await UI.myProfile(s.user.id);
-    sid = new URLSearchParams(location.search).get('id');
-    if (!sid) return (window.location.href = 'portal.html');
+    sid = UI.params().get('id');
+    if (!sid) return UI.go('portal.html');
     $('backLink').href = `server.html?id=${sid}`;
 
     const { data, error } = await window.db.from('servers').select('*').eq('id', sid).single();
@@ -562,6 +564,14 @@
     isOwner = srv.owner_id === me.id;
     $('navTitle').textContent = srv.name;
     document.title = `${srv.name} — Settings`;
+    UI.applyBackground(me.theme);
+    // Sidebar identity card: the server's icon, name and banner.
+    $('niName').textContent = srv.name;
+    $('niHandle').textContent = isOwner ? 'You own this server' : 'Server settings';
+    $('niAv').innerHTML = srv.icon_url
+      ? `<div class="ni-srv"><img ${window.Store ? Store.imgAttr(srv.icon_url) : `src="${UI.esc(srv.icon_url)}"`} alt=""></div>`
+      : `<div class="ni-srv">${UI.esc(UI.initial(srv.name))}</div>`;
+    if (srv.banner_url) $('niBanner').style.background = `url('${UI.esc(srv.banner_url)}') center/cover`;
     hydrate();
   })();
 })();

@@ -122,9 +122,24 @@ window.UI = (function () {
     return text ? ` style="${esc(text)}"` : '';
   }
 
+  /* ---- navigation + URL ----
+     Inside the SVG launcher (nexchat.svg) the app runs in a srcdoc frame whose
+     own location is about:srcdoc. The launcher publishes the "virtual" page
+     URL and a navigate hook as window.__NX_SHELL__, so every page reads its
+     query string and navigates through these helpers instead of `location`. */
+  const shell = () => window.__NX_SHELL__ || null;
+  function params() { return new URLSearchParams(shell() ? shell().search : location.search); }
+  function hash() { return shell() ? shell().hash : location.hash; }
+  function go(url) { if (shell()) shell().go(String(url)); else window.location.href = url; }
+  // Absolute, shareable URL for a page of the app (invite links etc.).
+  function pageUrl(path) {
+    if (shell()) return new URL(path, shell().site).href;
+    return new URL(path, location.href).href;
+  }
+
   async function requireSession(redirect) {
     const { data } = await window.db.auth.getSession();
-    if (!data.session) { window.location.href = redirect || 'index.html'; return null; }
+    if (!data.session) { go(redirect || 'index.html'); return null; }
     return data.session;
   }
 
@@ -146,7 +161,7 @@ window.UI = (function () {
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     // Browsers leave file.type empty for .tiff and most font files, and Storage
     // then stores them as octet-stream, which breaks <img> and @font-face.
-    const contentType = file.type || window.__nx_tp?.mimeOf?.(file.name) || 'application/octet-stream';
+    const contentType = file.type || window.Store?.mimeOf(file.name) || 'application/octet-stream';
     const { error } = await window.db.storage.from(bucket).upload(path, file, { upsert: false, contentType });
     if (error) throw error;
     const { data } = window.db.storage.from(bucket).getPublicUrl(path);
@@ -300,7 +315,7 @@ window.UI = (function () {
     ov.querySelector('[data-dm]')?.addEventListener('click', async () => {
       const { data, error } = await window.db.rpc('open_dm', { p_other: userId });
       if (error) return toast(error.message, true);
-      window.location.href = `dms.html?c=${data}`;
+      go(`dms.html?c=${data}`);
     });
     ov.querySelector('[data-add]')?.addEventListener('click', async (e) => {
       e.currentTarget.disabled = true;
@@ -324,7 +339,8 @@ window.UI = (function () {
   function roleIcon(role) {
     if (!role?.icon_url) return '';
     const v = role.icon_url.trim();
-    if (/^https?:\/\//i.test(v) || v.startsWith('data:')) return `<img class="role-ico" src="${esc(v)}" alt="">`;
+    if (/^https?:\/\//i.test(v)) return `<img class="role-ico" ${window.Store ? window.Store.imgAttr(v) : `src="${esc(v)}"`} alt="">`;
+    if (v.startsWith('data:')) return `<img class="role-ico" src="${esc(v)}" alt="">`;
     return `<span class="role-emoji">${esc(v)}</span>`;
   }
 
@@ -448,8 +464,8 @@ window.UI = (function () {
   function wallpaperUrl(key) {
     const cached = wallpaperUrls.get(key);
     if (cached && cached.until > Date.now()) return cached.promise;
-    const entry = { until: Date.now() + 50 * 60 * 1000 };
-    entry.promise = Promise.resolve().then(() => window.__nx_tp.presign(key, 60))
+    const entry = { until: Date.now() + 6 * 3600 * 1000 };
+    entry.promise = Promise.resolve().then(() => window.Store.signKey(key))
       .then((url) => {
         if (!url) throw new Error('Could not load wallpaper.');
         return url;
@@ -463,8 +479,14 @@ window.UI = (function () {
      grid, the profile editor, DMs and server channels all read the same
      profiles.theme keys, so the wallpaper follows the user around the app
      instead of only dressing the portal. */
+  /* Panel style: 'solid' (Midnight, default) or 'glass' (Liquid glass). */
+  function applyStyle(style) {
+    window.Glass?.set(style === 'glass');
+  }
+
   function applyBackground(theme) {
     const t = { ...(theme || {}) };
+    if ('ui_style' in t) applyStyle(t.ui_style);
     const version = ++backgroundVersion;
     clearTimeout(backgroundTimer);
     const key = wallpaperKey(t);
@@ -518,5 +540,5 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { params, hash, go, pageUrl, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();
