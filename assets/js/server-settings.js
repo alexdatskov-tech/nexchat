@@ -25,7 +25,7 @@
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== t));
       $('saveBar').classList.toggle('hidden', NO_SAVE.includes(t));
       ({ channels: loadChannels, roles: loadRoles, members: loadMembers, invites: loadInvites, bans: loadBans }[t] || (() => {}))();
-      window.scrollTo(0, 0);
+      document.querySelector('.set-main')?.scrollTo({ top: 0 });
     };
   });
 
@@ -188,10 +188,11 @@
       previewFont();
       icoFile = banFile = null;
       UI.toast('Server updated.');
+      window.SettingsUI?.clean();
     } catch (err) { UI.toast(err.message || 'Could not save.', true); }
     finally { b.disabled = false; b.textContent = 'Save changes'; }
   };
-  $('btnReset').onclick = () => hydrate();
+  $('btnReset').onclick = () => { hydrate(); window.SettingsUI?.clean(); };
 
   /* ---- channels ---- */
   async function loadChannels() {
@@ -563,6 +564,14 @@
     isOwner = srv.owner_id === me.id;
     $('navTitle').textContent = srv.name;
     document.title = `${srv.name} — Settings`;
+    UI.applyBackground(me.theme);
+    // Sidebar identity card: the server's icon, name and banner.
+    $('niName').textContent = srv.name;
+    $('niHandle').textContent = isOwner ? 'You own this server' : 'Server settings';
+    $('niAv').innerHTML = srv.icon_url
+      ? `<div class="ni-srv"><img ${window.Store ? Store.imgAttr(srv.icon_url) : `src="${UI.esc(srv.icon_url)}"`} alt=""></div>`
+      : `<div class="ni-srv">${UI.esc(UI.initial(srv.name))}</div>`;
+    if (srv.banner_url) $('niBanner').style.background = `url('${UI.esc(srv.banner_url)}') center/cover`;
     hydrate();
   })();
 })();

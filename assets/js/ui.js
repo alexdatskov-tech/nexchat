@@ -479,8 +479,14 @@ window.UI = (function () {
      grid, the profile editor, DMs and server channels all read the same
      profiles.theme keys, so the wallpaper follows the user around the app
      instead of only dressing the portal. */
+  /* Panel style: 'solid' (Midnight, default) or 'glass' (Liquid glass). */
+  function applyStyle(style) {
+    window.Glass?.set(style === 'glass');
+  }
+
   function applyBackground(theme) {
     const t = { ...(theme || {}) };
+    if ('ui_style' in t) applyStyle(t.ui_style);
     const version = ++backgroundVersion;
     clearTimeout(backgroundTimer);
     const key = wallpaperKey(t);
@@ -534,5 +540,5 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { params, hash, go, pageUrl, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { params, hash, go, pageUrl, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

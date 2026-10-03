@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#08090D" />
 <title>NexChat — Home</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=40" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=41" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=40" />
+<link rel="stylesheet" href="assets/css/theme.css?v=41" />
 </head>
 <body>
 <div class="app">
@@ -16,17 +16,24 @@
   <main class="home">
     <div class="home-top">
       <button class="btn btn-quiet btn-icon" id="homeBurger" title="Menu"><i class="fa-solid fa-bars"></i></button>
-      <img src="assets/img/logo.svg?v=40" alt="" /><b>NexChat</b>
+      <img src="assets/img/logo.svg?v=41" alt="" /><b>NexChat</b>
       <span style="flex:1"></span>
       <a class="btn btn-quiet btn-icon" href="dms.html" title="Messages"><i class="fa-solid fa-comment-dots"></i></a>
     </div>
 
     <div class="home-inner">
-      <section class="hero">
-        <div>
+      <section class="hero" id="hero">
+        <div class="hero-fx" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="hero-spot" aria-hidden="true"></div>
+        <div class="hero-main">
           <div class="hello"><span id="meAv"></span><span id="greet">Welcome back</span></div>
-          <h1>Hey, <span id="meName">…</span></h1>
-          <p>Jump back into your servers, catch up on messages, or start something new.</p>
+          <h1>Hey, <span class="hi-name" id="meName">…</span> <span class="hi-wave">👋</span></h1>
+          <p class="typer"><span id="heroLine">&nbsp;</span><i class="caret"></i></p>
+          <div class="hero-stats">
+            <div class="hs"><i class="fa-solid fa-server"></i><b id="stServers">0</b><span>servers</span></div>
+            <div class="hs"><i class="fa-solid fa-circle hs-on"></i><b id="stOnline">0</b><span>friends online</span></div>
+            <div class="hs" id="stAnnWrap"><i class="fa-solid fa-bullhorn"></i><b id="stAnn">0</b><span>new posts</span></div>
+          </div>
         </div>
         <div class="acts">
           <a class="btn btn-ghost" href="dms.html"><i class="fa-solid fa-comment-dots"></i> Messages</a>
@@ -129,17 +136,18 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=40"></script>
-<script src="assets/js/supabase-client.js?v=40"></script>
-<script src="assets/js/ui.js?v=40"></script>
-<script src="assets/js/md.js?v=40"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=40"></script>
-<script src="assets/js/storage.js?v=40"></script>
-<script src="assets/js/tiff.js?v=40"></script>
-<script src="assets/js/presence.js?v=40"></script>
-<script src="assets/js/guard.js?v=40"></script>
-<script src="assets/js/notify.js?v=40"></script>
-<script src="assets/js/nav.js?v=40"></script>
-<script src="assets/js/portal.js?v=40"></script>
+<script src="assets/js/config.js?v=41"></script>
+<script src="assets/js/supabase-client.js?v=41"></script>
+<script src="assets/js/ui.js?v=41"></script>
+<script src="assets/js/glass.js?v=41"></script>
+<script src="assets/js/md.js?v=41"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=41"></script>
+<script src="assets/js/storage.js?v=41"></script>
+<script src="assets/js/tiff.js?v=41"></script>
+<script src="assets/js/presence.js?v=41"></script>
+<script src="assets/js/guard.js?v=41"></script>
+<script src="assets/js/notify.js?v=41"></script>
+<script src="assets/js/nav.js?v=41"></script>
+<script src="assets/js/portal.js?v=41"></script>
 </body>
 </html>

@@ -1,0 +1,61 @@
+/* Sign-in page ambience: chat bubbles drifting up behind the card, a rotating
+   tagline, and show/hide on password fields. Purely decorative -- auth.js
+   owns the actual sign-in. */
+(function () {
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- floating bubbles ---- */
+  const LINES = ['gg', 'omw 🚀', 'vc?', 'lmaooo', 'brb', 'who’s on', 'ship it', '👀', 'gn 🌙', 'sup',
+    'one more game', 'check dms', 'w', 'that’s wild', '🔥🔥', 'call in 5?', 'lol', 'ok ok', '💜', 'hop in'];
+  const host = document.getElementById('bubbles');
+  if (host && !reduce) {
+    const spawn = (warm) => {
+      const b = document.createElement('span');
+      b.className = 'bub' + (Math.random() < 0.5 ? ' me' : '');
+      b.textContent = LINES[(Math.random() * LINES.length) | 0];
+      const dur = 16 + Math.random() * 18;
+      b.style.left = (2 + Math.random() * 92) + '%';
+      b.style.setProperty('--dur', dur + 's');
+      b.style.setProperty('--sway', (Math.random() * 60 - 30) + 'px');
+      b.style.setProperty('--s', (0.75 + Math.random() * 0.5).toFixed(2));
+      // Pre-warm: start some mid-flight so the sky isn't empty on load.
+      if (warm) b.style.animationDelay = -(Math.random() * dur) + 's';
+      host.appendChild(b);
+      b.addEventListener('animationend', () => b.remove());
+    };
+    for (let i = 0; i < 14; i++) spawn(true);
+    setInterval(() => { if (!document.hidden && host.childElementCount < 22) spawn(false); }, 1600);
+  }
+
+  /* ---- rotating tagline ---- */
+  const TAGS = ['your people are already here.', 'servers, dms, calls. no fuss.', 'the group chat, but better.', 'hop in, it’s late anyway.'];
+  const tag = document.getElementById('authTag');
+  if (tag && !reduce) {
+    let i = 0;
+    setInterval(() => {
+      tag.classList.add('out');
+      setTimeout(() => { i = (i + 1) % TAGS.length; tag.textContent = TAGS[i]; tag.classList.remove('out'); }, 350);
+    }, 4200);
+  }
+
+  /* ---- show / hide password ---- */
+  document.querySelectorAll('[data-peek]').forEach((b) => {
+    b.onclick = () => {
+      const inp = document.getElementById(b.dataset.peek);
+      const show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      b.innerHTML = `<i class="fa-regular fa-eye${show ? '-slash' : ''}"></i>`;
+      inp.focus();
+    };
+  });
+
+  /* ---- card follows the cursor a touch ---- */
+  const card = document.querySelector('.auth-panel');
+  if (card && !reduce && matchMedia('(hover: hover)').matches) {
+    window.addEventListener('pointermove', (e) => {
+      const x = e.clientX / innerWidth - 0.5, y = e.clientY / innerHeight - 0.5;
+      card.style.setProperty('--rx', (-y * 4).toFixed(2) + 'deg');
+      card.style.setProperty('--ry', (x * 5).toFixed(2) + 'deg');
+    }, { passive: true });
+  }
+})();

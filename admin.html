@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Admin</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=40" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=41" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=40" />
+<link rel="stylesheet" href="assets/css/theme.css?v=41" />
 </head>
 <body>
 <div class="hidden" id="denied" style="min-height:100dvh;display:grid;place-items:center;padding:24px;">
@@ -22,38 +22,71 @@
 </div>
 
 <div class="set-wrap hidden" id="wrap">
+  <div class="set-bg" aria-hidden="true"><i></i><i></i></div>
   <nav class="set-nav">
-    <a class="back" href="portal.html"><i class="fa-solid fa-arrow-left"></i> <span>Back</span></a>
+    <a class="back" href="portal.html"><i class="fa-solid fa-arrow-left"></i> <span>Back to NexChat</span></a>
+    <div class="nav-id admin-id">
+      <div class="ni-banner"></div>
+      <span class="ni-av"><span class="ni-srv adm"><i class="fa-solid fa-shield-halved"></i></span></span>
+      <div class="ni-t"><b>Admin console</b><small id="admWho">Platform tools</small></div>
+    </div>
     <div class="grp-label">Platform</div>
-    <button class="on" data-tab="nitro"><i class="fa-solid fa-bolt"></i> Nitro requests <span id="pendCount"></span></button>
-    <button data-tab="users"><i class="fa-solid fa-users"></i> Users</button>
-    <button data-tab="appeals"><i class="fa-solid fa-gavel"></i> Ban appeals <span id="appealCount"></span></button>
-    <button data-tab="announce"><i class="fa-solid fa-bullhorn"></i> Announcements</button>
+    <button class="on" data-tab="overview"><span class="ni-ico c1"><i class="fa-solid fa-chart-simple"></i></span><span class="nt"><b>Overview</b><small>Health at a glance</small></span></button>
+    <button data-tab="users"><span class="ni-ico c4"><i class="fa-solid fa-users"></i></span><span class="nt"><b>Users</b><small>Search, promote, ban</small></span></button>
+    <button data-tab="announce"><span class="ni-ico c2"><i class="fa-solid fa-bullhorn"></i></span><span class="nt"><b>Announcements</b><small>Post to everyone</small></span></button>
+    <div class="grp-label">Queues</div>
+    <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro requests</b><small>Approve or decline</small></span><span id="pendCount"></span></button>
+    <button data-tab="appeals"><span class="ni-ico c8"><i class="fa-solid fa-gavel"></i></span><span class="nt"><b>Ban appeals</b><small>Second chances</small></span><span id="appealCount"></span></button>
   </nav>
 
   <div class="set-main">
-    <section class="set-inner" data-pane="nitro">
-      <h2>Nitro requests</h2>
-      <div class="sub">Approving grants the animated halo and profile extras.</div>
+    <section class="set-inner wide" data-pane="overview">
+      <header class="pane-head"><span class="ph-ico c1"><i class="fa-solid fa-chart-simple"></i></span><div><h2>Overview</h2><div class="sub">Everything happening on NexChat right now.</div></div></header>
+      <div class="kpis" id="kpis">
+        <div class="kpi skel" style="height:112px"></div><div class="kpi skel" style="height:112px"></div><div class="kpi skel" style="height:112px"></div><div class="kpi skel" style="height:112px"></div>
+      </div>
+      <div class="ov-grid">
+        <div class="set-block">
+          <div class="bh-row"><h4><i class="fa-solid fa-inbox"></i> Needs attention</h4></div>
+          <div id="ovQueue" class="ov-queue"></div>
+        </div>
+        <div class="set-block">
+          <div class="bh-row"><h4><i class="fa-solid fa-user-plus"></i> Newest members</h4><button class="btn btn-quiet btn-sm" data-goto="users">All users <i class="fa-solid fa-arrow-right"></i></button></div>
+          <div id="ovRecent"></div>
+        </div>
+      </div>
+      <div class="set-block">
+        <div class="bh-row"><h4><i class="fa-solid fa-chart-column"></i> Sign-ups, last 14 days</h4><span class="bsub" id="ovSpark" style="margin:0"></span></div>
+        <div class="bars" id="ovBars"></div>
+      </div>
+    </section>
+
+    <section class="set-inner hidden" data-pane="nitro">
+      <header class="pane-head"><span class="ph-ico c3"><i class="fa-solid fa-bolt"></i></span><div><h2>Nitro requests</h2><div class="sub">Approving grants the animated halo and profile extras.</div></div></header>
       <div id="reqRows"></div>
     </section>
 
-    <section class="set-inner hidden" data-pane="users">
-      <h2>Users</h2>
-      <div class="sub">Everyone with an account.</div>
-      <input id="uSearch" class="input" placeholder="Search by username" style="margin-bottom:16px;" />
+    <section class="set-inner hidden wide" data-pane="users">
+      <header class="pane-head"><span class="ph-ico c4"><i class="fa-solid fa-users"></i></span><div><h2>Users</h2><div class="sub">Everyone with an account.</div></div></header>
+      <div class="u-tools">
+        <label class="search-pill"><i class="fa-solid fa-magnifying-glass"></i><input id="uSearch" placeholder="Search by name or username" /></label>
+        <div class="chips" id="uFilter">
+          <button class="on" data-f="all">All <span></span></button>
+          <button data-f="admin">Admins <span></span></button>
+          <button data-f="nitro">Nitro <span></span></button>
+          <button data-f="banned">Banned <span></span></button>
+        </div>
+      </div>
       <div id="userRows"></div>
     </section>
 
     <section class="set-inner hidden" data-pane="appeals">
-      <h2>Ban appeals</h2>
-      <div class="sub">Accepting an appeal lifts the ban straight away.</div>
+      <header class="pane-head"><span class="ph-ico c8"><i class="fa-solid fa-gavel"></i></span><div><h2>Ban appeals</h2><div class="sub">Accepting an appeal lifts the ban straight away.</div></div></header>
       <div id="appealRows"></div>
     </section>
 
     <section class="set-inner hidden" data-pane="announce">
-      <h2>Announcements</h2>
-      <div class="sub">Posted to everyone: shown on Home, in the megaphone panel, and popped up live for anyone online.</div>
+      <header class="pane-head"><span class="ph-ico c2"><i class="fa-solid fa-bullhorn"></i></span><div><h2>Announcements</h2><div class="sub">Posted to everyone: shown on Home, in the megaphone panel, and popped up live for anyone online.</div></div></header>
       <div id="annSetup" class="hidden"></div>
       <div class="set-block" id="annComposer">
         <h4>New announcement</h4>
@@ -85,16 +118,17 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=40"></script>
-<script src="assets/js/supabase-client.js?v=40"></script>
-<script src="assets/js/ui.js?v=40"></script>
-<script src="assets/js/md.js?v=40"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=40"></script>
-<script src="assets/js/storage.js?v=40"></script>
-<script src="assets/js/presence.js?v=40"></script>
-<script src="assets/js/guard.js?v=40"></script>
-<script src="assets/js/notify.js?v=40"></script>
-<script src="assets/js/nav.js?v=40"></script>
-<script src="assets/js/admin.js?v=40"></script>
+<script src="assets/js/config.js?v=41"></script>
+<script src="assets/js/supabase-client.js?v=41"></script>
+<script src="assets/js/ui.js?v=41"></script>
+<script src="assets/js/glass.js?v=41"></script>
+<script src="assets/js/md.js?v=41"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=41"></script>
+<script src="assets/js/storage.js?v=41"></script>
+<script src="assets/js/presence.js?v=41"></script>
+<script src="assets/js/guard.js?v=41"></script>
+<script src="assets/js/notify.js?v=41"></script>
+<script src="assets/js/nav.js?v=41"></script>
+<script src="assets/js/admin.js?v=41"></script>
 </body>
 </html>

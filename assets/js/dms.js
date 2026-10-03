@@ -923,7 +923,9 @@
         ta.oninput();
       });
     };
-    $('attachBtn').onclick = () => $('fileIn').click();
+    // "+" opens uploads, voice messages and Markdown tools.
+    if (window.ComposerPlus) ComposerPlus.attach({ button: $('attachBtn'), input: ta, fileInput: $('fileIn'), stage });
+    else $('attachBtn').onclick = () => $('fileIn').click();
     $('fileIn').onchange = (e) => { stage(e.target.files); e.target.value = ''; };
     ta.addEventListener('paste', (e) => {
       const fs = [...(e.clipboardData?.files || [])];

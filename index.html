@@ -3,88 +3,82 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#08090D" />
-<title>NexChat — Sign in</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=40" />
+<meta name="theme-color" content="#040406" />
+<title>nexchat</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=41" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=40" />
+<link rel="stylesheet" href="assets/css/theme.css?v=41" />
 </head>
-<body>
-  <div class="auth-page">
-    <section class="auth-hero">
-      <div class="brand"><img src="assets/img/logo.svg?v=40" alt="" /> NexChat</div>
-      <div>
-        <h1>Your people, <em>one place.</em></h1>
-        <p>Servers for your groups, DMs for everyone else, and voice and video calls that actually keep up.</p>
-        <div class="auth-feats">
-          <span><i class="fa-solid fa-hashtag"></i> Servers &amp; channels</span>
-          <span><i class="fa-solid fa-comment-dots"></i> Direct messages</span>
-          <span><i class="fa-solid fa-video"></i> Voice &amp; video</span>
-          <span><i class="fa-solid fa-display"></i> Screen share</span>
-          <span><i class="fa-solid fa-paperclip"></i> Files that don't expire</span>
-        </div>
-      </div>
-      <small>A hobby project. Be decent to each other.</small>
-    </section>
-
-    <section class="auth-side">
-      <div class="auth-card">
-        <div class="auth-brand">
-          <img src="assets/img/logo.svg?v=40" alt="" />
-          <div><h1>NexChat</h1><p>Your people, one place.</p></div>
-        </div>
-
-        <div class="surface">
-          <div class="segmented">
-            <button id="tabIn" class="on" type="button">Sign in</button>
-            <button id="tabUp" type="button">Create account</button>
-          </div>
-
-          <form id="formIn" class="auth-form">
-            <div class="field">
-              <label for="inUser">Username</label>
-              <input id="inUser" type="text" autocomplete="username" placeholder="alexander" required />
-            </div>
-            <div class="field">
-              <label for="inPass">Password</label>
-              <input id="inPass" type="password" autocomplete="current-password" placeholder="••••••••" required />
-            </div>
-            <p class="err" id="errIn"></p>
-            <button type="submit" id="btnIn" class="btn btn-primary">Sign in <i class="fa-solid fa-arrow-right"></i></button>
-          </form>
-
-          <form id="formUp" class="auth-form hidden">
-            <div class="field">
-              <label for="upUser">Username</label>
-              <input id="upUser" type="text" autocomplete="username" placeholder="alexander" maxlength="32" required />
-              <span class="hint">How people find and @mention you. Letters, numbers, underscores.</span>
-              <p class="err" id="errUser"></p>
-            </div>
-            <div class="field">
-              <label for="upPass">Password</label>
-              <input id="upPass" type="password" autocomplete="new-password" placeholder="At least 8 characters" required />
-            </div>
-            <div class="field">
-              <label for="upPass2">Confirm password</label>
-              <input id="upPass2" type="password" autocomplete="new-password" placeholder="Type it again" required />
-              <span class="hint">There's no email on file, so there's no password reset. Store it somewhere safe.</span>
-            </div>
-            <p class="err" id="errUp"></p>
-            <button type="submit" id="btnUp" class="btn btn-primary">Create account</button>
-          </form>
-        </div>
-        <p class="auth-foot">By joining you agree to be a decent human.</p>
-      </div>
-    </section>
+<body class="auth-body">
+  <!-- Ambient scene: drifting colour, grain, and chat bubbles floating up. -->
+  <div class="night" aria-hidden="true">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div class="bubbles" id="bubbles"></div>
+    <div class="grain"></div>
   </div>
+
+  <main class="auth-page">
+    <div class="auth-card">
+      <header class="auth-brand">
+        <div class="mark"><img src="assets/img/logo.svg?v=41" alt="" /></div>
+        <h1>nexchat</h1>
+        <p id="authTag">your people are already here.</p>
+      </header>
+
+      <div class="auth-panel">
+        <div class="segmented">
+          <span class="seg-ind" aria-hidden="true"></span>
+          <button id="tabIn" class="on" type="button">Sign in</button>
+          <button id="tabUp" type="button">New here?</button>
+        </div>
+
+        <form id="formIn" class="auth-form">
+          <label class="ifield">
+            <i class="fa-solid fa-at"></i>
+            <input id="inUser" type="text" autocomplete="username" placeholder="username" required />
+          </label>
+          <label class="ifield">
+            <i class="fa-solid fa-lock"></i>
+            <input id="inPass" type="password" autocomplete="current-password" placeholder="password" required />
+            <button type="button" class="peek" data-peek="inPass" title="Show password"><i class="fa-regular fa-eye"></i></button>
+          </label>
+          <p class="err" id="errIn"></p>
+          <button type="submit" id="btnIn" class="btn btn-primary btn-go">Let me in</button>
+        </form>
+
+        <form id="formUp" class="auth-form hidden">
+          <label class="ifield">
+            <i class="fa-solid fa-at"></i>
+            <input id="upUser" type="text" autocomplete="username" placeholder="pick a username" maxlength="32" required />
+          </label>
+          <p class="err" id="errUser"></p>
+          <label class="ifield">
+            <i class="fa-solid fa-lock"></i>
+            <input id="upPass" type="password" autocomplete="new-password" placeholder="password (8+ characters)" required />
+            <button type="button" class="peek" data-peek="upPass" title="Show password"><i class="fa-regular fa-eye"></i></button>
+          </label>
+          <label class="ifield">
+            <i class="fa-solid fa-check-double"></i>
+            <input id="upPass2" type="password" autocomplete="new-password" placeholder="same again" required />
+          </label>
+          <p class="hint">No email, no password reset — write it down somewhere.</p>
+          <p class="err" id="errUp"></p>
+          <button type="submit" id="btnUp" class="btn btn-primary btn-go">Create my account</button>
+        </form>
+      </div>
+
+      <p class="auth-foot">a hobby project · be nice ✌️</p>
+    </div>
+  </main>
 
   <div class="toast" id="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js?v=40"></script>
-  <script src="assets/js/supabase-client.js?v=40"></script>
-  <script src="assets/js/ui.js?v=40"></script>
-  <script src="assets/js/guard.js?v=40"></script>
-  <script src="assets/js/auth.js?v=40"></script>
+  <script src="assets/js/config.js?v=41"></script>
+  <script src="assets/js/supabase-client.js?v=41"></script>
+  <script src="assets/js/ui.js?v=41"></script>
+  <script src="assets/js/guard.js?v=41"></script>
+  <script src="assets/js/auth.js?v=41"></script>
+  <script src="assets/js/auth-fx.js?v=41"></script>
 </body>
 </html>

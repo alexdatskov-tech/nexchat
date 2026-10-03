@@ -5,29 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Server settings</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=40" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=41" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=40" />
+<link rel="stylesheet" href="assets/css/theme.css?v=41" />
 </head>
 <body>
 <div class="set-wrap">
+  <div class="set-bg" aria-hidden="true"><i></i><i></i></div>
   <nav class="set-nav">
     <a class="back" id="backLink" href="#"><i class="fa-solid fa-arrow-left"></i> <span>Back to server</span></a>
+    <div class="nav-id">
+      <div class="ni-banner" id="niBanner"></div>
+      <span class="ni-av" id="niAv"></span>
+      <div class="ni-t"><b id="niName">…</b><small id="niHandle"></small></div>
+    </div>
     <div class="grp-label" id="navTitle">Server</div>
-    <button class="on" data-tab="overview"><i class="fa-solid fa-sliders"></i> Overview</button>
-    <button data-tab="appearance"><i class="fa-solid fa-palette"></i> Appearance</button>
-    <button data-tab="channels"><i class="fa-solid fa-hashtag"></i> Channels</button>
-    <button data-tab="roles"><i class="fa-solid fa-shield"></i> Roles</button>
-    <button data-tab="members"><i class="fa-solid fa-user-group"></i> Members</button>
-    <button data-tab="invites"><i class="fa-solid fa-link"></i> Invites</button>
-    <button data-tab="bans"><i class="fa-solid fa-ban"></i> Bans</button>
-    <button data-tab="danger" style="color:#FF8085;"><i class="fa-solid fa-triangle-exclamation"></i> Danger zone</button>
+    <button class="on" data-tab="overview"><span class="ni-ico c1"><i class="fa-solid fa-sliders"></i></span><span class="nt"><b>Overview</b><small>Name, icon, banner</small></span></button>
+    <button data-tab="appearance"><span class="ni-ico c2"><i class="fa-solid fa-palette"></i></span><span class="nt"><b>Appearance</b><small>Accent &amp; name style</small></span></button>
+    <button data-tab="channels"><span class="ni-ico c6"><i class="fa-solid fa-hashtag"></i></span><span class="nt"><b>Channels</b><small>Order, topics, categories</small></span></button>
+    <div class="grp-label">People</div>
+    <button data-tab="roles"><span class="ni-ico c3"><i class="fa-solid fa-shield"></i></span><span class="nt"><b>Roles</b><small>Permissions &amp; colours</small></span></button>
+    <button data-tab="members"><span class="ni-ico c4"><i class="fa-solid fa-user-group"></i></span><span class="nt"><b>Members</b><small>Roles, kicks, bans</small></span></button>
+    <button data-tab="invites"><span class="ni-ico c5"><i class="fa-solid fa-link"></i></span><span class="nt"><b>Invites</b><small>Active invite codes</small></span></button>
+    <button data-tab="bans"><span class="ni-ico c7"><i class="fa-solid fa-ban"></i></span><span class="nt"><b>Bans</b><small>Who can't come back</small></span></button>
+    <div class="grp-label">Careful</div>
+    <button data-tab="danger" class="danger"><span class="ni-ico c8"><i class="fa-solid fa-triangle-exclamation"></i></span><span class="nt"><b>Danger zone</b><small>Delete the server</small></span></button>
   </nav>
 
   <div class="set-main">
     <section class="set-inner" data-pane="overview">
-      <h2>Overview</h2>
-      <div class="sub">Name, description and imagery.</div>
+      <header class="pane-head"><span class="ph-ico c1"><i class="fa-solid fa-sliders"></i></span><div><h2>Overview</h2><div class="sub">Name, description and imagery.</div></div></header>
       <div class="set-block">
         <div class="set-rows">
           <div class="field"><label for="sName">Server name</label><input id="sName" type="text" maxlength="100" /></div>
@@ -51,8 +58,7 @@
     </section>
 
     <section class="set-inner hidden" data-pane="appearance">
-      <h2>Appearance</h2>
-      <div class="sub">Set the accent everyone sees inside this server.</div>
+      <header class="pane-head"><span class="ph-ico c2"><i class="fa-solid fa-palette"></i></span><div><h2>Appearance</h2><div class="sub">Set the accent everyone sees inside this server.</div></div></header>
       <div class="set-block">
         <h4>Accent colour</h4>
         <div class="bsub">Applies to active channels, buttons and highlights here.</div>
@@ -97,42 +103,36 @@
       </div>
     </section>
 
-    <section class="set-inner hidden" data-pane="channels">
-      <h2>Channels</h2>
-      <div class="sub">Rename, retopic, reorder or remove.</div>
+    <section class="set-inner hidden" data-pane="channels" data-nosave>
+      <header class="pane-head"><span class="ph-ico c6"><i class="fa-solid fa-hashtag"></i></span><div><h2>Channels</h2><div class="sub">Rename, retopic, reorder or remove.</div></div></header>
       <button class="btn btn-primary btn-sm" id="addCat" style="margin-bottom:16px;"><i class="fa-solid fa-plus"></i> New category</button>
       <div id="chanRows"></div>
     </section>
 
-    <section class="set-inner hidden" data-pane="roles">
-      <h2>Roles</h2>
-      <div class="sub">Permissions apply to everyone holding the role.</div>
+    <section class="set-inner hidden" data-pane="roles" data-nosave>
+      <header class="pane-head"><span class="ph-ico c3"><i class="fa-solid fa-shield"></i></span><div><h2>Roles</h2><div class="sub">Permissions apply to everyone holding the role.</div></div></header>
       <button class="btn btn-primary btn-sm" id="addRole" style="margin-bottom:16px;"><i class="fa-solid fa-plus"></i> New role</button>
       <div id="roleRows"></div>
     </section>
 
-    <section class="set-inner hidden" data-pane="members">
-      <h2>Members</h2>
-      <div class="sub">Assign roles, kick or ban.</div>
+    <section class="set-inner hidden" data-pane="members" data-nosave>
+      <header class="pane-head"><span class="ph-ico c4"><i class="fa-solid fa-user-group"></i></span><div><h2>Members</h2><div class="sub">Assign roles, kick or ban.</div></div></header>
       <input id="memSearch" class="input" placeholder="Search members" style="margin-bottom:16px;" />
       <div id="memRows"></div>
     </section>
 
-    <section class="set-inner hidden" data-pane="invites">
-      <h2>Invites</h2>
-      <div class="sub">Active invite codes for this server.</div>
+    <section class="set-inner hidden" data-pane="invites" data-nosave>
+      <header class="pane-head"><span class="ph-ico c5"><i class="fa-solid fa-link"></i></span><div><h2>Invites</h2><div class="sub">Active invite codes for this server.</div></div></header>
       <div id="invRows"></div>
     </section>
 
-    <section class="set-inner hidden" data-pane="bans">
-      <h2>Bans</h2>
-      <div class="sub">Banned people can't rejoin, even with a valid invite.</div>
+    <section class="set-inner hidden" data-pane="bans" data-nosave>
+      <header class="pane-head"><span class="ph-ico c7"><i class="fa-solid fa-ban"></i></span><div><h2>Bans</h2><div class="sub">Banned people can't rejoin, even with a valid invite.</div></div></header>
       <div id="banRows"></div>
     </section>
 
-    <section class="set-inner hidden" data-pane="danger">
-      <h2>Danger zone</h2>
-      <div class="sub">These can't be undone.</div>
+    <section class="set-inner hidden" data-pane="danger" data-nosave>
+      <header class="pane-head"><span class="ph-ico c8"><i class="fa-solid fa-triangle-exclamation"></i></span><div><h2>Danger zone</h2><div class="sub">These can't be undone.</div></div></header>
       <div class="set-block" style="border-color:rgba(229,72,77,.3);">
         <h4>Delete this server</h4>
         <div class="bsub">Every channel, message and invite goes with it. Owner only.</div>
@@ -141,7 +141,7 @@
     </section>
 
     <div class="save-bar" id="saveBar">
-      <button class="btn btn-quiet" id="btnReset">Reset</button>
+      <button class="btn btn-quiet" id="btnReset">Undo</button>
       <button class="btn btn-primary" id="btnSave">Save changes</button>
     </div>
   </div>
@@ -149,16 +149,18 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=40"></script>
-<script src="assets/js/supabase-client.js?v=40"></script>
-<script src="assets/js/ui.js?v=40"></script>
-<script src="assets/js/tiff.js?v=40"></script>
-<script src="assets/js/md.js?v=40"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=40"></script>
-<script src="assets/js/storage.js?v=40"></script>
-<script src="assets/js/presence.js?v=40"></script>
-<script src="assets/js/guard.js?v=40"></script>
-<script src="assets/js/notify.js?v=40"></script>
-<script src="assets/js/server-settings.js?v=40"></script>
+<script src="assets/js/config.js?v=41"></script>
+<script src="assets/js/supabase-client.js?v=41"></script>
+<script src="assets/js/ui.js?v=41"></script>
+<script src="assets/js/glass.js?v=41"></script>
+<script src="assets/js/tiff.js?v=41"></script>
+<script src="assets/js/md.js?v=41"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=41"></script>
+<script src="assets/js/storage.js?v=41"></script>
+<script src="assets/js/presence.js?v=41"></script>
+<script src="assets/js/guard.js?v=41"></script>
+<script src="assets/js/notify.js?v=41"></script>
+<script src="assets/js/settings-ui.js?v=41"></script>
+<script src="assets/js/server-settings.js?v=41"></script>
 </body>
 </html>

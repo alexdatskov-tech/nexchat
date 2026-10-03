@@ -61,8 +61,9 @@
     if (e2) return UI.toast('Could not load servers: ' + e2.message, true);
 
     $('serverCount').textContent = `${servers.length} server${servers.length === 1 ? '' : 's'}`;
+    heroStats.servers = servers.length; paintHeroStats();
     const grid = $('grid');
-    grid.innerHTML = servers.map(card).join('')
+    grid.innerHTML = servers.map((sv, i) => card(sv).replace('<button class="scard"', `<button style="--i:${i}" class="scard rise"`)).join('')
       + '<button class="scard add" id="addCard"><i class="fa-solid fa-plus"></i><b>Create or join</b></button>';
     grid.classList.remove('hidden');
     grid.querySelectorAll('.scard[data-id]').forEach((el) => {
@@ -71,12 +72,101 @@
     $('addCard').onclick = openCreate;
   }
 
+  /* ---------------- greeting card ----------------
+     Live numbers that count up, a typewriter line built from the user's own
+     data, and a card that leans toward the cursor with a moving spotlight. */
+  const heroStats = { servers: 0, online: 0, ann: 0 };
+  const shown = { servers: 0, online: 0, ann: 0 };
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  function paintHeroStats() {
+    for (const k of Object.keys(heroStats)) {
+      const el = $({ servers: 'stServers', online: 'stOnline', ann: 'stAnn' }[k]);
+      if (!el) continue;
+      const from = shown[k], to = heroStats[k];
+      if (from === to) { el.textContent = to; continue; }
+      shown[k] = to;
+      if (reduceMotion) { el.textContent = to; continue; }
+      const t0 = performance.now(), dur = 700;
+      const step = (t) => {
+        const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(from + (to - from) * e);
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+      el.parentElement.classList.remove('bump'); void el.offsetWidth; el.parentElement.classList.add('bump');
+    }
+  }
+
+  function heroLines() {
+    const h = new Date().getHours();
+    const lines = [];
+    if (heroStats.online) lines.push(`${heroStats.online} friend${heroStats.online === 1 ? ' is' : 's are'} online right now.`);
+    if (heroStats.servers) lines.push(`You're in ${heroStats.servers} server${heroStats.servers === 1 ? '' : 's'}. Pick one and jump in.`);
+    if (heroStats.ann) lines.push(`${heroStats.ann} new announcement${heroStats.ann === 1 ? '' : 's'} from the team.`);
+    lines.push(h < 5 ? 'Still up? Somebody’s always around.' : h < 12 ? 'Fresh start. Catch up on what you missed.'
+      : h < 18 ? 'Afternoon check-in: see what’s new.' : 'Evening crew is getting online.');
+    lines.push('Start a call, share your screen, or just say hi.');
+    return lines;
+  }
+
+  function typer() {
+    const el = $('heroLine');
+    if (!el) return;
+    if (reduceMotion) { el.textContent = heroLines()[0]; return; }
+    let li = 0;
+    const type = (text, i = 0) => {
+      el.textContent = text.slice(0, i) || ' ';
+      if (i < text.length) return setTimeout(() => type(text, i + 1), 28 + Math.random() * 40);
+      setTimeout(() => erase(text, text.length), 3200);
+    };
+    const erase = (text, i) => {
+      el.textContent = text.slice(0, i) || ' ';
+      if (i > 0) return setTimeout(() => erase(text, i - 1), 14);
+      const lines = heroLines(); li = (li + 1) % lines.length;
+      setTimeout(() => type(lines[li]), 260);
+    };
+    setTimeout(() => type(heroLines()[0]), 500);
+  }
+
+  async function friendsOnline() {
+    const { data } = await window.db.from('friendships').select('user_id,friend_id,status').or(`user_id.eq.${me.id},friend_id.eq.${me.id}`);
+    const ids = (data || []).filter((f) => f.status === 'accepted').map((f) => (f.user_id === me.id ? f.friend_id : f.user_id));
+    const count = () => { heroStats.online = ids.filter((id) => window.Presence?.isOnline(id)).length; paintHeroStats(); };
+    window.Presence?.onChange(count);
+    count();
+  }
+
+  function hero() {
+    typer();
+    friendsOnline().catch(() => {});
+    const card = $('hero');
+    if (!card || reduceMotion || !matchMedia('(hover: hover)').matches) return;
+    card.addEventListener('pointermove', (e) => {
+      const r = card.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      card.style.setProperty('--mx', (x * 100).toFixed(1) + '%');
+      card.style.setProperty('--my', (y * 100).toFixed(1) + '%');
+      card.style.setProperty('--rx', ((0.5 - y) * 5).toFixed(2) + 'deg');
+      card.style.setProperty('--ry', ((x - 0.5) * 7).toFixed(2) + 'deg');
+      card.classList.add('lit');
+    });
+    card.addEventListener('pointerleave', () => {
+      card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg');
+      card.classList.remove('lit');
+    });
+  }
+
   /* Latest announcements from the team; the full list lives in the panel. */
   function announcements() {
     if (!window.Nav) return;
     $('annAll').onclick = () => Nav.openAnnouncements();
     Nav.onAnnouncements((list, ok) => {
       $('annSection').classList.toggle('hidden', !ok);
+      let seen = ''; try { seen = localStorage.getItem('nx_ann_seen') || ''; } catch {}
+      heroStats.ann = list.filter((a) => a.created_at > seen).length;
+      $('stAnnWrap').classList.toggle('hidden', !ok);
+      paintHeroStats();
       $('annFeed').innerHTML = list.length
         ? list.slice(0, 4).map((a) => Nav.annCard(a, true)).join('')
         : '<div class="ann-empty"><i class="fa-solid fa-bullhorn"></i>&nbsp; No announcements right now.</div>';
@@ -173,6 +263,7 @@
     if (me.is_platform_admin) $('adminLink').style.display = '';
     $('homeBurger').onclick = () => window.Nav?.openDrawer();
     announcements();
+    hero();
 
     // Deep links: ?invite=CODE opens the join box pre-filled; ?new=1 (the "+"
     // in the left bar on other pages) opens create.
