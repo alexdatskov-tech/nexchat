@@ -157,11 +157,21 @@
     }
 
     /* ---------------- fetching + inlining ---------------- */
+    // Flaky networks drop the odd request out of ~20 parallel ones: retry
+    // each file a few times with backoff before giving up on the page.
+    function fetchRetry(url, tries) {
+      return fetch(url).then(ok).catch(function (e) {
+        if (tries <= 1) throw e;
+        return new Promise(function (r) { setTimeout(r, 500 * (4 - tries)); })
+          .then(function () { return fetchRetry(url, tries - 1); });
+      });
+    }
+
     function text(url) {
       var clean = url.replace(/\?v=\d+$/, '');
       if (!cache.has(clean)) {
         total++; progress();
-        cache.set(clean, fetch(clean).then(ok).then(function (r) { return r.text(); })
+        cache.set(clean, fetchRetry(clean, 3).then(function (r) { return r.text(); })
           .then(function (t) { done++; progress(); return t; })
           .catch(function (e) { cache.delete(clean); throw e; }));
       }
