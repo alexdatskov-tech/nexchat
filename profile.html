@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Your profile</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=42" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=43" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=42" />
-<script src="assets/js/ambient.js?v=42"></script>
+<link rel="stylesheet" href="assets/css/theme.css?v=43" />
+<link rel="stylesheet" href="assets/css/drive.css?v=43" />
+<script src="assets/js/ambient.js?v=43"></script>
 </head>
 <body>
 <div class="set-wrap">
@@ -24,6 +25,8 @@
     <button class="on" data-tab="profile"><span class="ni-ico c1"><i class="fa-solid fa-user"></i></span><span class="nt"><b>Profile</b><small>Name, bio, avatar</small></span></button>
     <button data-tab="appearance"><span class="ni-ico c2"><i class="fa-solid fa-palette"></i></span><span class="nt"><b>Appearance</b><small>Glass, wallpaper, colour</small></span></button>
     <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro</b><small>Halo &amp; extras</small></span></button>
+    <div class="grp-label">Storage</div>
+    <button data-tab="drive"><span class="ni-ico c6"><i class="fa-solid fa-hard-drive"></i></span><span class="nt"><b>My Drive</b><small>Private encrypted files</small></span></button>
     <div class="grp-label">Security</div>
     <button data-tab="account"><span class="ni-ico c4"><i class="fa-solid fa-key"></i></span><span class="nt"><b>Account</b><small>Password &amp; session</small></span></button>
     <button data-tab="dev"><span class="ni-ico c5"><i class="fa-solid fa-code"></i></span><span class="nt"><b>Developer</b><small>Connection tools</small></span></button>
@@ -295,6 +298,11 @@
       </div>
     </section>
 
+    <!-- MY DRIVE -->
+    <section class="set-inner hidden drive-pane" data-pane="drive" data-nosave>
+      <div id="driveHost"></div>
+    </section>
+
     <div class="save-bar" id="saveBar">
       <button class="btn btn-quiet" id="btnReset">Undo</button>
       <button class="btn btn-primary" id="btnSave">Save changes</button>
@@ -304,19 +312,22 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=42"></script>
-<script src="assets/js/supabase-client.js?v=42"></script>
-<script src="assets/js/ui.js?v=42"></script>
-<script src="assets/js/glass.js?v=42"></script>
-<script src="assets/js/tiff.js?v=42"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=42"></script>
-<script src="assets/js/storage.js?v=42"></script>
-<script src="assets/js/ice.js?v=42"></script>
-<script src="assets/js/md.js?v=42"></script>
-<script src="assets/js/presence.js?v=42"></script>
-<script src="assets/js/guard.js?v=42"></script>
-<script src="assets/js/notify.js?v=42"></script>
-<script src="assets/js/settings-ui.js?v=42"></script>
-<script src="assets/js/profile.js?v=42"></script>
+<script src="assets/js/config.js?v=43"></script>
+<script src="assets/js/supabase-client.js?v=43"></script>
+<script src="assets/js/ui.js?v=43"></script>
+<script src="assets/js/glass.js?v=43"></script>
+<script src="assets/js/tiff.js?v=43"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=43"></script>
+<script src="assets/js/cloudgate.js?v=43"></script>
+<script src="assets/js/storage.js?v=43"></script>
+<script src="assets/js/ice.js?v=43"></script>
+<script src="assets/js/md.js?v=43"></script>
+<script src="assets/js/presence.js?v=43"></script>
+<script src="assets/js/guard.js?v=43"></script>
+<script src="assets/js/notify.js?v=43"></script>
+<script src="assets/js/settings-ui.js?v=43"></script>
+<script src="assets/js/vault.js?v=43"></script>
+<script src="assets/js/drive.js?v=43"></script>
+<script src="assets/js/profile.js?v=43"></script>
 </body>
 </html>

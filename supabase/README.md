@@ -8,7 +8,49 @@ to re-run. The last statement prints two `true` columns when it worked.
 Until it has been run, the app simply hides announcements; the Admin page
 shows a reminder in its Announcements tab.
 
-## 2. File storage signer (strongly recommended)
+## 2. Roles, platform tools and the private drive (required for Owner / Sudo Admin and My Drive)
+
+Paste `roles_and_powers.sql` into the SQL editor and run it (safe to re-run).
+It makes **alexd** the one and only Owner, keeps existing admins as Admins,
+and adds:
+
+| | Owner | Sudo Admin | Admin |
+|---|---|---|---|
+| Ban regular users | yes | yes | yes |
+| Ban admins | yes | yes | no |
+| Ban sudo admins | yes | no | no |
+| Ban the owner | - | no | no |
+| Give/remove Admin | yes | yes | no |
+| Give/remove Sudo Admin | yes | no | no |
+| See every server + who is in it, read & post without joining | yes | yes | no |
+| Set a user's password (signs them out everywhere) | yes | yes (not the owner) | no |
+| Delete accounts | yes | yes (not the owner) | no |
+
+The rule underneath all of it: you can only act on people ranked **below**
+you. The database enforces this; the buttons in the admin panel just follow
+it. Existing passwords can never be viewed (Supabase stores only a one-way
+hash), DMs stay private, and nobody can read another user's drive key.
+
+The final query prints the owner's username and `true` for each part.
+
+## 3. CloudGate storage (where new uploads go)
+
+`assets/js/config.js -> CLOUDGATE` points at the Wasmer CloudGate app. All new
+uploads land in the `nexchats-us1` category:
+
+- `attachments/...` - chat files, avatars, icons, wallpapers (permanent
+  CloudFront links, nothing expires)
+- `vault/<user id>/...` - each user's **My Drive**, encrypted in the browser
+  (AES-256-GCM, file names included) with a per-user key from
+  `user_vault_keys`
+
+Old iDrive e2 links already in the database keep working through the signer
+below. The CloudGate login in `config.js` is public like the rest of the site,
+so treat the bucket as listable by anyone; that is why drive files are
+encrypted before upload. To hide the login, proxy the CloudGate API through a
+Supabase Edge Function the same way as the signer below.
+
+## 4. File storage signer (for the old iDrive e2 links)
 
 Attachments live in an iDrive e2 bucket. Today the bucket's access key and
 **secret key** are embedded in

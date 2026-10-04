@@ -40,7 +40,10 @@
       b.classList.add('on');
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
       // Only the editable panes need the save bar.
-      $('saveBar').classList.toggle('hidden', b.dataset.tab === 'account' || b.dataset.tab === 'dev');
+      $('saveBar').classList.toggle('hidden', ['account', 'dev', 'drive'].includes(b.dataset.tab));
+      document.querySelector('.set-wrap')?.classList.toggle('drive-open', b.dataset.tab === 'drive');
+      if (b.dataset.tab === 'drive' && me) window.Drive?.mount(me, $('driveHost'));
+      try { history.replaceState(null, '', b.dataset.tab === 'profile' ? location.pathname + location.search : '#' + b.dataset.tab); } catch {}
       document.querySelector('.set-main')?.scrollTo({ top: 0 });
     };
   });
@@ -58,7 +61,7 @@
 
     let badges = '';
     if (me.is_nitro) badges += ' <span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>';
-    if (me.is_platform_admin) badges += ' <span class="badge badge-admin">Admin</span>';
+    if (UI.rank(me)) badges += ' ' + UI.roleBadge(me);
     $('pvBadges').innerHTML = badges;
 
     const avUrl = clearAvatar ? null : (avatarFile?._preview || me.avatar_url);
@@ -293,10 +296,16 @@
           catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
         }
         const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
-        await window.Store.put(key, wpFile);
+        const up = await window.Store.put(key, wpFile);
         wallpaperSelection++;
-        wallpaperKey = key;
-        bgVal = '';
+        if (window.CloudGate?.isOurs(up.url)) {
+          // A CloudGate URL never expires, so it is saved like a preset.
+          wallpaperKey = '';
+          bgVal = `url(${UI.cssString(up.url)})`;
+        } else {
+          wallpaperKey = key;
+          bgVal = '';
+        }
         wpFile = null;
         $('fWallpaper').value = '';
       }
@@ -447,6 +456,9 @@
         const img = document.createElement('img'); img.src = url;
         $('wpPrev').replaceChildren(img);
       }).catch(() => { /* shared background renderer retries */ });
+    } else {
+      const u = (bgVal.match(/^url\(\s*'(.*)'\s*\)$/) || [])[1];
+      if (u && window.CloudGate?.isOurs(u)) { const img = document.createElement('img'); img.src = u; $('wpPrev').replaceChildren(img); }
     }
     bgDim = th.dash_dim ?? 0;
     bgBlur = th.dash_blur ?? 0;
@@ -491,5 +503,8 @@
     $('acSince').textContent = new Date(me.created_at).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
     hydrate();
     loadNitro();
+    // Deep links: profile.html#drive, #appearance, ...
+    const tab = location.hash.slice(1);
+    if (tab) document.querySelector(`.set-nav button[data-tab="${CSS.escape(tab)}"]`)?.click();
   })();
 })();

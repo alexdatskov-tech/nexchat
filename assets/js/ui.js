@@ -159,6 +159,8 @@ window.UI = (function () {
     }
     const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    // New images go to CloudGate (permanent CloudFront URL) when configured.
+    if (window.CloudGate?.enabled()) return (await window.Store.put(`nexchat/${bucket}/${path}`, file)).url;
     // Browsers leave file.type empty for .tiff and most font files, and Storage
     // then stores them as octet-stream, which breaks <img> and @font-face.
     const contentType = file.type || window.Store?.mimeOf(file.name) || 'application/octet-stream';
@@ -295,7 +297,7 @@ window.UI = (function () {
         <div class="upop-av ${p.is_nitro ? haloClass(p) : ''}"${p.is_nitro ? haloStyle(p) : ''}>${avatar(p, 68, { halo: false })}</div>
         <h3>${esc(name)}
           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>' : ''}
-          ${p.is_platform_admin ? '<span class="badge badge-admin">Admin</span>' : ''}</h3>
+          ${roleBadge(p)}</h3>
         <div class="handle">@${esc(p.username)}</div>
         <div class="presence-line" style="margin-top:6px;color:${window.Presence?.isOnline(p.id) ? 'var(--accent)' : 'var(--txt-3)'}">
           <span class="pdot ${window.Presence?.isOnline(p.id) ? 'on' : 'off'}" data-pd="${p.id}"></span>
@@ -479,6 +481,22 @@ window.UI = (function () {
      grid, the profile editor, DMs and server channels all read the same
      profiles.theme keys, so the wallpaper follows the user around the app
      instead of only dressing the portal. */
+  /* Platform ranks: owner 3, sudo admin 2, admin 1, everyone else 0.
+     Mirrors nx_rank() in supabase/roles_and_powers.sql, which is what really
+     decides; the UI only uses this to hide buttons that would be refused. */
+  function rank(p) {
+    if (!p) return 0;
+    return { owner: 3, sudo: 2, admin: 1 }[p.platform_role] || (p.is_platform_admin ? 1 : 0);
+  }
+  const ROLE_NAMES = ['', 'Admin', 'Sudo Admin', 'Owner'];
+  const roleName = (p) => ROLE_NAMES[rank(p)];
+  function roleBadge(p) {
+    const r = rank(p);
+    if (!r) return '';
+    const ic = ['', 'fa-shield-halved', 'fa-user-shield', 'fa-crown'][r];
+    return `<span class="badge badge-role r${r}"><i class="fa-solid ${ic}"></i> ${ROLE_NAMES[r]}</span>`;
+  }
+
   /* Cursor-driven motion (tilts, spotlights). A CSS transition restarted on
      every pointermove stutters and trails the cursor; instead the values
      ease toward their target once per frame, independent of refresh rate,
@@ -569,5 +587,5 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { params, hash, go, pageUrl, smooth, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

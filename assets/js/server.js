@@ -1261,6 +1261,19 @@
       canManage = !!ok;
     }
 
+    // Owner / sudo admins can open any server without joining it.
+    if (UI.rank(me) >= 2 && srv.owner_id !== me.id) {
+      const { data: mem } = await window.db.from('server_members').select('user_id')
+        .eq('server_id', serverId).eq('user_id', me.id).maybeSingle();
+      if (!mem) {
+        const bar = document.createElement('div');
+        bar.className = 'preview-bar';
+        bar.innerHTML = `<i class="fa-solid fa-eye"></i><span>Viewing as <b>${UI.esc(UI.roleName(me))}</b>. You haven't joined this server; anything you send is posted under your name.</span>`;
+        $('chatHead').insertAdjacentElement('afterend', bar);
+        $('miLeave')?.classList.add('hidden');
+      }
+    }
+
     menus(); composer(); voiceButtons();
     await loadChannels();
   })();

@@ -12,6 +12,18 @@ window.NEXCHAT_CONFIG = {
   // `nexchat-storage` Edge Function is deployed (see supabase/README.md), set:
   //   STORAGE_ENDPOINT: 'https://xqzibelnvjlmavgrpyve.supabase.co/functions/v1/nexchat-storage',
   STORAGE_ENDPOINT: '',
+  // CloudGate on Wasmer: where every NEW upload goes (chat files, avatars,
+  // icons, wallpapers, and each user's encrypted drive). Old iDrive e2 links
+  // already in the database keep working through the signer above.
+  // This login ships to every browser, so treat the bucket as readable by
+  // anyone who looks; private drive files are encrypted before upload.
+  CLOUDGATE: {
+    endpoint: 'https://alexd-us1-s3.wasmer.app',
+    user: 'admin',
+    pass: 'admin!',
+    category: 'nexchats-us1',
+    cdn: 'd1dncmkdpaif79.cloudfront.net',
+  },
   // TURN relays (optional). Only used when two people can't connect directly
   // (strict NAT / school & office networks). A free public relay is the
   // fallback; your own TURN (e.g. a free Metered or Cloudflare TURN key) is

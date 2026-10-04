@@ -25,7 +25,11 @@
       for authenticated users (see supabase/functions/nexchat-storage). The
       bucket secret then never ships to browsers. This is the safe mode.
    2. otherwise -> the legacy in-browser signer (window.__nx_tp), which has
-      the bucket credentials embedded in public JavaScript.            */
+      the bucket credentials embedded in public JavaScript.
+
+   NEW UPLOADS go to CloudGate (cloudgate.js) whenever it is configured. Its
+   CloudFront URLs are permanent, so they are stored and rendered as-is; only
+   the old iDrive rows still pass through the signer.                 */
 window.Store = (function () {
   const cfg = () => window.NEXCHAT_CONFIG || {};
   const legacy = () => window.__nx_tp;
@@ -155,6 +159,14 @@ window.Store = (function () {
      signed link. */
   async function put(key, file, onProgress) {
     const type = file.type || mimeOf(file.name);
+    if (window.CloudGate?.enabled()) {
+      // nexchat/<a>/<b>/<file> -> nexchats-us1/attachments/<a>/<b>/<file>
+      const parts = key.replace(/^nexchat\//, '').split('/');
+      const name = parts.pop();
+      const up = await window.CloudGate.upload(window.CloudGate.join('attachments', ...parts), name, file,
+        { onProgress: (f) => onProgress?.(Math.round(f * 100)) });
+      return { key: up.key, url: up.url, size: file.size, type: file.type || up.type || type };
+    }
     if (cfg().STORAGE_ENDPOINT) {
       const { url, headers } = await edge({ op: 'put', key, type });
       await xhrPut(url, file, { 'Content-Type': type, ...(headers || {}) }, onProgress);
@@ -167,6 +179,7 @@ window.Store = (function () {
   }
 
   async function del(urlOrKey) {
+    if (window.CloudGate?.isOurs(urlOrKey)) return window.CloudGate.deleteFile(window.CloudGate.keyOf(urlOrKey));
     const key = isManaged(urlOrKey) ? keyOf(urlOrKey) : urlOrKey;
     if (!key) return;
     cache.delete(key);

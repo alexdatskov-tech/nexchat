@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Admin</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=42" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=43" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=42" />
-<script src="assets/js/ambient.js?v=42"></script>
+<link rel="stylesheet" href="assets/css/theme.css?v=43" />
+<script src="assets/js/ambient.js?v=43"></script>
 </head>
 <body>
 <div class="hidden" id="denied" style="min-height:100dvh;display:grid;place-items:center;padding:24px;">
@@ -33,7 +33,8 @@
     </div>
     <div class="grp-label">Platform</div>
     <button class="on" data-tab="overview"><span class="ni-ico c1"><i class="fa-solid fa-chart-simple"></i></span><span class="nt"><b>Overview</b><small>Health at a glance</small></span></button>
-    <button data-tab="users"><span class="ni-ico c4"><i class="fa-solid fa-users"></i></span><span class="nt"><b>Users</b><small>Search, promote, ban</small></span></button>
+    <button data-tab="users"><span class="ni-ico c4"><i class="fa-solid fa-users"></i></span><span class="nt"><b>Users</b><small>Search, roles, bans</small></span></button>
+    <button data-tab="servers" class="super-only hidden"><span class="ni-ico c5"><i class="fa-solid fa-server"></i></span><span class="nt"><b>Servers</b><small>Every server ever made</small></span></button>
     <button data-tab="announce"><span class="ni-ico c2"><i class="fa-solid fa-bullhorn"></i></span><span class="nt"><b>Announcements</b><small>Post to everyone</small></span></button>
     <div class="grp-label">Queues</div>
     <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro requests</b><small>Approve or decline</small></span><span id="pendCount"></span></button>
@@ -73,12 +74,25 @@
         <label class="search-pill"><i class="fa-solid fa-magnifying-glass"></i><input id="uSearch" placeholder="Search by name or username" /></label>
         <div class="chips" id="uFilter">
           <button class="on" data-f="all">All <span></span></button>
-          <button data-f="admin">Admins <span></span></button>
+          <button data-f="admin">Staff <span></span></button>
           <button data-f="nitro">Nitro <span></span></button>
           <button data-f="banned">Banned <span></span></button>
         </div>
       </div>
       <div id="userRows"></div>
+    </section>
+
+    <section class="set-inner hidden wide" data-pane="servers">
+      <header class="pane-head"><span class="ph-ico c5"><i class="fa-solid fa-server"></i></span><div><h2>Servers</h2><div class="sub">Every server on NexChat. Open any of them to read and post without joining.</div></div></header>
+      <div class="u-tools">
+        <label class="search-pill"><i class="fa-solid fa-magnifying-glass"></i><input id="sSearch" placeholder="Search servers or owners" /></label>
+        <div class="chips" id="sSort">
+          <button class="on" data-s="new">Newest</button>
+          <button data-s="members">Most members</button>
+          <button data-s="name">A&ndash;Z</button>
+        </div>
+      </div>
+      <div class="srv-grid" id="srvRows"></div>
     </section>
 
     <section class="set-inner hidden" data-pane="appeals">
@@ -119,17 +133,18 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=42"></script>
-<script src="assets/js/supabase-client.js?v=42"></script>
-<script src="assets/js/ui.js?v=42"></script>
-<script src="assets/js/glass.js?v=42"></script>
-<script src="assets/js/md.js?v=42"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=42"></script>
-<script src="assets/js/storage.js?v=42"></script>
-<script src="assets/js/presence.js?v=42"></script>
-<script src="assets/js/guard.js?v=42"></script>
-<script src="assets/js/notify.js?v=42"></script>
-<script src="assets/js/nav.js?v=42"></script>
-<script src="assets/js/admin.js?v=42"></script>
+<script src="assets/js/config.js?v=43"></script>
+<script src="assets/js/supabase-client.js?v=43"></script>
+<script src="assets/js/ui.js?v=43"></script>
+<script src="assets/js/glass.js?v=43"></script>
+<script src="assets/js/md.js?v=43"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=43"></script>
+<script src="assets/js/cloudgate.js?v=43"></script>
+<script src="assets/js/storage.js?v=43"></script>
+<script src="assets/js/presence.js?v=43"></script>
+<script src="assets/js/guard.js?v=43"></script>
+<script src="assets/js/notify.js?v=43"></script>
+<script src="assets/js/nav.js?v=43"></script>
+<script src="assets/js/admin.js?v=43"></script>
 </body>
 </html>
