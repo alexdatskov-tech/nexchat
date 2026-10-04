@@ -593,20 +593,20 @@
 
   // Read-only (Roles tab) or editable (Owner tab) permission table.
   function paintMatrix(host, editable) {
-    host.innerHTML = `<div class="pm ${editable ? 'edit' : ''}">
-      <div class="pm-h"><span>Permission</span><span><i class="fa-solid fa-crown"></i> Owner</span><span><i class="fa-solid fa-user-shield"></i> Sudo</span><span><i class="fa-solid fa-shield-halved"></i> Admin</span></div>
-      ${PERMS.map((p) => `<div class="pm-row" data-k="${p.k}">
-        <span class="pm-t"><i class="fa-solid ${p.ic}"></i><span><b>${p.t}</b><small>${p.d}</small></span></span>
-        <span><i class="fa-solid fa-circle-check pm-yes"></i></span>
+    host.innerHTML = `<div class="rp ${editable ? 'edit' : ''}">
+      <div class="rp-h"><span>Permission</span><span><i class="fa-solid fa-crown"></i> Owner</span><span><i class="fa-solid fa-user-shield"></i> Sudo</span><span><i class="fa-solid fa-shield-halved"></i> Admin</span></div>
+      ${PERMS.map((p) => `<div class="rp-row" data-k="${p.k}">
+        <span class="rp-t"><i class="fa-solid ${p.ic}"></i><span><b>${p.t}</b><small>${p.d}</small></span></span>
+        <span><i class="fa-solid fa-circle-check rp-yes"></i></span>
         ${['sudo', 'admin'].map((role) => editable
           ? `<span><input type="checkbox" class="switch" data-role="${role}" ${perms[role][p.k] ? 'checked' : ''} aria-label="${p.t} for ${role}"></span>`
-          : `<span>${perms[role][p.k] ? '<i class="fa-solid fa-circle-check pm-yes"></i>' : '<i class="fa-solid fa-circle-minus pm-no"></i>'}</span>`).join('')}
+          : `<span>${perms[role][p.k] ? '<i class="fa-solid fa-circle-check rp-yes"></i>' : '<i class="fa-solid fa-circle-minus rp-no"></i>'}</span>`).join('')}
       </div>`).join('')}
     </div>`;
     if (!editable) return;
     host.querySelectorAll('input.switch').forEach((sw) => {
       sw.onchange = async () => {
-        const k = sw.closest('.pm-row').dataset.k, role = sw.dataset.role, on = sw.checked;
+        const k = sw.closest('.rp-row').dataset.k, role = sw.dataset.role, on = sw.checked;
         sw.disabled = true;
         const { error } = await window.db.rpc('set_role_perm', { p_role: role, p_perm: k, p_allowed: on });
         sw.disabled = false;
