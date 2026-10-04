@@ -17,6 +17,9 @@ const ok = (n, c, extra) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${extra ?
   const files = [
     ...fs.readdirSync(APP).filter((f) => /^nexchat_patch\d+\.sql$/.test(f)),
     ...(fs.existsSync(sup) ? fs.readdirSync(sup).filter((f) => /\.sql$/.test(f)).map((f) => 'supabase/' + f) : []),
+    // Multi-part migrations live in a folder and are run in order.
+    ...(fs.existsSync(sup) ? fs.readdirSync(sup).filter((d) => fs.statSync(path.join(sup, d)).isDirectory() && d !== 'functions')
+      .flatMap((d) => fs.readdirSync(path.join(sup, d)).filter((f) => /\.sql$/.test(f)).map((f) => `supabase/${d}/${f}`)) : []),
   ].sort();
   ok('patch files found', files.length >= 1, files.join(', '));
 
@@ -43,6 +46,11 @@ const ok = (n, c, extra) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${extra ?
     const commentQuotes = sql.split('\n').map((l, i) => [i + 1, l])
       .filter(([, l]) => { const c = l.indexOf('--'); return c >= 0 && l.slice(c).includes("'"); });
     ok(`${f} has no apostrophes in comments`, commentQuotes.length === 0, commentQuotes.map(([n]) => 'line ' + n).join(', '));
+
+    // 2c. Some copy paths (the Claude app file preview) hand over only the
+    //     first 100 lines, which cut a function in half mid-paste. Parts in a
+    //     multi-part folder must each fit.
+    if (f.split('/').length > 2) ok(`${f} is under 100 lines`, sql.split('\n').length < 100, `${sql.split('\n').length} lines`);
 
     // 3. Re-running a patch must not error.
     ok(`${f} claims to be re-runnable`, /safe to re-run/i.test(sql));

@@ -47,8 +47,7 @@ create unique index if not exists idx_profiles_single_owner
   on public.profiles ((true)) where platform_role = 'owner';
 
 -- Existing admins keep their access as plain admins.
-update public.profiles set platform_role = 'admin'
- where is_platform_admin and platform_role is null;
+update public.profiles set platform_role = 'admin' where is_platform_admin and platform_role is null;
 
 
 -- -----------------------------------------------------------------------------
