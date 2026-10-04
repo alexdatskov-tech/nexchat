@@ -2,6 +2,9 @@
    tagline, and show/hide on password fields. Purely decorative -- auth.js
    owns the actual sign-in. */
 (function () {
+  // The spaces bar is painted from this cache before auth; never let the
+  // next account see the last one's servers.
+  try { sessionStorage.removeItem('nx_me_v1'); sessionStorage.removeItem('nx_spaces_v1'); } catch {}
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   /* ---- floating bubbles ---- */
@@ -52,10 +55,13 @@
   /* ---- card follows the cursor a touch ---- */
   const card = document.querySelector('.auth-panel');
   if (card && !reduce && matchMedia('(hover: hover)').matches) {
+    const tilt = window.UI?.smooth
+      ? UI.smooth({ rx: 0, ry: 0 }, (v) => { card.style.transform = `perspective(900px) rotateX(${v.rx.toFixed(3)}deg) rotateY(${v.ry.toFixed(3)}deg)`; }, 0.08)
+      : null;
     window.addEventListener('pointermove', (e) => {
       const x = e.clientX / innerWidth - 0.5, y = e.clientY / innerHeight - 0.5;
-      card.style.setProperty('--rx', (-y * 4).toFixed(2) + 'deg');
-      card.style.setProperty('--ry', (x * 5).toFixed(2) + 'deg');
+      tilt?.({ rx: -y * 4, ry: x * 5 });
     }, { passive: true });
+    document.addEventListener('pointerleave', () => tilt?.({ rx: 0, ry: 0 }));
   }
 })();

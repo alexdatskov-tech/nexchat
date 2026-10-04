@@ -479,6 +479,33 @@ window.UI = (function () {
      grid, the profile editor, DMs and server channels all read the same
      profiles.theme keys, so the wallpaper follows the user around the app
      instead of only dressing the portal. */
+  /* Cursor-driven motion (tilts, spotlights). A CSS transition restarted on
+     every pointermove stutters and trails the cursor; instead the values
+     ease toward their target once per frame, independent of refresh rate,
+     and the loop sleeps as soon as everything has settled.
+       const move = UI.smooth({ x: 0 }, (v) => el.style.transform = ...);
+       move({ x: 10 });                                                    */
+  function smooth(initial, apply, k = 0.16) {
+    const cur = { ...initial }, tgt = { ...initial };
+    let raf = 0, last = 0;
+    const step = (t) => {
+      const dt = last ? Math.min(50, t - last) : 16.7;
+      last = t;
+      const a = 1 - Math.pow(1 - k, dt / 16.7);
+      let moving = false;
+      for (const key in tgt) {
+        const d = tgt[key] - cur[key];
+        if (Math.abs(d) > 0.002) { cur[key] += d * a; moving = true; } else cur[key] = tgt[key];
+      }
+      apply(cur, !moving);
+      if (moving) raf = requestAnimationFrame(step); else { raf = 0; last = 0; }
+    };
+    return (next) => {
+      Object.assign(tgt, next);
+      if (!raf) raf = requestAnimationFrame(step);
+    };
+  }
+
   /* Panel style: 'solid' (Midnight, default) or 'glass' (Liquid glass). */
   function applyStyle(style) {
     window.Glass?.set(style === 'glass');
@@ -494,7 +521,7 @@ window.UI = (function () {
       // Never paint a persisted signature. Resolve the stable key at runtime.
       return wallpaperUrl(key).then((url) => {
         if (version !== backgroundVersion) return;
-        applyBackground({ ...t, dash_wallpaper_key: null, dash_bg: `url(${cssString(url)})` });
+        applyBackground({ ...t, dash_wallpaper_key: null, dash_bg: `url(${cssString(url)})`, _ambKey: key });
         backgroundTimer = setTimeout(() => applyBackground(t), Math.max(1000, wallpaperUrls.get(key).until - Date.now()));
         return url;
       }).catch((err) => {
@@ -509,10 +536,12 @@ window.UI = (function () {
       document.body.classList.remove('has-bg', 'bg-blur', 'chat-blur');
       document.querySelector('.dash-veil')?.remove();
       root.removeProperty('--dash-bg');
+      window.Ambient?.from(null);
       return;
     }
     document.body.classList.add('has-bg');
     root.setProperty('--dash-bg', t.dash_bg);
+    window.Ambient?.from(t.dash_bg, t._ambKey);
     root.setProperty('--dash-dim', (t.dash_dim ?? 0) / 100);
     root.setProperty('--dash-blur', (t.dash_blur ?? 0) + 'px');
     root.setProperty('--dash-bright', (t.dash_bright ?? 100) / 100);
@@ -540,5 +569,5 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { params, hash, go, pageUrl, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { params, hash, go, pageUrl, smooth, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();
