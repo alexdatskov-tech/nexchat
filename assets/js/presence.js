@@ -19,6 +19,9 @@ window.Presence = (function () {
   async function start(profile) {
     if (chan) return;
     me = profile;
+    // A page prerendered on hover must not announce you until it is shown.
+    if (document.prerendering) await new Promise((r) => document.addEventListener('prerenderingchange', r, { once: true }));
+    if (chan) return;
     chan = window.db.channel('nx-presence', {
       config: { presence: { key: me.id } },
     });

@@ -68,6 +68,7 @@
     grid.classList.remove('hidden');
     grid.querySelectorAll('.scard[data-id]').forEach((el) => {
       el.onclick = () => { UI.go(`server.html?id=${el.dataset.id}`); };
+      el.onpointerenter = () => window.Nav?.warm?.(`server.html?id=${el.dataset.id}`);
     });
     $('addCard').onclick = openCreate;
   }
@@ -142,19 +143,22 @@
     friendsOnline().catch(() => {});
     const card = $('hero');
     if (!card || reduceMotion || !matchMedia('(hover: hover)').matches) return;
+    const spot = card.querySelector('.hero-spot');
+    let r = null;
+    const tilt = UI.smooth({ rx: 0, ry: 0 }, (v, done) => {
+      card.style.transform = done && !v.rx && !v.ry ? '' : `perspective(1200px) rotateX(${v.rx.toFixed(3)}deg) rotateY(${v.ry.toFixed(3)}deg)`;
+    }, 0.12);
+    card.addEventListener('pointerenter', () => { r = card.getBoundingClientRect(); card.classList.add('lit'); });
     card.addEventListener('pointermove', (e) => {
-      const r = card.getBoundingClientRect();
+      r = r || card.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-      card.style.setProperty('--mx', (x * 100).toFixed(1) + '%');
-      card.style.setProperty('--my', (y * 100).toFixed(1) + '%');
-      card.style.setProperty('--rx', ((0.5 - y) * 5).toFixed(2) + 'deg');
-      card.style.setProperty('--ry', ((x - 0.5) * 7).toFixed(2) + 'deg');
-      card.classList.add('lit');
+      // The spotlight is a pre-painted circle that only moves (compositor).
+      if (spot) spot.style.transform = `translate3d(${(x * r.width).toFixed(1)}px, ${(y * r.height).toFixed(1)}px, 0)`;
+      tilt({ rx: (0.5 - y) * 5, ry: (x - 0.5) * 7 });
     });
-    card.addEventListener('pointerleave', () => {
-      card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg');
-      card.classList.remove('lit');
-    });
+    card.addEventListener('pointerleave', () => { r = null; tilt({ rx: 0, ry: 0 }); card.classList.remove('lit'); });
+    window.addEventListener('resize', () => { r = null; }, { passive: true });
+    document.querySelector('.home')?.addEventListener('scroll', () => { r = null; }, { passive: true });
   }
 
   /* Latest announcements from the team; the full list lives in the panel. */

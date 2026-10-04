@@ -47,14 +47,18 @@ window.Glass = (function () {
   function css() {
     const P = PANELS.map((s) => `body.glass ${s}`).join(',\n');
     return `
+/* Non-inherited, so moving the highlight restyles one panel, not every
+   message and channel inside it. */
+@property --gx { syntax: '<percentage>'; inherits: false; initial-value: 18%; }
+@property --gy { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
 body.glass { --txt-2: #C3C7D4; --txt-3: #8C92A4; --line: rgba(255,255,255,.12); --line-2: rgba(255,255,255,.2); }
 .glass-scene { position: fixed; inset: 0; z-index: -3; overflow: hidden; pointer-events: none; display: none; background: #07060D; }
 body.glass:not(.has-bg) .glass-scene { display: block; }
-.glass-scene i { position: absolute; border-radius: 50%; filter: blur(40px); will-change: transform; }
-.glass-scene i:nth-child(1) { width: 46vmax; height: 46vmax; left: -8vmax; top: -12vmax; background: radial-gradient(circle, #6D4BFF, transparent 62%); animation: gs1 22s ease-in-out infinite alternate; }
-.glass-scene i:nth-child(2) { width: 40vmax; height: 40vmax; right: -10vmax; top: 20vh; background: radial-gradient(circle, #0FB9A5, transparent 62%); animation: gs2 26s ease-in-out infinite alternate; }
-.glass-scene i:nth-child(3) { width: 34vmax; height: 34vmax; left: 30vw; bottom: -14vmax; background: radial-gradient(circle, #E0559B, transparent 62%); animation: gs3 19s ease-in-out infinite alternate; }
-.glass-scene i:nth-child(4) { width: 22vmax; height: 22vmax; left: 55vw; top: 8vh; background: radial-gradient(circle, #F5B94A, transparent 62%); opacity: .6; animation: gs1 30s ease-in-out -8s infinite alternate-reverse; }
+.glass-scene i { position: absolute; border-radius: 50%; will-change: transform; }
+.glass-scene i:nth-child(1) { width: 50vmax; height: 50vmax; left: -10vmax; top: -14vmax; background: radial-gradient(closest-side, var(--amb-1), transparent); animation: gs1 22s ease-in-out infinite alternate; }
+.glass-scene i:nth-child(2) { width: 44vmax; height: 44vmax; right: -12vmax; top: 18vh; background: radial-gradient(closest-side, var(--amb-2), transparent); animation: gs2 26s ease-in-out infinite alternate; }
+.glass-scene i:nth-child(3) { width: 38vmax; height: 38vmax; left: 28vw; bottom: -16vmax; background: radial-gradient(closest-side, var(--amb-3), transparent); animation: gs3 19s ease-in-out infinite alternate; }
+.glass-scene i:nth-child(4) { width: 26vmax; height: 26vmax; left: 53vw; top: 6vh; background: radial-gradient(closest-side, color-mix(in oklab, var(--amb-1), var(--amb-3)), transparent); opacity: .6; animation: gs1 30s ease-in-out -8s infinite alternate-reverse; }
 @keyframes gs1 { to { transform: translate(16vmax, 10vmax) scale(1.2); } }
 @keyframes gs2 { to { transform: translate(-18vmax, -8vmax) scale(.85); } }
 @keyframes gs3 { to { transform: translate(-12vmax, -16vmax) scale(1.25); } }
@@ -82,14 +86,10 @@ body.glass .overlay { background: rgba(4,4,8,.35); }
 body.glass .set-bg { display: none; }
 body.glass input:not([type=checkbox]):not([type=range]):not([type=color]):not([type=file]), body.glass textarea, body.glass select { background: rgba(0,0,0,.22) !important; }
 
-/* Tilt: a few degrees toward the cursor, springing back on leave. */
-body.glass :is(${TILT}) {
-  transform: perspective(900px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)) translateY(var(--lift, 0px));
-  transition: transform .5s cubic-bezier(.34,1.56,.64,1), box-shadow .3s;
-  will-change: transform;
-}
-body.glass :is(${TILT}).tilting { transition: transform .12s linear; }
-body.glass .scard:hover { --lift: -3px; }
+/* Tilt: glass.js writes the transform itself every frame (eased toward the
+   cursor and back), so no CSS transition may chase it. */
+body.glass :is(${TILT}) { transition-property: border-color, opacity, color, background-color; }
+body.glass :is(${TILT}).tilting { will-change: transform; }
 `;
   }
 
@@ -124,21 +124,35 @@ body.glass .scard:hover { --lift: -3px; }
       lastPanel = panel;
       if (reduce()) return;
       const card = t?.closest(TILT) || null;
-      if (lastTilt && lastTilt !== card) {
-        lastTilt.classList.remove('tilting');
-        lastTilt.style.setProperty('--tx', '0deg'); lastTilt.style.setProperty('--ty', '0deg');
-      }
+      if (lastTilt && lastTilt !== card) release(lastTilt);
       lastTilt = card;
       if (card) {
         const r = card.getBoundingClientRect();
         const x = (ev.clientX - r.left) / r.width - 0.5, y = (ev.clientY - r.top) / r.height - 0.5;
         const k = Math.max(1.5, 6 - r.width / 160);      // big cards tilt less
-        card.classList.add('tilting');
-        card.style.setProperty('--tx', (-y * k).toFixed(2) + 'deg');
-        card.style.setProperty('--ty', (x * k).toFixed(2) + 'deg');
+        tiltOf(card)({ tx: -y * k, ty: x * k, lift: card.matches('.scard') ? -4 : 0 });
       }
     });
   }
+
+  /* Each tilting card gets its own smoother; it eases back to flat on
+     leave and then hands the transform back to the stylesheet. */
+  const tilters = new WeakMap();
+  function tiltOf(card) {
+    let f = tilters.get(card);
+    if (!f) {
+      const ease = window.UI?.smooth || ((i, apply) => (v) => apply({ ...i, ...v }, true));
+      f = ease({ tx: 0, ty: 0, lift: 0 }, (v, done) => {
+        if (done && !v.tx && !v.ty && !v.lift) { card.style.transform = ''; card.classList.remove('tilting'); return; }
+        card.classList.add('tilting');
+        card.style.transform = `perspective(900px) rotateX(${v.tx.toFixed(3)}deg) rotateY(${v.ty.toFixed(3)}deg) translateY(${v.lift.toFixed(2)}px)`;
+      }, 0.14);
+      tilters.set(card, f);
+    }
+    return f;
+  }
+  const release = (card) => tiltOf(card)({ tx: 0, ty: 0, lift: 0 });
+  document.addEventListener('pointerleave', () => { if (lastTilt) { release(lastTilt); lastTilt = null; } });
 
   function set(enable) {
     enable = !!enable;

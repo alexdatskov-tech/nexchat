@@ -193,5 +193,20 @@ ok('no duplicate .surface frosted rules', trio.length <= 1, `${trio.length} rule
   ok('returning to 0 removes it again', !body.classList.contains('bg-blur'));
 }
 
+/* ---- 8. motion: nothing that animates forever re-filters or repaints ---- */
+{
+  const rules = [...bare.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1].trim(), body: m[2] }));
+  const looping = rules.filter((r) => /animation:[^;]*infinite/.test(r.body));
+  ok('no infinitely animated element carries a blur filter',
+     looping.every((r) => !/(^|[^-])filter:\s*blur/.test(r.body)));
+  ok('no "transition: all"', !/transition:\s*all\b/.test(bare));
+  const sp = rules.filter((r) => /^\.sp-item(:hover|\.on)?$/.test(r.sel) || r.sel === '.sp-item:hover, .sp-item.on');
+  ok('spaces tiles do not transition background (it snaps for gradients)',
+     sp.every((r) => !/transition:[^;]*background/.test(r.body)));
+  ok('spaces pill scales instead of animating height',
+     !/\.sp-item::before\s*\{[^}]*transition:[^;]*height/.test(bare));
+  ok('cross-document view transitions are enabled', /@view-transition\s*\{\s*navigation:\s*auto/.test(css));
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nAll background-performance checks passed');
 process.exit(fails ? 1 : 0);
