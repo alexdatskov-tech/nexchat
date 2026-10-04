@@ -36,6 +36,14 @@ const ok = (n, c, extra) => { console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${extra ?
     const bad = [...sql].filter((c) => c.charCodeAt(0) > 127);
     ok(`${f} is pure ASCII`, bad.length === 0, bad.length ? `${bad.length} byte(s): ${[...new Set(bad)].join(' ')}` : '');
 
+    // 2b. The Supabase SQL editor splits statements itself and counts an
+    //     apostrophe inside a -- comment as the start of a string. An odd
+    //     number of them makes it cut a function body short ("unterminated
+    //     dollar-quoted string"), even though Postgres itself would accept it.
+    const commentQuotes = sql.split('\n').map((l, i) => [i + 1, l])
+      .filter(([, l]) => { const c = l.indexOf('--'); return c >= 0 && l.slice(c).includes("'"); });
+    ok(`${f} has no apostrophes in comments`, commentQuotes.length === 0, commentQuotes.map(([n]) => 'line ' + n).join(', '));
+
     // 3. Re-running a patch must not error.
     ok(`${f} claims to be re-runnable`, /safe to re-run/i.test(sql));
 

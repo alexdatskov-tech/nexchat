@@ -13,7 +13,7 @@
 --    0    (user)
 --
 -- Rule for every action on another person: your rank must be STRICTLY higher
--- than theirs. So admins can't ban admins, sudo admins can ban admins but not
+-- than theirs. So admins cannot ban admins, sudo admins can ban admins but not
 -- the owner or each other, and the owner can ban anyone.
 --
 -- Owner + sudo additionally ("super"):
@@ -24,11 +24,11 @@
 --   * set a new password for a user (and sign them out everywhere)
 --
 -- Deliberately NOT included:
---   * reading anyone's existing password. Supabase stores only a one-way
+--   * reading the existing password of anyone. Supabase stores only a one-way
 --     bcrypt hash; the original cannot be recovered, and capturing plaintext
---     passwords would expose users' other accounts.
+--     passwords would expose the other accounts of users.
 --   * reading private DMs and group chats.
---   * reading anyone's file vault key (see section 7).
+--   * reading the file vault key of anyone (see section 7).
 -- =============================================================================
 
 
@@ -85,7 +85,7 @@ grant execute on function public.nx_is_platform_admin() to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 3. Nobody grants themselves a role
---    Extends patch 7's trigger: platform_role, like is_platform_admin, can only
+--    Extends the trigger from patch 7: platform_role, like is_platform_admin, can only
 --    change from inside set_user_role(), which flags the transaction.
 -- -----------------------------------------------------------------------------
 create or replace function public.guard_platform_admin()
@@ -269,7 +269,7 @@ grant execute on function public.admin_user_auth(uuid) to authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 8. Owner / sudo can see and post in every server without joining
---    Permissive policies are OR'ed with the existing ones, so members keep
+--    Permissive policies are OR-ed with the existing ones, so members keep
 --    exactly the access they had. DMs are intentionally left out.
 -- -----------------------------------------------------------------------------
 drop policy if exists "nx_super_servers_select" on public.servers;
@@ -337,7 +337,7 @@ create policy "vault_keys_insert_own" on public.user_vault_keys for insert with 
 
 
 -- -----------------------------------------------------------------------------
--- Verification -- runs last; if it doesn't appear, the paste was truncated.
+-- Verification -- runs last; if it does not appear, the paste was truncated.
 -- -----------------------------------------------------------------------------
 select
   (select username from public.profiles where platform_role = 'owner')            as owner,
