@@ -1909,12 +1909,16 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 .av-halo > .av-decoed > .av { border: 2px solid var(--bg-1); }
 
 /* Nitro bio banner: an animated frame behind the bio text */
-.bio-deco-box { position: relative; isolation: isolate; margin: 14px 10px; padding: 10px 14px; }
+/* Banners are portrait art (450x880), so they are cropped to fill the box
+   rather than stretched, which flattened them. Box heights are twice the
+   earlier size: the image is the box plus 14px above and below. */
+.bio-deco-box { position: relative; isolation: isolate; margin: 14px 10px; padding: 10px 14px;
+  min-height: 166px; display: flex; flex-direction: column; justify-content: center; }
 .bio-deco-box > .bio-deco {
   position: absolute; left: -12px; top: -14px; width: calc(100% + 24px); height: calc(100% + 28px);
-  object-fit: fill; z-index: -1; pointer-events: none;
+  object-fit: cover; object-position: center; z-index: -1; pointer-events: none;
 }
-.pcard .bio-deco-box { margin: 12px 0 0; padding: 8px 12px; }
+.pcard .bio-deco-box { margin: 12px 0 0; padding: 8px 12px; min-height: 102px; }
 
 /* Nitro shop */
 .nitro-only.hidden { display: none !important; }
@@ -1941,7 +1945,7 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 .shop-item .si-prev .av-decoed { width: 64px; height: 64px; }
 .shop-item .si-prev .av-deco { width: 138%; height: 138%; }
 .shop-item .si-bio { width: 100%; min-height: 64px; display: grid; place-items: center; }
-.shop-item .si-bio .bio-deco-box { margin: 0; width: 100%; font-size: 12px; color: var(--txt-2); }
+.shop-item .si-bio .bio-deco-box { margin: 0; width: 100%; font-size: 12px; color: var(--txt-2); min-height: 104px; }
 .shop-item b { font-size: 13px; }
 .shop-item small { font-size: 11px; color: var(--txt-3); }
 .shop-item .btn { width: 100%; }
