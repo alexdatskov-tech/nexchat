@@ -106,7 +106,7 @@
     if (heroStats.servers) lines.push(`You're in ${heroStats.servers} server${heroStats.servers === 1 ? '' : 's'}. Pick one and jump in.`);
     if (heroStats.ann) lines.push(`${heroStats.ann} new announcement${heroStats.ann === 1 ? '' : 's'} from the team.`);
     lines.push(h < 5 ? 'Still up? Somebody’s always around.' : h < 12 ? 'Fresh start. Catch up on what you missed.'
-      : h < 18 ? 'Afternoon check-in: see what’s new.' : 'Evening crew is getting online.');
+      : h < 18 ? 'Afternoon check-in: see what’s new.' : 'Your servers and DMs, all in one place.');
     lines.push('Start a call, share your screen, or just say hi.');
     return lines;
   }

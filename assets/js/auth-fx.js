@@ -31,7 +31,8 @@
   }
 
   /* ---- rotating tagline ---- */
-  const TAGS = ['your people are already here.', 'servers, dms, calls. no fuss.', 'the group chat, but better.', 'hop in, it’s late anyway.'];
+  // Minecraft-style splash lines: jokes, not claims about who is online.
+  const TAGS = ['Not an enterprise product!', 'Stay a while!', 'Hop in, it’s late anyway', 'Now with more chatting!', 'Bring your friends!', 'Ask me about DMs!', 'Pings, not reports!'];
   const tag = document.getElementById('authTag');
   if (tag && !reduce) {
     let i = 0;
