@@ -91,7 +91,7 @@ window.UI = (function () {
   }
 
   // Inline CSS for a name: colour or gradient, glow, weight, slant, shimmer.
-  function nxNameCss(p) {
+  function nxNameCss(p, noItalic) {
     const ns = nxNameStyle(p);
     const accent = p?.accent_color || 'var(--txt-1)';
     if (!ns) return `color:${accent};`;
@@ -102,7 +102,8 @@ window.UI = (function () {
     if (ns.shimmer && grad) css += 'background-size:220% auto;animation:nxShimmer 3.2s linear infinite;';
     if (ns.glow) css += `filter:drop-shadow(0 0 4px ${ns.glow}) drop-shadow(0 0 12px ${ns.glow});`;
     if (ns.bold) css += 'font-weight:800;';
-    if (ns.italic) css += 'font-style:italic;';
+    // Italic glyphs overhang their advance width, which clips the gradient fill: pad the right edge.
+    if (ns.italic && !noItalic) css += 'font-style:italic;padding-right:.2em;';
     return css;
   }
 
@@ -148,10 +149,16 @@ window.UI = (function () {
   }
 
   // The name block for the profile card and user card: ASCII art or the styled text.
+  // Own-name labels (rail, portal greeting): same styling as chat, always a single line.
+  function nxNameInto(el, p) {
+    if (!el) return;
+    el.innerHTML = `<span class="nx-name" style="${esc(nxNameCss(p, true))}">${nxNameText(p)}</span>`;
+  }
+
   function nxNameHtml(p, cls) {
     const ns = nxNameStyle(p);
     if (ns?.font === 'ascii') {
-      return `<pre class="nx-ascii ${cls || ''}" style="${esc(nxNameCss(p))}" aria-label="${nxNameText(p)}">${esc(nxAsciiArt(p.display_name || p.username))}</pre>`;
+      return `<pre class="nx-ascii ${cls || ''}" style="${esc(nxNameCss(p, true))}" aria-label="${nxNameText(p)}">${esc(nxAsciiArt(p.display_name || p.username))}</pre>`;
     }
     return `<span class="nx-name ${cls || ''}" style="${esc(nxNameCss(p))}">${nxNameText(p)}</span>`;
   }
@@ -596,18 +603,40 @@ window.UI = (function () {
     return '';
   }
 
+  /* Wallpapers are cached on the user's device, keyed by the stable storage
+     key (never the signed URL, which changes every time). A repeat visit reads
+     the image from Cache Storage and skips the sign-and-download round trip
+     that made the chat background take seconds to appear. */
+  const WP_CACHE = 'nx-wallpapers-v1';
   const wallpaperUrls = new Map();
+  const wpRequest = (key) => new Request('https://wallpaper.nexchat.invalid/' + encodeURIComponent(key));
   function wallpaperUrl(key) {
-    const cached = wallpaperUrls.get(key);
-    if (cached && cached.until > Date.now()) return cached.promise;
-    const entry = { until: Date.now() + 6 * 3600 * 1000 };
-    entry.promise = Promise.resolve().then(() => window.Store.signKey(key))
-      .then((url) => {
+    if (wallpaperUrls.has(key)) return wallpaperUrls.get(key);
+    const load = (async () => {
+      const cache = 'caches' in window ? await caches.open(WP_CACHE).catch(() => null) : null;
+      if (cache) {
+        const hit = await cache.match(wpRequest(key)).catch(() => null);
+        if (hit) return URL.createObjectURL(await hit.blob());
+      }
+      const type = /\.jpe?g$/i.test(key) ? 'image/jpeg' : /\.gif$/i.test(key) ? 'image/gif'
+        : /\.webp$/i.test(key) ? 'image/webp' : /\.avif$/i.test(key) ? 'image/avif' : 'image/png';
+      let blob;
+      try {
+        if (!window.CloudGate?.enabled()) throw new Error('not managed');
+        blob = new Blob([await window.CloudGate.fetchBytes(key)], { type });
+      } catch {
+        const url = await window.Store.signKey(key);
         if (!url) throw new Error('Could not load wallpaper.');
-        return url;
-      }).catch((err) => { wallpaperUrls.delete(key); throw err; });
-    wallpaperUrls.set(key, entry);
-    return entry.promise;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Could not load wallpaper.');
+        blob = new Blob([await res.arrayBuffer()], { type });
+      }
+      if (cache) await cache.put(wpRequest(key), new Response(blob, { headers: { 'content-type': type } })).catch(() => {});
+      return URL.createObjectURL(blob);
+    })();
+    wallpaperUrls.set(key, load);
+    load.catch(() => wallpaperUrls.delete(key));
+    return load;
   }
 
   let backgroundVersion = 0, backgroundTimer = null;
@@ -703,7 +732,8 @@ window.UI = (function () {
     // The chat column's own extra treatment, on top of whatever the wallpaper
     // already has. Defaults match the CSS fallbacks so a profile saved before
     // these keys existed looks exactly the same as it did.
-    const cBlur = t.chat_blur ?? CHAT_BLUR_DEFAULT;
+    // Liquid glass starts at a 5px frosted blur; the classic style keeps 12px.
+    const cBlur = t.chat_blur ?? (t.ui_style === 'glass' ? 5 : CHAT_BLUR_DEFAULT);
     root.setProperty('--chat-blur', cBlur + 'px');
     root.setProperty('--chat-dim', (t.chat_dim ?? CHAT_DIM_DEFAULT) / 100);
     document.body.classList.toggle('chat-blur', cBlur > 0);
@@ -736,5 +766,5 @@ window.UI = (function () {
     else attach();
   })();
 
-  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxDecoPath, nxBioBox, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxNameInto, nxDecoPath, nxBioBox, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

@@ -58,7 +58,7 @@ window.Glass = (function () {
    message and channel inside it. */
 @property --gx { syntax: '<percentage>'; inherits: false; initial-value: 50%; }
 @property --gy { syntax: '<percentage>'; inherits: false; initial-value: 50%; }
-body.glass { --txt-2: #C3C7D4; --txt-3: #8C92A4; --line: rgba(255,255,255,.1); --line-2: rgba(255,255,255,.16); }
+body.glass { --txt-2: #C3C7D4; --txt-3: #8C92A4; --line: rgba(255,255,255,.12); --line-2: rgba(255,255,255,.2); --glass-blur: 5px; }
 .glass-scene { position: fixed; inset: 0; z-index: -3; overflow: hidden; pointer-events: none; display: none; background: #07060D; }
 body.glass:not(.has-bg) .glass-scene { display: block; }
 .glass-scene i { position: absolute; border-radius: 50%; }
@@ -71,19 +71,16 @@ body.glass:not(.has-bg) .glass-scene { display: block; }
    exists while the cursor is over the panel (--ga is set by the pointer code). */
 ${sel(PANELS)} {
   background: radial-gradient(220px circle at var(--gx, 50%) var(--gy, 50%), rgba(255,255,255,var(--ga, 0)), transparent 70%),
-              linear-gradient(155deg, rgba(255,255,255,.07), rgba(255,255,255,.012) 50%, rgba(255,255,255,.03)) !important;
-  border-color: rgba(255,255,255,.12) !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 18px 40px -26px rgba(0,0,0,.7) !important;
+              linear-gradient(155deg, rgba(255,255,255,.14), rgba(255,255,255,.05) 50%, rgba(255,255,255,.1)) !important;
+  border-color: rgba(255,255,255,.2) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), inset 0 0 0 1px rgba(255,255,255,.04), 0 18px 40px -26px rgba(0,0,0,.7) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur, 5px)) saturate(1.6);
+  backdrop-filter: blur(var(--glass-blur, 5px)) saturate(1.6) !important;
 }
-/* Refraction only on fixed chrome. */
+/* Refraction on fixed chrome, on top of the same frosted blur. */
 ${sel(LENS)} {
-  -webkit-backdrop-filter: saturate(1.4);
-  backdrop-filter: url(#nx-lens) saturate(1.4) brightness(1.04) !important;
-}
-/* Everything that scrolls under or over content: no backdrop filter at all. */
-${sel(plain)} {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur, 5px)) saturate(1.6);
+  backdrop-filter: url(#nx-lens) blur(var(--glass-blur, 5px)) saturate(1.6) brightness(1.04) !important;
 }
 body.glass .chat-head, body.glass .composer-inner, body.glass .rail-foot { border-radius: 0; }
 body.glass .composer-inner { border-radius: 22px; }

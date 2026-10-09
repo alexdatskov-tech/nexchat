@@ -1244,7 +1244,7 @@
     window.addEventListener('pagehide', () => window.db.removeChannel(appearanceSub), { once: true });
 
     $('meAv').innerHTML = UI.avatar(me, 28, { presence: true });
-    $('meName').textContent = me.display_name || me.username;
+    UI.nxNameInto($('meName'), me);
     $('meHandle').textContent = '@' + me.username;
 
     UI.applyBackground(me.theme);

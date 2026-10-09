@@ -1081,7 +1081,7 @@
     }
     profiles[me.id] = me;
     $('meAv').innerHTML = UI.avatar(me, 28);
-    $('meName').textContent = me.display_name || me.username;
+    UI.nxNameInto($('meName'), me);
     $('meHandle').textContent = '@' + me.username;
     composer(); newModal(); callUI();
 

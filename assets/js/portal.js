@@ -261,7 +261,7 @@
     applyDashboardBg(me.theme);
     window.Nav?.mount(me, { active: 'home', onAdd: openCreate });
     $('meAv').innerHTML = UI.avatar(me, 22, { halo: false });
-    $('meName').textContent = me.display_name || me.username;
+    UI.nxNameInto($('meName'), me);
     const h = new Date().getHours();
     $('greet').textContent = h < 5 ? 'Up late?' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     if (me.is_platform_admin) $('adminLink').style.display = '';
