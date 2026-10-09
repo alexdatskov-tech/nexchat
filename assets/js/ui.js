@@ -174,10 +174,17 @@ window.UI = (function () {
   }
 
   // Wraps the bio text in its banner overlay when one is equipped.
+  // Full banner, never cropped, centred; a blurred copy of the same art fills
+  // the rest of the card so the whole bio is covered.
+  function bioDecoImgs(src) {
+    const s = esc(src);
+    return `<img class="bio-deco-bg" src="${s}" alt="" aria-hidden="true" loading="lazy" decoding="async"><img class="bio-deco" src="${s}" alt="" decoding="async">`;
+  }
+
   function nxBioBox(p, innerHtml) {
     const deco = nxDecoPath(p, 'bio');
     if (!deco) return innerHtml;
-    return `<div class="bio-deco-box"><img class="bio-deco" src="${esc(deco)}" alt="">${innerHtml}</div>`;
+    return `<div class="bio-deco-box">${bioDecoImgs(deco)}${innerHtml}</div>`;
   }
 
   /* ---- Nitro halo ----
@@ -766,5 +773,5 @@ window.UI = (function () {
     else attach();
   })();
 
-  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxNameInto, nxDecoPath, nxBioBox, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxNameInto, nxDecoPath, nxBioBox, bioDecoImgs, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

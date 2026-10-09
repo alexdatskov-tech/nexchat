@@ -1901,15 +1901,18 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 .av-halo > .av-decoed > .av { border: 2px solid var(--bg-1); }
 
 /* Nitro bio banner: an animated frame behind the bio text */
-/* Banners are portrait art (450x880), so they are cropped to fill the box
-   rather than stretched, which flattened them. Box heights are twice the
-   earlier size: the image is the box plus 14px above and below. */
+/* Banners are portrait art (450x880). The full banner is shown uncropped and
+   undistorted in the centre; a blurred copy of the same art fills the rest of
+   the card. Box heights are twice the earlier size: the banner is the box plus
+   14px above and below. */
 .bio-deco-box { position: relative; isolation: isolate; margin: 14px 10px; padding: 10px 14px;
   min-height: 166px; display: flex; flex-direction: column; justify-content: center; }
-.bio-deco-box > .bio-deco {
+.bio-deco-box > .bio-deco, .bio-deco-box > .bio-deco-bg {
   position: absolute; left: -12px; top: -14px; width: calc(100% + 24px); height: calc(100% + 28px);
-  object-fit: cover; object-position: center; z-index: -1; pointer-events: none;
+  pointer-events: none;
 }
+.bio-deco-box > .bio-deco { object-fit: contain; object-position: center; z-index: -1; }
+.bio-deco-box > .bio-deco-bg { object-fit: cover; z-index: -2; filter: blur(12px) saturate(1.3) brightness(.75); border-radius: 18px; }
 .pcard .bio-deco-box { margin: 12px 0 0; padding: 8px 12px; min-height: 102px; }
 
 /* Nitro shop */

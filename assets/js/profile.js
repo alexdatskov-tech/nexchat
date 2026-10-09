@@ -66,7 +66,7 @@
     const bioEl = $('pvBio');
     bioEl.classList.toggle('bio-deco-box', !!bioDeco);
     bioEl.classList.toggle('hidden', !bio && !bioDeco);
-    bioEl.innerHTML = `${bioDeco ? `<img class="bio-deco" src="${UI.esc(bioDeco)}" alt="">` : ''}<span></span>`;
+    bioEl.innerHTML = `${bioDeco ? UI.bioDecoImgs(bioDeco) : ''}<span></span>`;
     bioEl.querySelector('span').textContent = bio || (bioDeco ? 'Your bio sits here.' : '');
 
     let badges = '';
@@ -499,7 +499,7 @@
     const on = (kind === 'pfp' ? th.pfp_deco : th.bio_deco) === it.file;
     const prev = kind === 'pfp'
       ? `<div class="si-prev">${UI.avatar({ ...me, is_nitro: true, theme: { ...th, pfp_deco: it.file } }, 64, { halo: false })}</div>`
-      : `<div class="si-bio"><div class="bio-deco-box"><img class="bio-deco" src="${UI.esc(it.file)}" alt="" loading="lazy" decoding="async"><span>Your bio</span></div></div>`;
+      : `<div class="si-bio"><div class="bio-deco-box">${UI.bioDecoImgs(it.file)}<span>Your bio</span></div></div>`;
     return `<div class="shop-item ${on ? 'on' : ''}">${prev}
       <b>${UI.esc(it.name || it.id)}</b><small>${on ? 'Equipped' : (kind === 'pfp' ? 'Avatar frame' : 'Bio banner')}</small>
       <button class="btn ${on ? 'btn-ghost' : 'btn-primary'} btn-sm" data-kind="${kind}" data-file="${UI.esc(it.file)}">${on ? 'Remove' : 'Equip'}</button>
