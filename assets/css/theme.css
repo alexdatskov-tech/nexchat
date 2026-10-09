@@ -1967,3 +1967,35 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 }
 .nx-preview .nx-name { font-size: 22px; font-weight: 700; }
 .nx-preview .nx-ascii { font-size: 9px; text-align: left; margin: 0; }
+
+/* ============================================================================
+   MOBILE PASS: phones (<= 640px) and touch screens
+   Bigger touch targets, dialogs as bottom sheets, safe-area insets, and no
+   iOS zoom on focus (inputs are 16px).
+   ============================================================================ */
+@media (max-width: 640px) {
+  input, textarea, select { font-size: 16px; }
+
+  .chat-head { min-height: 56px; }
+  .chat-head .btn-icon, .m-burger { width: 42px; height: 42px; }
+
+  .composer { padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .composer-inner { gap: 6px; min-height: 52px; }
+  .composer .attach-btn, .composer .emoji-btn { width: 40px; height: 40px; min-width: 40px; }
+  .composer .send { width: 42px; height: 42px; min-width: 42px; }
+  .composer textarea { min-height: 40px; max-height: 120px; }
+
+  .overlay { align-items: flex-end; padding: 0; }
+  .modal { max-width: 100%; border-radius: 22px 22px 0 0; max-height: 88dvh; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+  .upop { max-width: calc(100vw - 24px); }
+  .shop-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 38px; }
+  .btn-icon { width: 44px; height: 44px; }
+  .btn-icon.btn-sm { width: 38px; height: 38px; }
+  button, [role="button"], a { touch-action: manipulation; }
+}
