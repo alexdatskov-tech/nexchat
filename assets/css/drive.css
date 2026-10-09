@@ -70,6 +70,15 @@
 .du-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--amb-1), var(--amb-2)); transition: width 700ms var(--ease); }
 .du-bar.warn i { background: linear-gradient(90deg, var(--warning), var(--danger)); }
 .drv-usage small { font-size: 11.5px; color: var(--txt-3); }
+.drv-more-btn {
+  margin-top: 10px; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 10px; border-radius: 11px; border: 1px solid var(--line-2); background: rgba(255,255,255,.04);
+  color: var(--txt-2); font-size: 12px; font-family: var(--f-body); cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.drv-more-btn:hover:not(:disabled) { background: rgba(255,255,255,.08); color: var(--txt-1); }
+.drv-more-btn:disabled { opacity: .7; cursor: default; }
+.drv-more-btn i { color: var(--nitro, #E8B04B); }
 .drv-usage small b { color: var(--txt-1); font-weight: 600; }
 
 /* ---- main ---- */

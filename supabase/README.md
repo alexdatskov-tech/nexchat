@@ -33,10 +33,30 @@ hash), DMs stay private, and nobody can read another user's drive key.
 
 The final query prints the owner's username and `true` for each part.
 
+## 2b. Drive storage quotas and storage requests
+
+Paste `storage_quota.sql` into the SQL editor and run it, after `roles_and_powers.sql`
+and the `roles_v2` parts (it uses their `nx_rank`, `nx_can` and `nx_audit`). Safe to re-run.
+
+It adds:
+
+- `profiles.drive_quota_gb` (default 5). Only staff can change it; the database
+  refuses changes from anyone else, so nobody can raise their own quota.
+- The **Manage drive storage** permission, which the Owner tab can switch per role
+  (Sudo Admin and Admin have it by default).
+- `storage_requests`: users ask for more space from My Drive, staff approve or decline
+  from **Admin -> Storage requests**. Approving sets the new size straight away.
+- `admin_set_drive_quota()` for setting a size directly from a user's drawer in the admin panel.
+
+Uploads are checked against the quota in the browser before they are encrypted and
+sent. That check is a convenience: the bucket itself is not quota-enforced.
+
 ## 3. CloudGate storage (where new uploads go)
 
-`assets/js/config.js -> CLOUDGATE` points at the Wasmer CloudGate app. All new
-uploads land in the `nexchats-us1` category:
+`assets/js/config.js -> CLOUDGATE` points at the Wasmer CloudGate app. Endpoints are tried
+in order (`endpoints`): if the Wasmer app can't be reached or answers 5xx, the next one takes
+over. The second entry is a placeholder; point it at another deployment of the same
+CloudGate API. All new uploads land in the `nexchats-us1` category:
 
 - `attachments/...` - chat files, avatars, icons, wallpapers (permanent
   CloudFront links, nothing expires)

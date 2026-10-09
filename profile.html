@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Your profile</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=45" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=46" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=45" />
-<link rel="stylesheet" href="assets/css/drive.css?v=45" />
-<script src="assets/js/ambient.js?v=45"></script>
+<link rel="stylesheet" href="assets/css/theme.css?v=46" />
+<link rel="stylesheet" href="assets/css/drive.css?v=46" />
+<script src="assets/js/ambient.js?v=46"></script>
 </head>
 <body>
 <div class="set-wrap">
@@ -24,7 +24,8 @@
     <div class="grp-label">Account</div>
     <button class="on" data-tab="profile"><span class="ni-ico c1"><i class="fa-solid fa-user"></i></span><span class="nt"><b>Profile</b><small>Name, bio, avatar</small></span></button>
     <button data-tab="appearance"><span class="ni-ico c2"><i class="fa-solid fa-palette"></i></span><span class="nt"><b>Appearance</b><small>Glass, wallpaper, colour</small></span></button>
-    <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro</b><small>Halo &amp; extras</small></span></button>
+    <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro</b><small>Halo, name style &amp; extras</small></span></button>
+    <button data-tab="shop" class="hidden nitro-only"><span class="ni-ico c3"><i class="fa-solid fa-bag-shopping"></i></span><span class="nt"><b>Nitro shop</b><small>Avatar frames &amp; bio banners</small></span></button>
     <div class="grp-label">Storage</div>
     <button data-tab="drive"><span class="ni-ico c6"><i class="fa-solid fa-hard-drive"></i></span><span class="nt"><b>My Drive</b><small>Private encrypted files</small></span></button>
     <div class="grp-label">Security</div>
@@ -187,6 +188,40 @@
           <span class="hint">Direct link to a GIF or APNG. It rings your avatar everywhere.</span>
         </div>
 
+        <div class="field" style="margin-top:18px;">
+          <label>Name style</label>
+          <span class="hint" style="margin:0 0 10px;display:block;">How your name looks on your profile card, in your user card and in chat.</span>
+          <div class="nx-fonts" id="nxFonts"></div>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Presets</label>
+          <div class="nx-presets" id="nxPresets"></div>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Colour</label>
+          <div class="nx-colors">
+            <label><input type="checkbox" id="nxUseAcc"> Use my accent colour</label>
+            <label id="nxC1Wrap">Colour <input type="color" id="nxC1" aria-label="Name colour"></label>
+            <label><input type="checkbox" id="nxGrad"> Gradient</label>
+            <label id="nxC2Wrap">to <input type="color" id="nxC2" aria-label="Gradient end colour"></label>
+          </div>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Effects</label>
+          <div class="nx-toggles">
+            <label><input type="checkbox" id="nxBold"> Bold</label>
+            <label><input type="checkbox" id="nxItalic"> Italic</label>
+            <label><input type="checkbox" id="nxShimmer"> Shimmer (needs a gradient)</label>
+            <label><input type="checkbox" id="nxGlowOn"> Glow</label>
+            <label id="nxGlowWrap">glow colour <input type="color" id="nxGlow" aria-label="Glow colour"></label>
+          </div>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label>Preview</label>
+          <div class="nx-preview" id="nxPreview"></div>
+          <span class="hint">ASCII art shows on your profile card and user card. In chat the name stays as text, with your colours and glow.</span>
+        </div>
+
         <div class="field hidden" id="haloCssField" style="margin-top:14px;">
           <label for="fHaloCss">Custom halo CSS</label>
           <textarea id="fHaloCss" rows="3" spellcheck="false" class="mono"
@@ -223,6 +258,21 @@
         <h4>Request declined</h4>
         <div class="bsub" id="nitroDeniedNote"></div>
         <button class="btn btn-ghost" id="btnNitroAgain" style="margin-top:6px;">Request again</button>
+      </div>
+    </section>
+
+    <!-- NITRO SHOP -->
+    <section class="set-inner hidden" data-pane="shop" data-nosave>
+      <header class="pane-head"><span class="ph-ico c3"><i class="fa-solid fa-bag-shopping"></i></span><div><h2>Nitro shop</h2><div class="sub">Animated frames for your avatar and banners for your bio. Equip one and it's live straight away.</div></div></header>
+      <div class="shop-sect">
+        <h4><i class="fa-solid fa-circle-notch"></i> Avatar frames</h4>
+        <div class="bsub">Drawn around your profile picture.</div>
+        <div class="shop-grid" id="shopPfp"></div>
+      </div>
+      <div class="shop-sect">
+        <h4><i class="fa-solid fa-id-card"></i> Bio banners</h4>
+        <div class="bsub">Drawn behind your bio on your profile and user card.</div>
+        <div class="shop-grid" id="shopBio"></div>
       </div>
     </section>
 
@@ -312,22 +362,22 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=45"></script>
-<script src="assets/js/supabase-client.js?v=45"></script>
-<script src="assets/js/ui.js?v=45"></script>
-<script src="assets/js/glass.js?v=45"></script>
-<script src="assets/js/tiff.js?v=45"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=45"></script>
-<script src="assets/js/cloudgate.js?v=45"></script>
-<script src="assets/js/storage.js?v=45"></script>
-<script src="assets/js/ice.js?v=45"></script>
-<script src="assets/js/md.js?v=45"></script>
-<script src="assets/js/presence.js?v=45"></script>
-<script src="assets/js/guard.js?v=45"></script>
-<script src="assets/js/notify.js?v=45"></script>
-<script src="assets/js/settings-ui.js?v=45"></script>
-<script src="assets/js/vault.js?v=45"></script>
-<script src="assets/js/drive.js?v=45"></script>
-<script src="assets/js/profile.js?v=45"></script>
+<script src="assets/js/config.js?v=46"></script>
+<script src="assets/js/supabase-client.js?v=46"></script>
+<script src="assets/js/ui.js?v=46"></script>
+<script src="assets/js/glass.js?v=46"></script>
+<script src="assets/js/tiff.js?v=46"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=46"></script>
+<script src="assets/js/cloudgate.js?v=46"></script>
+<script src="assets/js/storage.js?v=46"></script>
+<script src="assets/js/ice.js?v=46"></script>
+<script src="assets/js/md.js?v=46"></script>
+<script src="assets/js/presence.js?v=46"></script>
+<script src="assets/js/guard.js?v=46"></script>
+<script src="assets/js/notify.js?v=46"></script>
+<script src="assets/js/settings-ui.js?v=46"></script>
+<script src="assets/js/vault.js?v=46"></script>
+<script src="assets/js/drive.js?v=46"></script>
+<script src="assets/js/profile.js?v=46"></script>
 </body>
 </html>

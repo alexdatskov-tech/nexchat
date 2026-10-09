@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Admin</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=45" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=46" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=45" />
-<script src="assets/js/ambient.js?v=45"></script>
+<link rel="stylesheet" href="assets/css/theme.css?v=46" />
+<script src="assets/js/ambient.js?v=46"></script>
 </head>
 <body>
 <div class="hidden" id="denied" style="min-height:100dvh;display:grid;place-items:center;padding:24px;">
@@ -42,6 +42,7 @@
     <button data-tab="owner" class="hidden owner-tab" data-owner><span class="ni-ico owner-ico"><i class="fa-solid fa-crown"></i></span><span class="nt"><b>Owner</b><small>Permissions &amp; control</small></span></button>
     <div class="grp-label">Queues</div>
     <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro requests</b><small>Approve or decline</small></span><span id="pendCount"></span></button>
+    <button data-tab="storage" class="hidden" data-perm="manage_storage"><span class="ni-ico c6"><i class="fa-solid fa-hard-drive"></i></span><span class="nt"><b>Storage requests</b><small>More drive space</small></span><span id="storeCount"></span></button>
     <button data-tab="appeals" class="hidden" data-perm="review_appeals"><span class="ni-ico c8"><i class="fa-solid fa-gavel"></i></span><span class="nt"><b>Ban appeals</b><small>Second chances</small></span><span id="appealCount"></span></button>
   </nav>
 
@@ -141,6 +142,11 @@
       </div>
     </section>
 
+    <section class="set-inner hidden" data-pane="storage">
+      <header class="pane-head"><span class="ph-ico c6"><i class="fa-solid fa-hard-drive"></i></span><div><h2>Storage requests</h2><div class="sub">People asking for more room in My Drive. Approving sets their new size straight away.</div></div></header>
+      <div id="storeRows"></div>
+    </section>
+
     <section class="set-inner hidden" data-pane="appeals">
       <header class="pane-head"><span class="ph-ico c8"><i class="fa-solid fa-gavel"></i></span><div><h2>Ban appeals</h2><div class="sub">Accepting an appeal lifts the ban straight away.</div></div></header>
       <div id="appealRows"></div>
@@ -179,18 +185,18 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=45"></script>
-<script src="assets/js/supabase-client.js?v=45"></script>
-<script src="assets/js/ui.js?v=45"></script>
-<script src="assets/js/glass.js?v=45"></script>
-<script src="assets/js/md.js?v=45"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=45"></script>
-<script src="assets/js/cloudgate.js?v=45"></script>
-<script src="assets/js/storage.js?v=45"></script>
-<script src="assets/js/presence.js?v=45"></script>
-<script src="assets/js/guard.js?v=45"></script>
-<script src="assets/js/notify.js?v=45"></script>
-<script src="assets/js/nav.js?v=45"></script>
-<script src="assets/js/admin.js?v=45"></script>
+<script src="assets/js/config.js?v=46"></script>
+<script src="assets/js/supabase-client.js?v=46"></script>
+<script src="assets/js/ui.js?v=46"></script>
+<script src="assets/js/glass.js?v=46"></script>
+<script src="assets/js/md.js?v=46"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=46"></script>
+<script src="assets/js/cloudgate.js?v=46"></script>
+<script src="assets/js/storage.js?v=46"></script>
+<script src="assets/js/presence.js?v=46"></script>
+<script src="assets/js/guard.js?v=46"></script>
+<script src="assets/js/notify.js?v=46"></script>
+<script src="assets/js/nav.js?v=46"></script>
+<script src="assets/js/admin.js?v=46"></script>
 </body>
 </html>

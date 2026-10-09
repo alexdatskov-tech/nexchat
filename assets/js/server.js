@@ -256,7 +256,7 @@
       ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`
       : `<div class="m-av" data-u="${m.author_id}" style="cursor:pointer">${UI.avatar(p, 38, { presence: true })}</div>`;
     const head = grouped ? '' :
-      `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+      `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;${UI.nxNameCss(p)}">${UI.nxNameText(p)}</span>
        ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
        <span class="m-time">${UI.timeLabel(m.created_at)}</span></div>`;
 
@@ -307,7 +307,7 @@
       first.outerHTML = `<div class="m-av" data-u="${uid}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
       if (!el.querySelector('.m-head')) {
         el.querySelector('.m-main').insertAdjacentHTML('afterbegin',
-          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;${UI.nxNameCss(p)}">${UI.nxNameText(p)}</span>
            ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
            <span class="m-time">${UI.timeLabel(ts)}</span></div>`);
       }

@@ -17,31 +17,57 @@
    encrypted before upload (see vault.js); chat attachments are not. */
 window.CloudGate = (function () {
   const cfg = () => (window.NEXCHAT_CONFIG || {}).CLOUDGATE || null;
-  const enabled = () => !!cfg()?.endpoint;
   const category = () => cfg()?.category || 'nexchats-us1';
-  const base = () => cfg().endpoint.replace(/\/+$/, '');
   const auth = () => 'Basic ' + btoa(unescape(encodeURIComponent(`${cfg().user}:${cfg().pass}`)));
 
+  /* Endpoints in the order they should be tried. A single `endpoint` string
+     still works for older configs. */
+  function endpoints() {
+    const c = cfg();
+    if (!c) return [];
+    const list = Array.isArray(c.endpoints) && c.endpoints.length
+      ? c.endpoints
+      : (c.endpoint ? [{ name: 'primary', endpoint: c.endpoint }] : []);
+    return list
+      .map((e) => ({ name: e.name || 'endpoint', base: String(e.endpoint || '').replace(/\/+$/, '') }))
+      .filter((e) => /^https?:\/\//.test(e.base));
+  }
+  const enabled = () => endpoints().length > 0;
+
   // Network blips (mobile, sleeping laptops, Wasmer cold starts) get a couple
-  // of quiet retries before an error reaches the user.
+  // of quiet retries on the same endpoint before we move on to the next one.
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   async function retry(fn, tries = 3) {
     for (let i = 0; ; i++) {
       try { return await fn(); } catch (e) {
-        if (i >= tries - 1 || e.name === 'AbortError' || e.noRetry) throw e;
+        if (i >= tries - 1 || !e.transient) throw e;
         await sleep(400 * 2 ** i);
       }
     }
   }
 
-  async function api(path, { method = 'GET', body, query } = {}) {
-    const url = new URL(base() + path);
+  // One request to one endpoint. "Transient" means the endpoint itself is the
+  // problem (unreachable, or a 5xx). A 4xx is an answer and is never retried
+  // elsewhere.
+  function transient(msg) { const e = new Error(msg); e.transient = true; return e; }
+  async function callAt(ep, path, { method = 'GET', body, query } = {}) {
+    const url = new URL(ep.base + path);
     Object.entries(query || {}).forEach(([k, v]) => v != null && url.searchParams.set(k, v));
-    const r = await retry(() => fetch(url, {
-      method,
-      headers: { authorization: auth(), ...(body ? { 'content-type': 'application/json' } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-    }).then((res) => { if (res.status >= 502 && res.status <= 504) throw new Error(`Storage error (${res.status})`); return res; }));
+    const r = await retry(async () => {
+      let res;
+      try {
+        res = await fetch(url, {
+          method,
+          headers: { authorization: auth(), ...(body ? { 'content-type': 'application/json' } : {}) },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      } catch (e) {
+        if (e.name === 'AbortError') throw e;
+        throw transient(`Storage unreachable (${ep.name})`);
+      }
+      if (res.status >= 500 && res.status <= 599) throw transient(`Storage error (${res.status})`);
+      return res;
+    });
     let out = null;
     try { out = await r.json(); } catch {}
     if (!r.ok) {
@@ -50,6 +76,23 @@ window.CloudGate = (function () {
     }
     return out;
   }
+
+  /* Failover: try each endpoint in turn until one answers. Returns the data
+     and the endpoint that answered, so multipart uploads can stay pinned to it. */
+  async function route(path, opts) {
+    const list = endpoints();
+    if (!list.length) throw new Error('Storage is not configured.');
+    let last = null;
+    for (const ep of list) {
+      try { return { data: await callAt(ep, path, opts), ep }; }
+      catch (e) {
+        if (!e.transient) throw e;
+        last = e;
+      }
+    }
+    throw new Error(`${last?.message || 'Storage error'} - every storage endpoint failed`);
+  }
+  const api = async (path, opts) => (await route(path, opts)).data;
 
   /* ---- paths: everything is relative to our category ---- */
   const clean = (p) => String(p || '').split('/').filter(Boolean).join('/');
@@ -89,7 +132,7 @@ window.CloudGate = (function () {
     if (!enabled()) throw new Error('Storage is not configured.');
     const p = clean(path);
     if (blob.size > MULTIPART_OVER) {
-      const m = await api('/api/upload/multipart/create', { method: 'POST', body: { category: category(), path: p, filename, size: blob.size } });
+      const { data: m, ep } = await route('/api/upload/multipart/create', { method: 'POST', body: { category: category(), path: p, filename, size: blob.size } });
       const loaded = new Array(m.partUrls.length).fill(0);
       const report = () => onProgress?.(loaded.reduce((a, b) => a + b, 0) / blob.size);
       try {
@@ -103,10 +146,11 @@ window.CloudGate = (function () {
           }
         };
         await Promise.all([worker(), worker(), worker(), worker()]);
-        const done = await api('/api/upload/multipart/complete', { method: 'POST', body: { key: m.key, uploadId: m.uploadId } });
+        // Pinned to the endpoint that started the upload: its upload id lives there.
+        const done = await callAt(ep, '/api/upload/multipart/complete', { method: 'POST', body: { key: m.key, uploadId: m.uploadId } });
         return { key: done.key, url: done.url || m.publicUrl, size: blob.size, type: m.contentType };
       } catch (e) {
-        api('/api/upload/multipart/abort', { method: 'POST', body: { key: m.key, uploadId: m.uploadId } }).catch(() => {});
+        callAt(ep, '/api/upload/multipart/abort', { method: 'POST', body: { key: m.key, uploadId: m.uploadId } }).catch(() => {});
         throw e;
       }
     }
@@ -125,9 +169,13 @@ window.CloudGate = (function () {
       if (r.ok) return r.arrayBuffer();
     } catch {}
     const key = /^https?:/i.test(keyOrUrl) ? keyOf(keyOrUrl) : keyOrUrl;
-    const r = await fetch(base() + '/api/download?key=' + encodeURIComponent(key), { headers: { authorization: auth() } });
-    if (!r.ok) throw new Error('Could not read that file.');
-    return r.arrayBuffer();
+    for (const ep of endpoints()) {
+      try {
+        const r = await fetch(ep.base + '/api/download?key=' + encodeURIComponent(key), { headers: { authorization: auth() } });
+        if (r.ok) return r.arrayBuffer();
+      } catch {}
+    }
+    throw new Error('Could not read that file.');
   }
 
   function publicUrl(key) {
@@ -145,7 +193,7 @@ window.CloudGate = (function () {
   const exists = (key) => api('/api/files/exists', { query: { key } });
 
   return {
-    enabled, category, join, keyOf, isOurs, publicUrl,
+    enabled, endpoints, category, join, keyOf, isOurs, publicUrl,
     upload, fetchBytes, browse, createFolder, renameFolder, deleteFolder, renameFile, deleteFile, exists,
   };
 })();

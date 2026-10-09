@@ -18,11 +18,23 @@ window.NEXCHAT_CONFIG = {
   // This login ships to every browser, so treat the bucket as readable by
   // anyone who looks; private drive files are encrypted before upload.
   CLOUDGATE: {
-    endpoint: 'https://alexd-us1-s3.wasmer.app',
+    // Tried in order. If one can't be reached (or answers 5xx), the next one
+    // takes over. Every endpoint must run the same CloudGate API, with the
+    // same login and category. The fallback is a placeholder: point it at a
+    // second deployment of cloudgate-wasmer when you have one.
+    endpoints: [
+      { name: 'wasmer', endpoint: 'https://alexd-us1-s3.wasmer.app' },
+      { name: 'fallback', endpoint: 'https://cloudgate-fallback.placeholder.invalid' },
+    ],
     user: 'admin',
     pass: 'admin!',
     category: 'nexchats-us1',
     cdn: 'd1dncmkdpaif79.cloudfront.net',
+    // Default My Drive size for a user with no quota of their own yet. Admins
+    // change it per user (Admin -> Users, or Storage requests).
+    driveQuotaGB: 5,
+    // Largest single file in My Drive, in GB.
+    driveMaxFileGB: 5,
   },
   // TURN relays (optional). Only used when two people can't connect directly
   // (strict NAT / school & office networks). A free public relay is the

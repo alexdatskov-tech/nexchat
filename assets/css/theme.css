@@ -539,7 +539,7 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .chat-head .btn-icon:hover { color: var(--txt-1); }
 
 /* overflow-anchor off: prepending older history adjusts scrollTop itself. */
-.msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 0 10px; display: flex; flex-direction: column; overflow-anchor: none; }
+.msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 0 calc(var(--composer-h, 88px) + 6px); display: flex; flex-direction: column; overflow-anchor: none; }
 .msgs > :first-child { margin-top: auto; }
 .msgs-older {
   align-self: center; display: inline-flex; align-items: center; gap: 8px; margin: 6px auto 12px;
@@ -666,10 +666,18 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .editbox small { font-size: 11.5px; color: var(--txt-3); }
 
 /* ---- Composer -------------------------------------------------------------- */
-.composer { flex-shrink: 0; padding: 6px 18px calc(18px + env(safe-area-inset-bottom)); }
+.composer {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; flex-shrink: 0;
+  padding: 6px 18px calc(14px + env(safe-area-inset-bottom));
+  pointer-events: none; /* only the bar itself takes clicks; the chat behind stays scrollable */
+}
+.composer > * { pointer-events: auto; }
 .composer-inner {
   display: flex; align-items: flex-end; gap: 6px; padding: 6px 6px 6px 8px;
-  background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 22px; box-shadow: var(--sh-2);
+  background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.035)), rgba(20,22,30,.46);
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  border: 1px solid rgba(255,255,255,.15); border-radius: 22px;
+  box-shadow: 0 12px 34px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.14);
   transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 .composer-inner:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-ring), var(--sh-2); }
@@ -1531,7 +1539,7 @@ body.has-bg .chan.on, body.has-bg .dm-item.on { background: color-mix(in srgb, v
 body.has-bg .m-text, body.has-bg .m-name, body.has-bg .m-head { text-shadow: 0 1px 3px rgba(0,0,0,.7); }
 body.has-bg .m:hover { background: rgba(255,255,255,.06); }
 body.has-bg .msgs-top p { color: var(--txt-1); text-shadow: 0 1px 3px rgba(0,0,0,.75); }
-body.has-bg .composer-inner { background: rgba(18,20,28,.86); }
+body.has-bg .composer-inner { background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.03)), rgba(18,20,28,.5); }
 body.has-bg .m-text code, body.has-bg .m-text pre { background: rgba(8,9,13,.74); }
 body.has-bg .scard { background: rgba(21,24,32,.84); border-color: rgba(255,255,255,.12); }
 body.has-bg .scard-ico { border-color: rgba(21,24,32,.9); }
@@ -1630,7 +1638,6 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 /* ============================================================================
    COMPOSER "+" MENU, VOICE RECORDER, MARKDOWN EDITOR
    ============================================================================ */
-.composer { position: relative; }
 .plus-btn { color: var(--txt-2); transition: color var(--t-fast), background var(--t-fast), transform .45s var(--spring); }
 .plus-btn i { transition: transform .45s var(--spring); }
 .plus-btn:hover i { transform: rotate(90deg); }
@@ -1859,3 +1866,91 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 .role-txt { font-size: 13px; font-weight: 600; color: var(--txt-2); padding: 6px 12px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
 .us-act.locked { border-style: dashed; }
 .us-act.locked b i { color: var(--txt-3); margin-right: 4px; font-size: 11px; }
+
+/* ============================================================================
+   FIXES AND NITRO EXTRAS
+   ============================================================================ */
+
+/* Admin sidebar group labels (Platform / Staff / Queues) were being squeezed
+   to nothing: the column is taller than the window, so flexbox shrank them and
+   the overflow clip cut the letters. Items keep their natural height and the
+   column scrolls instead. */
+.set-nav > * { flex-shrink: 0; }
+.set-nav .grp-label { line-height: 1.35; }
+
+/* Chat input: the composer is glass that floats over the messages, so the
+   list runs right to the bottom of the page (no solid strip under the bar). */
+
+/* Nitro name styles */
+@keyframes nxShimmer { from { background-position: 0% 50%; } to { background-position: 220% 50%; } }
+.nx-name { overflow-wrap: anywhere; }
+.nx-ascii {
+  display: block; margin: 6px 0 2px; max-width: 100%; overflow-x: auto;
+  font-family: var(--f-mono); font-size: 8.5px; line-height: 1.04; font-weight: 800;
+  white-space: pre; color: var(--txt-1); letter-spacing: 0;
+}
+.pcard h3 .nx-ascii { font-size: 8px; }
+
+/* Nitro avatar decoration: an animated frame laid over the picture */
+.av-decoed { position: relative; display: inline-flex; flex-shrink: 0; border-radius: 50%; }
+.av-deco {
+  position: absolute; left: 50%; top: 50%; width: 138%; height: 138%;
+  transform: translate(-50%, -50%); max-width: none; pointer-events: none; z-index: 2;
+}
+.av-halo > .av-decoed { border: 0; }
+.av-halo > .av-decoed > .av { border: 2px solid var(--bg-1); }
+
+/* Nitro bio banner: an animated frame behind the bio text */
+.bio-deco-box { position: relative; isolation: isolate; margin: 14px 10px; padding: 10px 14px; }
+.bio-deco-box > .bio-deco {
+  position: absolute; left: -12px; top: -14px; width: calc(100% + 24px); height: calc(100% + 28px);
+  object-fit: fill; z-index: -1; pointer-events: none;
+}
+.pcard .bio-deco-box { margin: 12px 0 0; padding: 8px 12px; }
+
+/* Nitro shop */
+.nitro-only.hidden { display: none !important; }
+.shop-sect + .shop-sect { margin-top: 18px; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 12px; }
+.shop-item {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  padding: 14px 12px 12px; border-radius: 18px; background: rgba(255,255,255,.035); border: 1px solid var(--line);
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.shop-item:hover { border-color: var(--line-2); background: rgba(255,255,255,.06); }
+.shop-item.on { border-color: var(--accent-ring); background: var(--accent-lo); }
+.shop-item .si-prev { width: 104px; height: 104px; display: grid; place-items: center; position: relative; }
+.shop-item .si-prev .av { width: 64px; height: 64px; font-size: 22px; }
+.shop-item .si-prev .av-decoed { width: 64px; height: 64px; }
+.shop-item .si-prev .av-deco { width: 138%; height: 138%; }
+.shop-item .si-bio { width: 100%; min-height: 64px; display: grid; place-items: center; }
+.shop-item .si-bio .bio-deco-box { margin: 0; width: 100%; font-size: 12px; color: var(--txt-2); }
+.shop-item b { font-size: 13px; }
+.shop-item small { font-size: 11px; color: var(--txt-3); }
+.shop-item .btn { width: 100%; }
+.shop-empty { padding: 26px 18px; text-align: center; border-radius: 18px; border: 1px dashed var(--line-2); color: var(--txt-2); }
+.shop-empty i { font-size: 22px; color: var(--nitro); margin-bottom: 8px; }
+.shop-empty b { display: block; color: var(--txt-1); margin-bottom: 4px; }
+.shop-empty small { font-size: 12.5px; color: var(--txt-3); }
+
+/* Nitro name editor */
+.nx-fonts { display: flex; flex-wrap: wrap; gap: 8px; }
+.nx-fonts button, .nx-presets button {
+  padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: rgba(255,255,255,.03);
+  color: var(--txt-2); font-size: 12.5px; font-family: var(--f-body); cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.nx-fonts button:hover, .nx-presets button:hover { color: var(--txt-1); background: rgba(255,255,255,.07); }
+.nx-fonts button.on { border-color: var(--nitro); color: var(--txt-1); background: rgba(245,185,74,.12); }
+.nx-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.nx-toggles { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
+.nx-toggles label { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--txt-2); cursor: pointer; }
+.nx-colors { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.nx-colors label { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--txt-2); }
+.nx-colors input[type=color] { width: 38px; height: 30px; padding: 0; border: none; background: none; cursor: pointer; }
+.nx-preview {
+  min-height: 74px; padding: 14px; border-radius: 16px; display: grid; place-items: center; text-align: center;
+  background: rgba(0,0,0,.28); border: 1px solid var(--line); overflow: hidden;
+}
+.nx-preview .nx-name { font-size: 22px; font-weight: 700; }
+.nx-preview .nx-ascii { font-size: 9px; text-align: left; margin: 0; }

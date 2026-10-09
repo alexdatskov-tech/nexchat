@@ -13,8 +13,13 @@ window.Drive = (function () {
     get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   };
-  const MAX_FILE = 2 * 1024 ** 3;
-  const quotaBytes = () => ((window.NEXCHAT_CONFIG?.CLOUDGATE?.driveQuotaGB) || 5) * 1024 ** 3;
+  const GB = 1024 ** 3;
+  const CFG = () => window.NEXCHAT_CONFIG?.CLOUDGATE || {};
+  const MAX_FILE = (CFG().driveMaxFileGB || 5) * GB;
+  // Each user's own quota (profiles.drive_quota_gb, set by staff), falling back
+  // to the site default while that column is not there yet.
+  const quotaGB = () => Number(me?.drive_quota_gb) || CFG().driveQuotaGB || 5;
+  const quotaBytes = () => quotaGB() * GB;
 
   let me = null, K = null, host = null, mounted = false;
   let path = [];                     // [{ enc, name }]
@@ -23,6 +28,8 @@ window.Drive = (function () {
   let mode = 'files';                // files | recent | image | video | audio | doc | other
   let query = '';
   let index = null, indexP = null;   // every file in the drive, for search/types/usage
+  let indexBytes = 0, addedBytes = 0; // bytes in the index, plus uploads finished since it was built
+  let storeReq = null;               // latest storage request from this user, if loaded
   const sel = new Set();
   const thumbs = new Map();          // key -> object URL
 
@@ -103,6 +110,7 @@ window.Drive = (function () {
       // a worker can idle while another is still discovering folders
       while (queue.length) await work();
       index = all;
+      indexBytes = all.reduce((a, f) => a + f.stored, 0); addedBytes = 0;
       indexP = null;
       paintUsage();
       return all;
@@ -111,6 +119,8 @@ window.Drive = (function () {
     return indexP;
   }
   const dirty = () => { index = null; };
+  // Bytes this drive holds right now, or null while the index is still loading.
+  const usedBytes = () => (index ? indexBytes + addedBytes : null);
 
   /* ---------------- shell ---------------- */
   function shell() {
@@ -144,6 +154,7 @@ window.Drive = (function () {
         <div class="drv-usage" id="dUsage">
           <div class="du-bar"><i style="width:0"></i></div>
           <small>Calculating usage…</small>
+          <button class="drv-more-btn" id="dAsk"><i class="fa-solid fa-circle-up"></i> <span>Request more storage</span></button>
         </div>
       </aside>
 
@@ -178,9 +189,67 @@ window.Drive = (function () {
       <input type="file" id="dDir" webkitdirectory multiple hidden>
     </div>`;
     wire();
+    paintRequest();
+  }
+
+  /* ---- more storage ----
+     Users ask here; staff answer in the admin panel. The quota itself is only
+     changed by staff (the database refuses anything else). */
+  function paintRequest() {
+    const b = $('#dAsk'); if (!b) return;
+    const pending = storeReq?.status === 'pending';
+    b.querySelector('span').textContent = pending ? `Requested ${storeReq.requested_gb} GB · pending` : 'Request more storage';
+    b.disabled = pending;
+    b.title = pending ? 'Your request is with the admins' : '';
+  }
+
+  async function loadRequest() {
+    if (!window.db) return;
+    const { data, error } = await window.db.from('storage_requests').select('*')
+      .eq('user_id', me.id).order('created_at', { ascending: false }).limit(1);
+    if (error) return; // table not created yet: the button just stays available
+    storeReq = data?.[0] || null;
+    paintRequest();
+  }
+
+  function askMoreStorage() {
+    const cur = quotaGB();
+    const ov = document.createElement('div');
+    ov.className = 'overlay';
+    ov.innerHTML = `<div class="modal" style="max-width:420px;">
+      <div class="modal-head"><h3>Request more storage</h3><button class="x-btn" data-no><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="modal-body">
+        <p class="bsub" style="margin:0 0 12px">Your drive is ${cur} GB. Tell the admins how much you need.</p>
+        <div class="field"><label for="rqGb">New size (GB)</label>
+          <input id="rqGb" class="input" type="number" min="${cur + 1}" max="2048" step="1" value="${cur * 2}" /></div>
+        <div class="field" style="margin-top:12px"><label for="rqWhy">Why (optional)</label>
+          <textarea id="rqWhy" rows="3" maxlength="1000" placeholder="What are you storing?"></textarea></div>
+        <p class="err" id="rqErr"></p>
+      </div>
+      <div class="modal-foot"><button class="btn btn-quiet" data-no>Cancel</button><button class="btn btn-primary" data-yes><i class="fa-solid fa-paper-plane"></i> Send request</button></div>
+    </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.querySelectorAll('[data-no]').forEach((x) => { x.onclick = close; });
+    ov.onclick = (e) => { if (e.target === ov) close(); };
+    ov.querySelector('[data-yes]').onclick = async () => {
+      const gb = Math.floor(Number(ov.querySelector('#rqGb').value));
+      const err = ov.querySelector('#rqErr');
+      if (!(gb > cur && gb <= 2048)) return (err.textContent = `Pick a number from ${cur + 1} to 2048.`);
+      const btn = ov.querySelector('[data-yes]'); btn.disabled = true;
+      const { error } = await window.db.from('storage_requests').insert({
+        user_id: me.id, requested_gb: gb, reason: ov.querySelector('#rqWhy').value.trim() || null,
+      });
+      if (error) { btn.disabled = false; return (err.textContent = /duplicate|unique|idx_storage/i.test(error.message) ? 'You already have a request open.' : error.message); }
+      close();
+      toast(`Request for ${gb} GB sent to the admins.`);
+      await loadRequest();
+    };
+    ov.querySelector('#rqGb').focus();
   }
 
   function wire() {
+    $('#dAsk').onclick = askMoreStorage;
     const menu = $('#dNewMenu');
     $('#dNew').onclick = (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); };
     document.addEventListener('click', (e) => { if (!e.target.closest('.drv-newwrap')) menu.classList.add('hidden'); closeCtx(e); });
@@ -309,11 +378,12 @@ window.Drive = (function () {
 
   function paintUsage() {
     const u = $('#dUsage'); if (!u || !index) return;
-    const used = index.reduce((a, f) => a + f.stored, 0), q = quotaBytes();
+    const used = usedBytes(), q = quotaBytes();
     const pct = Math.min(100, used / q * 100);
     u.querySelector('i').style.width = Math.max(pct, used ? 1.5 : 0) + '%';
     u.querySelector('.du-bar').classList.toggle('warn', pct > 85);
     u.querySelector('small').innerHTML = `<b>${fmt(used)}</b> of ${fmt(q)} · ${index.length} file${index.length === 1 ? '' : 's'}`;
+    paintRequest();
     paintNav();
   }
 
@@ -720,7 +790,7 @@ window.Drive = (function () {
     if (!files.length) return;
     const base = path.slice();
     for (const f of files) {
-      if (f.size > MAX_FILE) { toast(`${f.name} is over 2 GB, which is the per-file limit.`, true); continue; }
+      if (f.size > MAX_FILE) { toast(`${f.name} is over ${fmt(MAX_FILE)}, which is the per-file limit.`, true); continue; }
       const rel = withDirs ? (f.nxPath || f.webkitRelativePath || f.name) : f.name;
       const dirs = rel.split('/').slice(0, -1).filter(Boolean);
       const job = { f, name: f.name, base, dirs, pct: 0, state: 'queued', ctl: new AbortController() };
@@ -765,6 +835,13 @@ window.Drive = (function () {
       job.state = 'encrypting'; paintJob(job);
       (async () => {
         try {
+          // Refuse before spending time encrypting if this would overflow the quota.
+          // Bytes already in flight count too, so two big files can't both squeeze in.
+          if (usedBytes() === null) await buildIndex();
+          const inflight = queue.reduce((a, j) => a + (j !== job && ['encrypting', 'uploading'].includes(j.state) ? j.f.size : 0), 0);
+          if (usedBytes() + inflight + job.f.size > quotaBytes()) {
+            throw new Error(`Over your ${quotaGB()} GB limit. Request more storage in My Drive.`);
+          }
           const segs = await ensureDirs(job.base, job.dirs);
           const blob = await Vault.encBlob(K, job.f);
           if (job.ctl.signal.aborted) throw new DOMException('cancelled', 'AbortError');
@@ -773,7 +850,9 @@ window.Drive = (function () {
             signal: job.ctl.signal, onProgress: (p) => { job.pct = p; paintJob(job); },
           });
           job.state = 'done'; job.pct = 1;
-          dirty();
+          // The index stays valid; just count the new bytes. It is rebuilt
+          // once the whole queue has finished.
+          if (index) addedBytes += job.f.size;
         } catch (e) {
           job.state = e.name === 'AbortError' ? 'cancelled' : 'error';
           job.err = e.message;
@@ -848,6 +927,7 @@ window.Drive = (function () {
     shell();
     refresh();
     buildIndex().catch(() => { const u = $('#dUsage small'); if (u) u.textContent = 'Usage unavailable'; });
+    loadRequest();
   }
 
   return { mount };

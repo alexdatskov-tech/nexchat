@@ -35,8 +35,142 @@ window.UI = (function () {
     const inner = profile?.avatar_url
       ? `<div class="av" style="width:${size}px;height:${size}px;"><img src="${esc(profile.avatar_url)}" alt=""></div>`
       : `<div class="av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;${bg}">${initial(name)}</div>`;
-    if (profile?.is_nitro && o.halo !== false) return `<span class="${haloClass(profile)}"${haloStyle(profile)}>${inner}</span>`;
-    return inner;
+    // Nitro avatar decoration: an animated frame laid over the picture.
+    const deco = nxDecoPath(profile, 'pfp');
+    const framed = deco && o.deco !== false
+      ? `<span class="av-decoed">${inner}<img class="av-deco" src="${esc(deco)}" alt="" loading="lazy"></span>`
+      : inner;
+    if (profile?.is_nitro && o.halo !== false) return `<span class="${haloClass(profile)}"${haloStyle(profile)}>${framed}</span>`;
+    return framed;
+  }
+
+  /* ---- Nitro extras: name styles, avatar and bio decorations ----
+     Everything here is stored in profile.theme and only shown while the
+     account is Nitro. Values are checked on the way in, so a hand-edited row
+     can't inject CSS or paths. */
+  const NX_FONTS = ['normal', 'bold', 'script', 'double', 'ascii'];
+  const HEX = /^#[0-9a-f]{6}$/i;
+
+  function nxNameStyle(p) {
+    if (!p?.is_nitro) return null;
+    const n = p.theme?.name_style;
+    if (!n || typeof n !== 'object') return null;
+    const font = NX_FONTS.includes(n.font) ? n.font : 'normal';
+    return {
+      font,
+      color: HEX.test(n.color || '') ? n.color : null,
+      color2: HEX.test(n.color2 || '') ? n.color2 : null,
+      glow: HEX.test(n.glow || '') ? n.glow : null,
+      italic: !!n.italic,
+      shimmer: !!n.shimmer,
+      bold: !!n.bold || font === 'bold',
+    };
+  }
+
+  // Unicode lettering: these are real text characters, so they copy, search and
+  // wrap like normal names. Bold, script and double-struck share the same layout.
+  const NX_FANCY = {
+    bold:   { up: 0x1D400, lo: 0x1D41A, dg: 0x1D7CE },
+    script: { up: 0x1D4D0, lo: 0x1D4EA },
+    double: { up: 0x1D538, lo: 0x1D552, dg: 0x1D7D8 },
+  };
+  const NX_DOUBLE_HOLES = { C: 0x2102, H: 0x210D, N: 0x2115, P: 0x2119, Q: 0x211A, R: 0x211D, Z: 0x2124 };
+  function nxFancy(text, font) {
+    const m = NX_FANCY[font];
+    if (!m) return text;
+    return [...text].map((ch) => {
+      const c = ch.codePointAt(0);
+      if (c >= 65 && c <= 90) {
+        if (font === 'double' && NX_DOUBLE_HOLES[ch]) return String.fromCodePoint(NX_DOUBLE_HOLES[ch]);
+        return String.fromCodePoint(m.up + c - 65);
+      }
+      if (c >= 97 && c <= 122) return String.fromCodePoint(m.lo + c - 97);
+      if (c >= 48 && c <= 57 && m.dg) return String.fromCodePoint(m.dg + c - 48);
+      return ch;
+    }).join('');
+  }
+
+  // Inline CSS for a name: colour or gradient, glow, weight, slant, shimmer.
+  function nxNameCss(p) {
+    const ns = nxNameStyle(p);
+    const accent = p?.accent_color || 'var(--txt-1)';
+    if (!ns) return `color:${accent};`;
+    let css = '';
+    const grad = ns.color2 ? `linear-gradient(90deg, ${ns.color || accent}, ${ns.color2})` : null;
+    if (grad) css += `background:${grad};-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;`;
+    else css += `color:${ns.color || accent};`;
+    if (ns.shimmer && grad) css += 'background-size:220% auto;animation:nxShimmer 3.2s linear infinite;';
+    if (ns.glow) css += `filter:drop-shadow(0 0 4px ${ns.glow}) drop-shadow(0 0 12px ${ns.glow});`;
+    if (ns.bold) css += 'font-weight:800;';
+    if (ns.italic) css += 'font-style:italic;';
+    return css;
+  }
+
+  // The name as text, for lists and messages. ASCII art only shows on the
+  // profile card and the user card; everywhere else it falls back to plain text.
+  function nxNameText(p) {
+    const name = p?.display_name || p?.username || '?';
+    const ns = nxNameStyle(p);
+    return esc(ns && ns.font !== 'ascii' ? nxFancy(name, ns.font) : name);
+  }
+
+  // Block-letter art for the ASCII style. 3 x 5 pixel glyphs, drawn with blocks.
+  const NX_PIXEL = {
+    A: ['010', '101', '111', '101', '101'], B: ['110', '101', '110', '101', '110'],
+    C: ['011', '100', '100', '100', '011'], D: ['110', '101', '101', '101', '110'],
+    E: ['111', '100', '110', '100', '111'], F: ['111', '100', '110', '100', '100'],
+    G: ['011', '100', '101', '101', '011'], H: ['101', '101', '111', '101', '101'],
+    I: ['111', '010', '010', '010', '111'], J: ['001', '001', '001', '101', '010'],
+    K: ['101', '101', '110', '101', '101'], L: ['100', '100', '100', '100', '111'],
+    M: ['101', '111', '111', '101', '101'], N: ['110', '101', '101', '101', '101'],
+    O: ['010', '101', '101', '101', '010'], P: ['110', '101', '110', '100', '100'],
+    Q: ['010', '101', '101', '110', '011'], R: ['110', '101', '110', '101', '101'],
+    S: ['011', '100', '010', '001', '110'], T: ['111', '010', '010', '010', '010'],
+    U: ['101', '101', '101', '101', '111'], V: ['101', '101', '101', '101', '010'],
+    W: ['101', '101', '111', '111', '101'], X: ['101', '101', '010', '101', '101'],
+    Y: ['101', '101', '010', '010', '010'], Z: ['111', '001', '010', '100', '111'],
+    0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'],
+    2: ['110', '001', '010', '100', '111'], 3: ['110', '001', '010', '001', '110'],
+    4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '110', '001', '110'],
+    6: ['011', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'],
+    8: ['111', '101', '111', '101', '111'], 9: ['111', '101', '111', '001', '110'],
+    ' ': ['000', '000', '000', '000', '000'], '?': ['110', '001', '011', '000', '010'],
+  };
+  function nxAsciiArt(text) {
+    const rows = ['', '', '', '', ''];
+    [...String(text || '').toUpperCase().slice(0, 12)].forEach((ch, i) => {
+      const g = NX_PIXEL[ch] || NX_PIXEL['?'];
+      for (let r = 0; r < 5; r++) {
+        rows[r] += (i ? ' ' : '') + g[r].replace(/0/g, ' ').replace(/1/g, '\u2588');
+      }
+    });
+    return rows.join('\n');
+  }
+
+  // The name block for the profile card and user card: ASCII art or the styled text.
+  function nxNameHtml(p, cls) {
+    const ns = nxNameStyle(p);
+    if (ns?.font === 'ascii') {
+      return `<pre class="nx-ascii ${cls || ''}" style="${esc(nxNameCss(p))}" aria-label="${nxNameText(p)}">${esc(nxAsciiArt(p.display_name || p.username))}</pre>`;
+    }
+    return `<span class="nx-name ${cls || ''}" style="${esc(nxNameCss(p))}">${nxNameText(p)}</span>`;
+  }
+
+  // Decorations are files under assets/deco/. Only that folder is accepted.
+  function nxDecoPath(p, kind) {
+    if (!p?.is_nitro) return null;
+    const folder = kind === 'pfp' ? 'assets/deco/pfp/' : 'assets/deco/profile/';
+    const v = kind === 'pfp' ? p.theme?.pfp_deco : p.theme?.bio_deco;
+    if (typeof v !== 'string' || !v.startsWith(folder) || v.includes('..')) return null;
+    if (!/^[\w./-]+\.(png|apng|gif|webp)$/i.test(v)) return null;
+    return v;
+  }
+
+  // Wraps the bio text in its banner overlay when one is equipped.
+  function nxBioBox(p, innerHtml) {
+    const deco = nxDecoPath(p, 'bio');
+    if (!deco) return innerHtml;
+    return `<div class="bio-deco-box"><img class="bio-deco" src="${esc(deco)}" alt="">${innerHtml}</div>`;
   }
 
   /* ---- Nitro halo ----
@@ -295,7 +429,7 @@ window.UI = (function () {
       <div class="upop-banner" style="background:${banner}"></div>
       <div class="upop-body">
         <div class="upop-av ${p.is_nitro ? haloClass(p) : ''}"${p.is_nitro ? haloStyle(p) : ''}>${avatar(p, 68, { halo: false })}</div>
-        <h3>${esc(name)}
+        <h3>${nxNameHtml(p)}
           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>' : ''}
           ${roleBadge(p)}</h3>
         <div class="handle">@${esc(p.username)}</div>
@@ -304,7 +438,7 @@ window.UI = (function () {
           ${window.Presence?.isOnline(p.id) ? 'Online' : 'Offline'}
         </div>
         ${p.custom_status ? `<div class="sect"><h5>Status</h5><p>${esc(p.custom_status)}</p></div>` : ''}
-        <div class="sect"><h5>About me</h5><p>${p.bio ? esc(p.bio) : '<span style="color:var(--txt-3)">Nothing here yet.</span>'}</p></div>
+        <div class="sect"><h5>About me</h5>${nxBioBox(p, `<p>${p.bio ? esc(p.bio) : '<span style="color:var(--txt-3)">Nothing here yet.</span>'}</p>`)}</div>
         ${roleChips}
         <div class="sect"><h5>Member since</h5><p>${new Date(p.created_at).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</p></div>
         ${actions}
@@ -587,5 +721,20 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  /* The chat composer floats over the message list (glass), so the list
+     needs to know how tall it is to leave room for the last message. */
+  (function trackComposerHeight() {
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const h = Math.round(e.target.getBoundingClientRect().height);
+        if (h > 0) document.documentElement.style.setProperty('--composer-h', h + 'px');
+      }
+    });
+    const attach = () => document.querySelectorAll('.composer').forEach((el) => ro.observe(el));
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach);
+    else attach();
+  })();
+
+  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxDecoPath, nxBioBox, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

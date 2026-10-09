@@ -12,6 +12,7 @@
       if (b.dataset.tab === 'announce') loadAnnouncements();
       if (b.dataset.tab === 'overview') loadOverview();
       if (b.dataset.tab === 'nitro') loadRequests();
+      if (b.dataset.tab === 'storage') loadStorage();
       if (b.dataset.tab === 'servers') loadServers();
       if (b.dataset.tab === 'roles') loadRoles();
       if (b.dataset.tab === 'audit') loadAudit();
@@ -61,6 +62,61 @@
         UI.toast(error ? error.message : 'Request declined.', !!error);
         loadRequests();
       });
+    });
+  }
+
+  /* ---- storage requests ----
+     Approving or declining is a database call (review_storage_request), which
+     applies the same rank rule as everything else. */
+  const DRIVE_DEFAULT_GB = 5;
+  const quotaOf = (u) => Number(u?.drive_quota_gb) || DRIVE_DEFAULT_GB;
+
+  async function loadStorage() {
+    const { data, error } = await window.db.from('storage_requests')
+      .select('*, profiles!user_id(username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme,drive_quota_gb)')
+      .order('created_at', { ascending: false }).limit(300);
+    if (error) {
+      $('storeCount').innerHTML = '';
+      const missing = error.code === 'PGRST205' || /schema cache|does not exist/i.test(error.message || '');
+      $('storeRows').innerHTML = missing
+        ? `<div class="empty"><div class="ico"><i class="fa-solid fa-database"></i></div><h3>Storage requests aren't set up</h3><p>Run <code>supabase/storage_quota.sql</code> in the Supabase SQL editor.</p></div>`
+        : `<div class="empty"><div class="ico"><i class="fa-solid fa-triangle-exclamation"></i></div><h3>Couldn't load requests</h3><p>${UI.esc(error.message || 'Unknown error')}</p></div>`;
+      return;
+    }
+    const pending = (data || []).filter((r) => r.status === 'pending');
+    $('storeCount').innerHTML = pending.length ? `<span class="badge badge-admin" style="margin-left:auto;">${pending.length}</span>` : '';
+
+    $('storeRows').innerHTML = (data || []).map((r) => {
+      const p = r.profiles || { username: 'unknown' };
+      const now = quotaOf(p);
+      const tag = r.status === 'pending' ? '' :
+        `<span class="badge ${r.status === 'approved' ? 'badge-admin' : 'badge-owner'}">${r.status}</span>`;
+      return `<div class="lrow" data-id="${r.id}">
+        ${UI.avatar(p, 32, { presence: true })}
+        <div class="lmain">
+          <b>${UI.esc(p.display_name || p.username)} ${tag}</b>
+          <small>@${UI.esc(p.username)} · ${now} GB now → asking for <b>${r.requested_gb} GB</b> · ${new Date(r.created_at).toLocaleDateString()}</small>
+          ${r.reason ? `<div class="appeal-msg">${UI.esc(r.reason)}</div>` : ''}
+          ${r.review_note ? `<small style="display:block;margin-top:6px;">Note: ${UI.esc(r.review_note)}</small>` : ''}
+        </div>
+        ${r.status === 'pending' ? `<div class="lacts">
+          <button class="btn btn-quiet btn-sm s-no">Decline</button>
+          <button class="btn btn-primary btn-sm s-yes">Approve ${r.requested_gb} GB</button>
+        </div>` : ''}
+      </div>`;
+    }).join('') || '<div class="empty"><div class="ico"><i class="fa-solid fa-hard-drive"></i></div><h3>Nothing waiting</h3><p>Storage requests from My Drive land here.</p></div>';
+
+    $('storeRows').querySelectorAll('.lrow').forEach((row) => {
+      const id = row.dataset.id;
+      const resolve = async (approve, note) => {
+        const { error } = await window.db.rpc('review_storage_request', { p_id: id, p_approve: approve, p_note: note });
+        if (error) return UI.toast(adminErr(error), true);
+        UI.toast(approve ? 'Storage increased.' : 'Request declined.');
+        users = [];
+        loadStorage();
+      };
+      row.querySelector('.s-yes')?.addEventListener('click', () => resolve(true, null));
+      row.querySelector('.s-no')?.addEventListener('click', () => resolve(false, prompt('Reason (optional)') || null));
     });
   }
 
@@ -155,12 +211,13 @@
     { k: 'reset_passwords', ic: 'fa-key', t: 'Set user passwords', d: 'Replace a password and sign the person out. Never for staff at or above them.' },
     { k: 'delete_users', ic: 'fa-user-xmark', t: 'Delete accounts', d: 'Permanently remove an account and its data.' },
     { k: 'post_announcements', ic: 'fa-bullhorn', t: 'Post announcements', d: 'Post, pin and delete announcements for everyone.' },
+    { k: 'manage_storage', ic: 'fa-hard-drive', t: 'Manage drive storage', d: 'Change how much space a user’s drive gets, and answer storage requests.' },
     { k: 'review_appeals', ic: 'fa-gavel', t: 'Review ban appeals', d: 'Accept or decline appeals from banned accounts.' },
     { k: 'view_audit', ic: 'fa-clock-rotate-left', t: 'View the audit log', d: 'See every staff action.' },
   ];
   const DEFAULT_PERMS = {
     sudo: Object.fromEntries(PERMS.map((p) => [p.k, true])),
-    admin: Object.fromEntries(PERMS.map((p) => [p.k, ['ban_users', 'post_announcements', 'review_appeals'].includes(p.k)])),
+    admin: Object.fromEntries(PERMS.map((p) => [p.k, ['ban_users', 'post_announcements', 'review_appeals', 'manage_storage'].includes(p.k)])),
   };
   let perms = JSON.parse(JSON.stringify(DEFAULT_PERMS)), permsLive = false;
   async function loadPerms() {
@@ -272,6 +329,7 @@
         <div class="us-facts">
           <div><span>Username</span><b class="mono">${UI.esc(u.username)}</b></div>
           <div><span>Joined</span><b>${new Date(u.created_at).toLocaleDateString([], { dateStyle: 'medium' })}</b></div>
+          <div><span>Drive storage</span><b id="usQuota">${quotaOf(u)} GB</b></div>
           <div><span>Last sign-in</span><b id="usLast">${canAuth() ? '…' : '—'}</b></div>
           <div><span>Active sessions</span><b id="usSess">${canAuth() ? '…' : '—'}</b></div>
           <div class="wide"><span>User ID</span><b class="mono sel">${u.id}</b></div>
@@ -287,6 +345,10 @@
             <div><b>Role</b><small>${canRole ? 'You can give roles below your own.' : 'Only staff allowed to manage roles can change this.'}</small></div>
             ${canRole ? `<select id="usRole" class="input">${roleOpts}</select>` : `<span class="role-txt">${UI.roleName(u) || 'User'}</span>`}
           </div>
+          ${can('manage_storage') ? `<div class="us-act">
+            <div><b>Drive storage</b><small>How much space their My Drive gets. Applies straight away; they can also ask for more.</small></div>
+            <div class="us-stor"><input id="usGb" class="input mono" type="number" min="1" max="2048" step="1" value="${quotaOf(u)}" aria-label="Storage in GB" /><span>GB</span><button class="btn btn-ghost btn-sm" id="usGbSave">Save</button></div>
+          </div>` : ''}
           ${can('ban_users') ? `<div class="us-act">
             <div><b>${u.is_banned ? 'Lift ban' : 'Ban account'}</b><small>${u.is_banned ? 'Let them back in.' : 'Locks them out everywhere, instantly.'}</small></div>
             <button class="btn ${u.is_banned ? 'btn-ghost' : 'btn-danger'} btn-sm" id="usBan">${u.is_banned ? 'Unban' : 'Ban'}</button>
@@ -336,6 +398,16 @@
       paintUsers(); openUser(u);
     });
     el.querySelector('#usBan')?.addEventListener('click', () => toggleBan(u, () => openUser(u)));
+    el.querySelector('#usGbSave')?.addEventListener('click', async () => {
+      const gb = Math.floor(Number(el.querySelector('#usGb').value));
+      if (!(gb >= 1 && gb <= 2048)) return UI.toast('Storage must be between 1 and 2048 GB.', true);
+      const { error } = await window.db.rpc('admin_set_drive_quota', { p_user_id: u.id, p_gb: gb });
+      if (error) return UI.toast(adminErr(error), true);
+      u.drive_quota_gb = gb;
+      const q = el.querySelector('#usQuota'); if (q) q.textContent = gb + ' GB';
+      UI.toast(`${u.username} now has ${gb} GB of drive storage.`);
+      users = users.map((x) => (x.id === u.id ? u : x));
+    });
     el.querySelector('#usPw')?.addEventListener('click', () => setPassword(u));
     el.querySelector('#usDel')?.addEventListener('click', () => deleteUser(u, close));
     el.querySelector('.rr-ask')?.addEventListener('click', () => { close(); requestRankUp(); });
@@ -804,11 +876,12 @@
     const day = 86400000, now = Date.now();
     const week = users.filter((u) => now - new Date(u.created_at) < 7 * day).length;
     const online = window.Presence?.online ? (window.Presence.online.size ?? Object.keys(window.Presence.online).length) : 0;
-    const [servers, pendNitro, pendAppeals, anns] = await Promise.all([
+    const [servers, pendNitro, pendAppeals, anns, pendStorage] = await Promise.all([
       headCount('servers'),
       headCount('nitro_requests', (q) => q.eq('status', 'pending')),
       headCount('ban_appeals', (q) => q.eq('status', 'pending')),
       headCount('announcements'),
+      headCount('storage_requests', (q) => q.eq('status', 'pending')),
     ]);
     const kpis = [
       { k: 'Members', v: users.length, ic: 'fa-users', c: 'c4', sub: `+${week} this week` },
@@ -826,6 +899,7 @@
 
     const queue = [];
     if (pendNitro) queue.push(`<button class="q-item" data-goto="nitro"><span class="ph-ico c3"><i class="fa-solid fa-bolt"></i></span><span><b>${pendNitro} Nitro request${pendNitro === 1 ? '' : 's'}</b><small>Waiting for a decision</small></span><i class="fa-solid fa-chevron-right"></i></button>`);
+    if (pendStorage) queue.push(`<button class="q-item" data-goto="storage"><span class="ph-ico c6"><i class="fa-solid fa-hard-drive"></i></span><span><b>${pendStorage} storage request${pendStorage === 1 ? '' : 's'}</b><small>More room in My Drive</small></span><i class="fa-solid fa-chevron-right"></i></button>`);
     if (pendAppeals) queue.push(`<button class="q-item" data-goto="appeals"><span class="ph-ico c8"><i class="fa-solid fa-gavel"></i></span><span><b>${pendAppeals} ban appeal${pendAppeals === 1 ? '' : 's'}</b><small>Someone wants back in</small></span><i class="fa-solid fa-chevron-right"></i></button>`);
     if (anns == null) queue.push(`<button class="q-item" data-goto="announce"><span class="ph-ico c2"><i class="fa-solid fa-database"></i></span><span><b>Announcements not set up</b><small>Run supabase/announcements.sql</small></span><i class="fa-solid fa-chevron-right"></i></button>`);
     $('ovQueue').innerHTML = queue.join('') || '<div class="ov-clear"><i class="fa-solid fa-circle-check"></i> All clear. Nothing waiting on you.</div>';
