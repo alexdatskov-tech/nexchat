@@ -487,26 +487,55 @@
   const shopEmpty = (what) => `<div class="shop-empty" style="grid-column:1/-1"><i class="fa-solid fa-hourglass-half"></i>
       <b>${what} are on the way</b><small>They show up here as soon as the decoration files are added to <code>assets/deco</code>.</small></div>`;
 
+  // The shop renders a page of decorations at a time. Every APNG in view
+  // decodes and animates, so rendering the whole catalogue at once makes the
+  // page crawl. The first page shows straight away; the next one loads when the
+  // "Loading more" marker scrolls near the viewport.
+  const SHOP_PAGE = 9;
+  let shopStops = [];
+  const shopNear = (el) => el.offsetParent !== null && el.getBoundingClientRect().top < window.innerHeight + 300;
+
+  function shopCard(it, kind, th) {
+    const on = (kind === 'pfp' ? th.pfp_deco : th.bio_deco) === it.file;
+    const prev = kind === 'pfp'
+      ? `<div class="si-prev">${UI.avatar({ ...me, is_nitro: true, theme: { ...th, pfp_deco: it.file } }, 64, { halo: false })}</div>`
+      : `<div class="si-bio"><div class="bio-deco-box"><img class="bio-deco" src="${UI.esc(it.file)}" alt="" loading="lazy" decoding="async"><span>Your bio</span></div></div>`;
+    return `<div class="shop-item ${on ? 'on' : ''}">${prev}
+      <b>${UI.esc(it.name || it.id)}</b><small>${on ? 'Equipped' : (kind === 'pfp' ? 'Avatar frame' : 'Bio banner')}</small>
+      <button class="btn ${on ? 'btn-ghost' : 'btn-primary'} btn-sm" data-kind="${kind}" data-file="${UI.esc(it.file)}">${on ? 'Remove' : 'Equip'}</button>
+    </div>`;
+  }
+
+  function shopSection(el, list, kind, th) {
+    const usable = list.filter((it) => UI.nxDecoPath({ is_nitro: true, theme: kind === 'pfp' ? { pfp_deco: it.file } : { bio_deco: it.file } }, kind));
+    if (!usable.length) { el.innerHTML = shopEmpty(kind === 'pfp' ? 'Avatar frames' : 'Bio banners'); return; }
+    el.innerHTML = '<div class="shop-cards"></div><div class="shop-more" hidden><i class="fa-solid fa-circle-notch fa-spin"></i> Loading more...</div>';
+    const cards = el.querySelector('.shop-cards');
+    const more = el.querySelector('.shop-more');
+    let shown = 0;
+    const showNext = () => {
+      const batch = usable.slice(shown, shown + SHOP_PAGE);
+      cards.insertAdjacentHTML('beforeend', batch.map((it) => shopCard(it, kind, th)).join(''));
+      shown += batch.length;
+      more.hidden = shown >= usable.length;
+      if (shown >= usable.length) stop();
+    };
+    // Only scrolling loads the next page: the first page is exactly SHOP_PAGE.
+    const onScroll = () => { if (shown < usable.length && shopNear(more)) showNext(); };
+    const stop = () => document.removeEventListener('scroll', onScroll, true);
+    document.addEventListener('scroll', onScroll, true);
+    shopStops.push(stop);
+    showNext();
+  }
+
   async function renderShop() {
     if (!me?.is_nitro) return;
+    shopStops.forEach((stop) => stop());
+    shopStops = [];
     const m = await loadDecoManifest();
     const th = me.theme || {};
-    const cards = (list, kind) => list
-      .filter((it) => UI.nxDecoPath({ is_nitro: true, theme: kind === 'pfp' ? { pfp_deco: it.file } : { bio_deco: it.file } }, kind))
-      .map((it) => {
-        const on = (kind === 'pfp' ? th.pfp_deco : th.bio_deco) === it.file;
-        const prev = kind === 'pfp'
-          ? `<div class="si-prev">${UI.avatar({ ...me, is_nitro: true, theme: { ...th, pfp_deco: it.file } }, 64, { halo: false })}</div>`
-          : `<div class="si-bio"><div class="bio-deco-box"><img class="bio-deco" src="${UI.esc(it.file)}" alt=""><span>Your bio</span></div></div>`;
-        return `<div class="shop-item ${on ? 'on' : ''}">${prev}
-          <b>${UI.esc(it.name || it.id)}</b><small>${on ? 'Equipped' : (kind === 'pfp' ? 'Avatar frame' : 'Bio banner')}</small>
-          <button class="btn ${on ? 'btn-ghost' : 'btn-primary'} btn-sm" data-kind="${kind}" data-file="${UI.esc(it.file)}">${on ? 'Remove' : 'Equip'}</button>
-        </div>`;
-      }).join('');
-    const pfp = Array.isArray(m.pfp) ? m.pfp : [];
-    const bio = Array.isArray(m.profile) ? m.profile : [];
-    $('shopPfp').innerHTML = cards(pfp, 'pfp') || shopEmpty('Avatar frames');
-    $('shopBio').innerHTML = cards(bio, 'bio') || shopEmpty('Bio banners');
+    shopSection($('shopPfp'), Array.isArray(m.pfp) ? m.pfp : [], 'pfp', th);
+    shopSection($('shopBio'), Array.isArray(m.profile) ? m.profile : [], 'bio', th);
   }
 
   async function equipDeco(kind, file) {
