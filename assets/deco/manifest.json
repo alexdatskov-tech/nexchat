@@ -1,4 +1,342 @@
 {
-  "pfp": [],
-  "profile": []
+  "pfp": [
+    {
+      "id": "airforce",
+      "name": "Airforce",
+      "file": "assets/deco/pfp/airforce.png",
+      "animated": true
+    },
+    {
+      "id": "angelwings",
+      "name": "Angelwings",
+      "file": "assets/deco/pfp/angelwings.png",
+      "animated": true
+    },
+    {
+      "id": "aurora",
+      "name": "Aurora",
+      "file": "assets/deco/pfp/aurora.png",
+      "animated": true
+    },
+    {
+      "id": "catearsblack",
+      "name": "Catearsblack",
+      "file": "assets/deco/pfp/catearsblack.png",
+      "animated": true
+    },
+    {
+      "id": "chomp",
+      "name": "Chomp",
+      "file": "assets/deco/pfp/chomp.png",
+      "animated": true
+    },
+    {
+      "id": "cloudnine",
+      "name": "Cloudnine",
+      "file": "assets/deco/pfp/cloudnine.png",
+      "animated": true
+    },
+    {
+      "id": "cometsdusk",
+      "name": "Cometsdusk",
+      "file": "assets/deco/pfp/cometsdusk.png",
+      "animated": true
+    },
+    {
+      "id": "deepseadreams",
+      "name": "Deepseadreams",
+      "file": "assets/deco/pfp/deepseadreams.png",
+      "animated": true
+    },
+    {
+      "id": "dragon",
+      "name": "Dragon",
+      "file": "assets/deco/pfp/dragon.png",
+      "animated": true
+    },
+    {
+      "id": "fallfoliage",
+      "name": "Fallfoliage",
+      "file": "assets/deco/pfp/fallfoliage.png",
+      "animated": true
+    },
+    {
+      "id": "flames",
+      "name": "Flames",
+      "file": "assets/deco/pfp/flames.png",
+      "animated": true
+    },
+    {
+      "id": "foxtail",
+      "name": "Foxtail",
+      "file": "assets/deco/pfp/foxtail.png",
+      "animated": true
+    },
+    {
+      "id": "hallelujamountains",
+      "name": "Hallelujamountains",
+      "file": "assets/deco/pfp/hallelujamountains.png",
+      "animated": true
+    },
+    {
+      "id": "japanesemaple",
+      "name": "Japanesemaple",
+      "file": "assets/deco/pfp/japanesemaple.png",
+      "animated": true
+    },
+    {
+      "id": "leafloaf",
+      "name": "Leafloaf",
+      "file": "assets/deco/pfp/leafloaf.png",
+      "animated": true
+    },
+    {
+      "id": "lonewolf",
+      "name": "Lonewolf",
+      "file": "assets/deco/pfp/lonewolf.png",
+      "animated": true
+    },
+    {
+      "id": "moon",
+      "name": "Moon",
+      "file": "assets/deco/pfp/moon.png",
+      "animated": true
+    },
+    {
+      "id": "orbital",
+      "name": "Orbital",
+      "file": "assets/deco/pfp/orbital.png",
+      "animated": true
+    },
+    {
+      "id": "petals",
+      "name": "Petals",
+      "file": "assets/deco/pfp/petals.png",
+      "animated": true
+    },
+    {
+      "id": "purplering",
+      "name": "Purplering",
+      "file": "assets/deco/pfp/purplering.png",
+      "animated": true
+    },
+    {
+      "id": "purplesparkles",
+      "name": "Purplesparkles",
+      "file": "assets/deco/pfp/purplesparkles.png",
+      "animated": true
+    },
+    {
+      "id": "ritualcircle",
+      "name": "Ritualcircle",
+      "file": "assets/deco/pfp/ritualcircle.png",
+      "animated": true
+    },
+    {
+      "id": "sakuraink",
+      "name": "Sakuraink",
+      "file": "assets/deco/pfp/sakuraink.png",
+      "animated": true
+    },
+    {
+      "id": "skillissue",
+      "name": "Skillissue",
+      "file": "assets/deco/pfp/skillissue.png",
+      "animated": true
+    },
+    {
+      "id": "spacetravel",
+      "name": "Spacetravel",
+      "file": "assets/deco/pfp/spacetravel.png",
+      "animated": true
+    },
+    {
+      "id": "spirits",
+      "name": "Spirits",
+      "file": "assets/deco/pfp/spirits.png",
+      "animated": true
+    },
+    {
+      "id": "surprised",
+      "name": "Surprised",
+      "file": "assets/deco/pfp/surprised.png",
+      "animated": true
+    },
+    {
+      "id": "sweatdrops",
+      "name": "Sweatdrops",
+      "file": "assets/deco/pfp/sweatdrops.png",
+      "animated": true
+    },
+    {
+      "id": "sweetdreams",
+      "name": "Sweetdreams",
+      "file": "assets/deco/pfp/sweetdreams.png",
+      "animated": true
+    },
+    {
+      "id": "swirl",
+      "name": "Swirl",
+      "file": "assets/deco/pfp/swirl.png",
+      "animated": true
+    },
+    {
+      "id": "whiteroses",
+      "name": "Whiteroses",
+      "file": "assets/deco/pfp/whiteroses.png",
+      "animated": true
+    },
+    {
+      "id": "witchinghour",
+      "name": "Witchinghour",
+      "file": "assets/deco/pfp/witchinghour.png",
+      "animated": true
+    },
+    {
+      "id": "witchinghour2",
+      "name": "Witchinghour2",
+      "file": "assets/deco/pfp/witchinghour2.png",
+      "animated": true
+    }
+  ],
+  "profile": [
+    {
+      "id": "alwayswatching",
+      "name": "Alwayswatching",
+      "file": "assets/deco/profile/alwayswatching.png",
+      "animated": true
+    },
+    {
+      "id": "bonsaieternity",
+      "name": "Bonsaieternity",
+      "file": "assets/deco/profile/bonsaieternity.png",
+      "animated": true
+    },
+    {
+      "id": "candlelight",
+      "name": "Candlelight",
+      "file": "assets/deco/profile/candlelight.png",
+      "animated": true
+    },
+    {
+      "id": "celestial",
+      "name": "Celestial",
+      "file": "assets/deco/profile/celestial.png",
+      "animated": true
+    },
+    {
+      "id": "comet",
+      "name": "Comet",
+      "file": "assets/deco/profile/comet.png",
+      "animated": true
+    },
+    {
+      "id": "doves",
+      "name": "Doves",
+      "file": "assets/deco/profile/doves.png",
+      "animated": true
+    },
+    {
+      "id": "duck",
+      "name": "Duck",
+      "file": "assets/deco/profile/duck.png",
+      "animated": true
+    },
+    {
+      "id": "fallfoliage",
+      "name": "Fallfoliage",
+      "file": "assets/deco/profile/fallfoliage.png",
+      "animated": true
+    },
+    {
+      "id": "fog",
+      "name": "Fog",
+      "file": "assets/deco/profile/fog.png",
+      "animated": true
+    },
+    {
+      "id": "glitch",
+      "name": "Glitch",
+      "file": "assets/deco/profile/glitch.png",
+      "animated": true
+    },
+    {
+      "id": "greengoo",
+      "name": "Greengoo",
+      "file": "assets/deco/profile/greengoo.png",
+      "animated": true
+    },
+    {
+      "id": "hallelujamountains",
+      "name": "Hallelujamountains",
+      "file": "assets/deco/profile/hallelujamountains.png",
+      "animated": true
+    },
+    {
+      "id": "hellokitty",
+      "name": "Hellokitty",
+      "file": "assets/deco/profile/hellokitty.png",
+      "animated": true
+    },
+    {
+      "id": "leaves",
+      "name": "Leaves",
+      "file": "assets/deco/profile/leaves.png",
+      "animated": true
+    },
+    {
+      "id": "lonewolf",
+      "name": "Lonewolf",
+      "file": "assets/deco/profile/lonewolf.png",
+      "animated": true
+    },
+    {
+      "id": "mists",
+      "name": "Mists",
+      "file": "assets/deco/profile/mists.png",
+      "animated": true
+    },
+    {
+      "id": "pinkflowers",
+      "name": "Pinkflowers",
+      "file": "assets/deco/profile/pinkflowers.png",
+      "animated": true
+    },
+    {
+      "id": "purplemists",
+      "name": "Purplemists",
+      "file": "assets/deco/profile/purplemists.png",
+      "animated": true
+    },
+    {
+      "id": "samurai",
+      "name": "Samurai",
+      "file": "assets/deco/profile/samurai.png",
+      "animated": true
+    },
+    {
+      "id": "starstruck",
+      "name": "Starstruck",
+      "file": "assets/deco/profile/starstruck.png",
+      "animated": true
+    },
+    {
+      "id": "unlimitedvoid",
+      "name": "Unlimitedvoid",
+      "file": "assets/deco/profile/unlimitedvoid.png",
+      "animated": true
+    },
+    {
+      "id": "whiteroses",
+      "name": "Whiteroses",
+      "file": "assets/deco/profile/whiteroses.png",
+      "animated": true
+    },
+    {
+      "id": "witchinghour",
+      "name": "Witchinghour",
+      "file": "assets/deco/profile/witchinghour.png",
+      "animated": true
+    }
+  ]
 }
