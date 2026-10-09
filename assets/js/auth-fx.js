@@ -31,17 +31,6 @@
   }
 
   /* ---- rotating tagline ---- */
-  // Minecraft-style splash lines: jokes, not claims about who is online.
-  const TAGS = ['Not an enterprise product!', 'Stay a while!', 'Hop in, it’s late anyway', 'Now with more chatting!', 'Bring your friends!', 'Ask me about DMs!', 'Pings, not reports!'];
-  const tag = document.getElementById('authTag');
-  if (tag && !reduce) {
-    let i = 0;
-    setInterval(() => {
-      tag.classList.add('out');
-      setTimeout(() => { i = (i + 1) % TAGS.length; tag.textContent = TAGS[i]; tag.classList.remove('out'); }, 350);
-    }, 4200);
-  }
-
   /* ---- show / hide password ---- */
   document.querySelectorAll('[data-peek]').forEach((b) => {
     b.onclick = () => {
