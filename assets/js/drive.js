@@ -163,9 +163,9 @@ window.Drive = (function () {
           <div class="drv-crumbs" id="dCrumbs"></div>
           <div class="drv-tools">
             <label class="drv-search"><i class="fa-solid fa-magnifying-glass"></i><input id="dSearch" placeholder="Search your drive" autocomplete="off"><kbd>/</kbd></label>
-            <select id="dSort" class="drv-sel" title="Sort">
+            <span class="drv-sel-wrap" data-val="Name"><select id="dSort" class="drv-sel" title="Sort">
               <option value="name">Name</option><option value="date">Modified</option><option value="size">Size</option><option value="type">Type</option>
-            </select>
+            </select></span>
             <div class="drv-seg" role="group" aria-label="View">
               <button data-view="grid" title="Grid"><i class="fa-solid fa-grip"></i></button>
               <button data-view="list" title="List"><i class="fa-solid fa-list"></i></button>
@@ -275,8 +275,10 @@ window.Drive = (function () {
       clearTimeout(st);
       st = setTimeout(() => { query = e.target.value.trim(); sel.clear(); query ? showDerived() : (mode === 'files' ? paint() : showDerived()); }, 160);
     };
+    const sortWrap = () => { const w = $('#dSort').closest('.drv-sel-wrap'); if (w) w.dataset.val = $('#dSort').selectedOptions[0]?.textContent || ''; };
     $('#dSort').value = sort;
-    $('#dSort').onchange = (e) => { sort = e.target.value; store.set('nx_drive_sort', sort); paint(); };
+    sortWrap();
+    $('#dSort').onchange = (e) => { sort = e.target.value; store.set('nx_drive_sort', sort); sortWrap(); paint(); };
     host.querySelectorAll('[data-view]').forEach((b) => {
       b.classList.toggle('on', b.dataset.view === view);
       b.onclick = () => { view = b.dataset.view; store.set('nx_drive_view', view); host.querySelectorAll('[data-view]').forEach((x) => x.classList.toggle('on', x === b)); paint(); };

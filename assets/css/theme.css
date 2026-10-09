@@ -1911,6 +1911,12 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 /* Nitro shop */
 .nitro-only.hidden { display: none !important; }
 .shop-sect + .shop-sect { margin-top: 18px; }
+.shop-sect h4 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--txt-1);
+  padding-bottom: 8px; margin-bottom: 2px; border-bottom: 1px solid var(--line-2); }
+.shop-sect h4 i { color: var(--nitro); }
+.shop-count { margin-left: auto; font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
+  background: var(--accent-lo); color: var(--txt-2); }
+.shop-count:empty { display: none; }
 .shop-grid { display: block; }
 .shop-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 12px; }
 .shop-more { padding: 14px 0 4px; text-align: center; font-size: 12.5px; color: var(--txt-3); }

@@ -257,3 +257,11 @@
   .pv-stage { padding: 0 10px 16px; }
   .pv-nav { display: none; }
 }
+
+/* Sort dropdown: the box sizes to the selected label, so the arrow sits right after it.
+   The hidden ::after copy of the label sets the width; the select fills that cell. */
+.drv-sel-wrap { display: inline-grid; }
+.drv-sel-wrap::after { content: attr(data-val); grid-area: 1 / 1; visibility: hidden; white-space: pre;
+  height: 38px; box-sizing: border-box; padding: 0 30px 0 12px; border: 1px solid transparent;
+  font: 500 13px var(--f-body); }
+.drv-sel-wrap > .drv-sel { grid-area: 1 / 1; width: 0; min-width: 100%; }

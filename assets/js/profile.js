@@ -506,8 +506,9 @@
     </div>`;
   }
 
-  function shopSection(el, list, kind, th) {
+  function shopSection(el, list, kind, th, countEl) {
     const usable = list.filter((it) => UI.nxDecoPath({ is_nitro: true, theme: kind === 'pfp' ? { pfp_deco: it.file } : { bio_deco: it.file } }, kind));
+    if (countEl) countEl.textContent = usable.length ? `${usable.length}` : '';
     if (!usable.length) { el.innerHTML = shopEmpty(kind === 'pfp' ? 'Avatar frames' : 'Bio banners'); return; }
     el.innerHTML = '<div class="shop-cards"></div><div class="shop-more" hidden><i class="fa-solid fa-circle-notch fa-spin"></i> Loading more...</div>';
     const cards = el.querySelector('.shop-cards');
@@ -534,8 +535,8 @@
     shopStops = [];
     const m = await loadDecoManifest();
     const th = me.theme || {};
-    shopSection($('shopPfp'), Array.isArray(m.pfp) ? m.pfp : [], 'pfp', th);
-    shopSection($('shopBio'), Array.isArray(m.profile) ? m.profile : [], 'bio', th);
+    shopSection($('shopPfp'), Array.isArray(m.pfp) ? m.pfp : [], 'pfp', th, $('shopPfpN'));
+    shopSection($('shopBio'), Array.isArray(m.profile) ? m.profile : [], 'bio', th, $('shopBioN'));
   }
 
   async function equipDeco(kind, file) {
