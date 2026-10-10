@@ -94,6 +94,7 @@ body.glass .m:hover { background: rgba(255,255,255,.05); }
 body.glass .overlay { background: rgba(4,4,8,.35); }
 body.glass .set-bg { display: none; }
 body.glass input:not([type=checkbox]):not([type=range]):not([type=color]):not([type=file]), body.glass textarea, body.glass select { background: rgba(0,0,0,.22) !important; }
+body.glass .composer textarea { background: none !important; }
 
 /* Tilt: glass.js writes the transform itself every frame (eased toward the
    cursor and back), so no CSS transition may chase it. */
