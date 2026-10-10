@@ -91,7 +91,8 @@ window.UI = (function () {
   }
 
   // Inline CSS for a name: colour or gradient, glow, weight, slant, shimmer.
-  function nxNameCss(p, noItalic) {
+  // noGlow: compact spots (footer, page header) clip the glow into a box, so it is skipped there.
+  function nxNameCss(p, noItalic, noGlow) {
     const ns = nxNameStyle(p);
     const accent = p?.accent_color || 'var(--txt-1)';
     if (!ns) return `color:${accent};`;
@@ -100,7 +101,7 @@ window.UI = (function () {
     if (grad) css += `background:${grad};-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;`;
     else css += `color:${ns.color || accent};`;
     if (ns.shimmer && grad) css += 'background-size:220% auto;animation:nxShimmer 3.2s linear infinite;';
-    if (ns.glow) css += `filter:drop-shadow(0 0 4px ${ns.glow}) drop-shadow(0 0 12px ${ns.glow});`;
+    if (ns.glow && !noGlow) css += `filter:drop-shadow(0 0 4px ${ns.glow}) drop-shadow(0 0 12px ${ns.glow});`;
     if (ns.bold) css += 'font-weight:800;';
     // Italic glyphs overhang their advance width, which clips the gradient fill: pad the right edge.
     if (ns.italic && !noItalic) css += 'font-style:italic;padding-right:.2em;';
@@ -152,7 +153,7 @@ window.UI = (function () {
   // Own-name labels (rail, portal greeting): same styling as chat, always a single line.
   function nxNameInto(el, p) {
     if (!el) return;
-    el.innerHTML = `<span class="nx-name" style="${esc(nxNameCss(p, true))}">${nxNameText(p)}</span>`;
+    el.innerHTML = `<span class="nx-name" style="${esc(nxNameCss(p, true, true))}">${nxNameText(p)}</span>`;
   }
 
   function nxNameHtml(p, cls) {
