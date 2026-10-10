@@ -42,6 +42,10 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1f232d; 
 th { color: #aab3c5; font-weight: 600; background: #11141c; }
 blockquote { margin: 1em 0; padding: .4em 1em; border-left: 3px solid #3b4a6b; color: #b5bdcc; background: #10131b; border-radius: 0 8px 8px 0; }
 hr { border: 0; border-top: 1px solid #1f232d; margin: 2em 0; }
+.hidden { display: none !important; }
+.down { max-width: 860px; margin: 0 auto; padding: 60px 22px; }
+.down h1 { font-size: 1.8em; }
+footer.credit { margin-top: 3em; padding-top: 1em; border-top: 1px solid #1f232d; color: #7d8699; font-size: 13px; }
 ul, ol { padding-left: 1.4em; } li { margin: .25em 0; }
 `;
 
@@ -56,9 +60,32 @@ function page(title, body) {
 </head>
 <body>
 <header class="top"><a href="../portal.html">← NexChat</a><span>Developer docs</span></header>
-<main>
+<div id="docDown" class="hidden down">
+  <h1>Bot API docs are temporarily unavailable</h1>
+  <p>The owner has switched the bot platform off for now. Bot API by andrew. Check back later.</p>
+</div>
+<main id="docMain" class="hidden">
 ${body}
+<footer class="credit">Bot API by andrew</footer>
 </main>
+<script src="../assets/js/config.js"></script>
+<script>
+// The docs follow the same owner switch as the API (platform_features, key bot_api).
+// Fails closed: if the check cannot run, the notice shows instead of the docs.
+(async () => {
+  const c = window.NEXCHAT_CONFIG || {};
+  let on = false;
+  try {
+    const r = await fetch(c.SUPABASE_URL + '/rest/v1/platform_features?key=eq.bot_api&select=enabled', {
+      headers: { apikey: c.SUPABASE_ANON_KEY, authorization: 'Bearer ' + c.SUPABASE_ANON_KEY },
+    });
+    const rows = await r.json();
+    on = !!(rows && rows[0] && rows[0].enabled);
+  } catch (_) { on = false; }
+  document.getElementById('docMain').classList.toggle('hidden', !on);
+  document.getElementById('docDown').classList.toggle('hidden', on);
+})();
+</script>
 </body>
 </html>
 `;

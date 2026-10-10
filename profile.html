@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat — Your profile</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=62" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=63" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=62" />
-<link rel="stylesheet" href="assets/css/drive.css?v=62" />
-<script src="assets/js/ambient.js?v=62"></script>
+<link rel="stylesheet" href="assets/css/theme.css?v=63" />
+<link rel="stylesheet" href="assets/css/drive.css?v=63" />
+<script src="assets/js/ambient.js?v=63"></script>
 </head>
 <body>
 <div class="set-wrap">
@@ -329,6 +329,9 @@
     <section class="set-inner hidden" data-pane="dev" data-nosave>
       <header class="pane-head"><span class="ph-ico c5"><i class="fa-solid fa-code"></i></span><div><h2>Developer</h2><div class="sub">Low-level connection controls. Leave off unless you know why you need them.</div></div></header>
 
+      <div id="botPlatform">
+        <div class="bot-off-note hidden" id="botOffNote"></div>
+
       <div class="set-block">
         <h4>Developer account</h4>
         <div class="bsub">Create a developer token to make bots and use the bot API. Developer access never gives admin rank. Full docs: <a href="docs/bot-api.html" target="_blank" rel="noopener">docs/bot-api.html</a>.</div>
@@ -354,6 +357,13 @@
         </form>
         <p class="err" id="botErr"></p>
         <div id="botList" style="margin-top:12px;display:grid;gap:8px;"></div>
+      </div>
+
+        <div class="bot-credit">Bot API by andrew</div>
+        <div class="bot-owner hidden" id="botOwner">
+          <label class="set-row" style="margin-top:12px;"><div class="info"><b>Bot platform switch</b><small>Owner only. Turns the bot API, developer tokens and the docs on or off for everyone.</small></div>
+          <input type="checkbox" id="botSwitch" class="switch" aria-label="Bot platform on or off"></label>
+        </div>
       </div>
 
       <div class="set-block">
@@ -389,23 +399,23 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=62"></script>
-<script src="assets/js/supabase-client.js?v=62"></script>
-<script src="assets/js/ui.js?v=62"></script>
-<script src="assets/js/glass.js?v=62"></script>
-<script src="assets/js/tiff.js?v=62"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=62"></script>
-<script src="assets/js/cloudgate.js?v=62"></script>
-<script src="assets/js/storage.js?v=62"></script>
-<script src="assets/js/ice.js?v=62"></script>
-<script src="assets/js/md.js?v=62"></script>
-<script src="assets/js/presence.js?v=62"></script>
-<script src="assets/js/guard.js?v=62"></script>
-<script src="assets/js/notify.js?v=62"></script>
-<script src="assets/js/settings-ui.js?v=62"></script>
-<script src="assets/js/vault.js?v=62"></script>
-<script src="assets/js/drive.js?v=62"></script>
-<script src="assets/js/profile.js?v=62"></script>
-<script src="assets/js/devtools.js?v=62"></script>
+<script src="assets/js/config.js?v=63"></script>
+<script src="assets/js/supabase-client.js?v=63"></script>
+<script src="assets/js/ui.js?v=63"></script>
+<script src="assets/js/glass.js?v=63"></script>
+<script src="assets/js/tiff.js?v=63"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=63"></script>
+<script src="assets/js/cloudgate.js?v=63"></script>
+<script src="assets/js/storage.js?v=63"></script>
+<script src="assets/js/ice.js?v=63"></script>
+<script src="assets/js/md.js?v=63"></script>
+<script src="assets/js/presence.js?v=63"></script>
+<script src="assets/js/guard.js?v=63"></script>
+<script src="assets/js/notify.js?v=63"></script>
+<script src="assets/js/settings-ui.js?v=63"></script>
+<script src="assets/js/vault.js?v=63"></script>
+<script src="assets/js/drive.js?v=63"></script>
+<script src="assets/js/profile.js?v=63"></script>
+<script src="assets/js/devtools.js?v=63"></script>
 </body>
 </html>

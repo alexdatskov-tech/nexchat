@@ -87,6 +87,11 @@ const USERNAME = /^[a-z0-9_]{3,24}$/;
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
+  // Platform switch (supabase/bot_api_switch.sql). Off means every route is
+  // closed, including login. Missing row also counts as off.
+  const { data: feat } = await admin.from('platform_features').select('enabled').eq('key', 'bot_api').maybeSingle();
+  if (!feat?.enabled) return fail(503, 'The bot API is temporarily unavailable.');
+
   const url = new URL(req.url);
   // Last '/v1/' so the function's own /functions/v1/ prefix is skipped.
   const at = url.pathname.lastIndexOf('/v1/');
