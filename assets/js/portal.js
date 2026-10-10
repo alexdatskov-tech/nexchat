@@ -259,7 +259,7 @@
     window.Guard?.start(me);
     window.Presence?.start(me);
     applyDashboardBg(me.theme);
-    window.Nav?.mount(me, { active: 'home', onAdd: openCreate });
+    window.Nav?.mount(me, { active: 'home', onCreate: openCreate, onJoin: openJoin });
     $('meAv').innerHTML = UI.avatar(me, 22, { halo: false });
     UI.nxNameInto($('meName'), me);
     const h = new Date().getHours();
@@ -274,6 +274,7 @@
     const inv = UI.params().get('invite');
     if (inv) { openJoin(); $('jCode').value = inv; }
     else if (UI.params().get('new')) openCreate();
+    else if (UI.params().get('join')) openJoin();
 
     await load();
   })();

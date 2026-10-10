@@ -144,6 +144,35 @@ window.Nav = (function () {
     document.querySelector('.rail-scrim')?.remove();
   }
 
+  /* The green "+": a small menu with Create and Join. Pages that own the
+     modals pass onCreate / onJoin; other pages open the portal with a flag. */
+  function addMenu(anchor, o) {
+    const old = document.getElementById('spAddMenu');
+    if (old) { old.remove(); return; }
+    const m = document.createElement('div');
+    m.id = 'spAddMenu';
+    m.className = 'sp-addmenu';
+    m.innerHTML = '<button type="button" data-k="create"><i class="fa-solid fa-plus"></i> Create a server</button>'
+      + '<button type="button" data-k="join"><i class="fa-solid fa-right-to-bracket"></i> Join with a code</button>';
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = (r.right + 12) + 'px';
+    m.style.top = Math.max(8, Math.min(r.top, innerHeight - 120)) + 'px';
+    m.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-k]');
+      if (!b) return;
+      m.remove();
+      if (b.dataset.k === 'create') (o.onCreate ? o.onCreate() : UI.go('portal.html?new=1'));
+      else (o.onJoin ? o.onJoin() : UI.go('portal.html?join=1'));
+    });
+    const away = (e) => {
+      if (m.contains(e.target) || e.target === anchor) return;
+      m.remove();
+      document.removeEventListener('pointerdown', away, true);
+    };
+    setTimeout(() => document.addEventListener('pointerdown', away, true), 0);
+  }
+
   /* opts: { active: 'home' | 'dms' | <serverId>, onAdd?: () => void } */
   let mounted = false;
   function mount(profile, o = {}, early = false) {
@@ -169,7 +198,7 @@ window.Nav = (function () {
       if (servers) $('spServers').innerHTML = servers;
     }
     nav.querySelector('.sp-ann').onclick = openAnnouncements;
-    nav.querySelector('.sp-add').onclick = () => (o.onAdd ? o.onAdd() : UI.go('portal.html?new=1'));
+    nav.querySelector('.sp-add').onclick = (e) => addMenu(e.currentTarget, o);
     if (!nav.dataset.wired) {
       nav.dataset.wired = '1';
       nav.addEventListener('click', (e) => { if (e.target.closest('a.sp-item, a.sp-me')) closeDrawer(); });

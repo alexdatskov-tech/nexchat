@@ -37,10 +37,18 @@
     try { localStorage.setItem('nx_members_open', open ? '1' : '0'); } catch {}
   }
   async function loadMembers() {
-    const { data, error } = await window.db.from('server_members')
-      .select('user_id, profiles!user_id(id, username, display_name, avatar_url, accent_color, is_nitro, theme, is_bot)')
-      .eq('server_id', serverId);
-    if (error) return;
+    const cols = 'id, username, display_name, avatar_url, accent_color, is_nitro, theme';
+    const q = (c) => window.db.from('server_members')
+      .select(`user_id, profiles!user_id(${c})`).eq('server_id', serverId);
+    // profiles.is_bot comes from supabase/profiles_is_bot.sql. Until that runs,
+    // retry without it so people still show, and everyone is treated as a member.
+    let { data, error } = await q(cols + ', is_bot');
+    if (error && /is_bot/.test(error.message || '')) ({ data, error } = await q(cols));
+    if (error) {
+      const list = $('memList');
+      if (list) list.innerHTML = '<div class="mem-sect">Could not load members</div>';
+      return;
+    }
     memRows = (data || []).map((r) => r.profiles).filter(Boolean);
     paintMembers();
   }
