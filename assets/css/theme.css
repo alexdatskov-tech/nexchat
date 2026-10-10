@@ -2051,4 +2051,3 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
   background: rgba(12,14,19,.5);
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
-body.glass .composer { backdrop-filter: blur(var(--glass-blur, 5px)) saturate(1.4); -webkit-backdrop-filter: blur(var(--glass-blur, 5px)) saturate(1.4); }

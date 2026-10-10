@@ -12,6 +12,11 @@ function page(file) {
   w.eval(source('assets/js/ui.js'));
   w.eval(source('assets/js/storage.js'));   // signs stored keys at render time
   w.UI.toast = () => {};
+  // Wallpapers are now fetched and kept as blob URLs (device cache), so the
+  // page needs fetch and createObjectURL. Record what was fetched.
+  w.__fetched = [];
+  w.fetch = async (url) => { w.__fetched.push(String(url)); return { ok: true, arrayBuffer: async () => new TextEncoder().encode('img').buffer }; };
+  w.URL.createObjectURL = () => 'blob:nx/' + Math.random().toString(36).slice(2);
   return w;
 }
 function check(label, fn) { fn(); console.log('PASS ' + label); }
@@ -47,7 +52,8 @@ function mockDb(w, row) {
       await w.UI.applyBackground(theme);
       check('legacy expired wallpaper is signed from its key, not reused', () => {
         assert.equal(calls, 1);
-        assert.match(w.document.documentElement.style.getPropertyValue('--dash-bg'), /Signature=fresh/);
+        assert.match(w.__fetched.at(-1), /Signature=fresh/);
+        assert.match(w.document.documentElement.style.getPropertyValue('--dash-bg'), /blob:/);
         assert.match(theme.dash_bg, /expired/); // never mutate stored rows with signatures
         assert(w.document.body.classList.contains('has-bg'));
       });
@@ -74,7 +80,7 @@ function mockDb(w, row) {
       await w.UI.applyBackground({ dash_wallpaper_key: 'retry-key' });
       w.__nx_tp.presign = async () => 'https://storage.test/recovered.png';
       await w.UI.applyBackground({ dash_wallpaper_key: 'retry-key' });
-      check('failed signing can recover without reuploading', () => assert.match(w.document.documentElement.style.getPropertyValue('--dash-bg'), /recovered/));
+      check('failed signing can recover without reuploading', () => { assert.match(w.__fetched.at(-1), /recovered/); assert.match(w.document.documentElement.style.getPropertyValue('--dash-bg'), /blob:/); });
       const css = source('assets/css/theme.css');
       check('server wallpaper layers are isolated above body paint', () => {
         assert.match(css, /body\.has-bg\s*\{\s*isolation:\s*isolate/);
@@ -149,7 +155,7 @@ function mockDb(w, row) {
       });
       $('btnReset').onclick(); await tick();
       check('key-only profile hydrates wallpaper and does not select None', () => {
-        assert.equal($('wpPrev').querySelector('img').src, 'https://storage.test/fresh.png');
+        assert.match($('wpPrev').querySelector('img').src, /^blob:/); assert.equal(w.__fetched.at(-1), 'https://storage.test/fresh.png');
         assert.equal(w.document.querySelector('.bg-preset.on'), null);
       });
       upload(); // pending local file must not override a subsequently chosen preset
