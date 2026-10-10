@@ -2004,7 +2004,7 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 }
 
 /* ============================================================================
-   MEMBER PANEL: owner, bots and members of the server, online first
+   MEMBER PANEL: owner and members of the server, online first
    ============================================================================ */
 .chat-head .mem-toggle { margin-left: auto; }
 .members { width: 248px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
@@ -2021,7 +2021,6 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 .mem-row .av { width: 30px; height: 30px; font-size: 12px; flex-shrink: 0; }
 .mem-row .mn { min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mem-row.off { opacity: .5; }
-.bot-tag { font-size: 9.5px; font-weight: 800; letter-spacing: .04em; padding: 1px 5px; border-radius: 5px; background: var(--accent-lo); color: var(--accent-hi); flex-shrink: 0; }
 @media (max-width: 1000px) {
   .members { position: fixed; top: 0; right: 0; bottom: 0; z-index: 35; box-shadow: var(--sh-3); background: var(--bg-1); }
 }
@@ -2051,13 +2050,3 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
   background: rgba(12,14,19,.5);
   padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
-
-/* ---- Developer: bot platform switched off by the owner ---- */
-#botPlatform.feature-off .set-block {
-  opacity: .42; filter: grayscale(1); pointer-events: none; user-select: none;
-}
-.bot-off-note {
-  margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; font-size: 13px; color: var(--txt-2);
-  background: rgba(255,255,255,.05); border: 1px dashed rgba(255,255,255,.2);
-}
-.bot-credit { margin-top: 14px; font-size: 12px; color: var(--txt-3); }

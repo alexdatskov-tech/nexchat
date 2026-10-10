@@ -117,14 +117,3 @@ TURN_SERVERS: [
 
 The in-call **Connection** panel (signal icon) tells you whether a call is
 direct or relayed.
-
-## 9. Bot platform (developer accounts, bots, bot API)
-
-Run, in order, in the SQL editor (all safe to re-run):
-
-1. `join_by_invite.sql`: joining servers by invite code.
-2. `profiles_is_bot.sql`: the bot flag used by the member list.
-3. `bots.sql`: bot accounts, developer tokens and rate limits.
-
-Then deploy the API: `supabase functions deploy bot-api --no-verify-jwt`.
-Full guide, SDKs and endpoints: `docs/bot-api.html`.

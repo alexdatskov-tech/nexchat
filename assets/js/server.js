@@ -28,7 +28,7 @@
   };
 
   // One page of history, oldest-first. `before` pages backwards from there.
-  /* ---- member panel: owner, bots and members; online people first ---- */
+  /* ---- member panel: owner and members; online people first ---- */
   let memRows = [];
   const memOnline = (p) => !!window.Presence?.isOnline(p.id);
   const memSort = (a, b) => (memOnline(b) - memOnline(a)) || (a.username || '').localeCompare(b.username || '');
@@ -37,13 +37,9 @@
     try { localStorage.setItem('nx_members_open', open ? '1' : '0'); } catch {}
   }
   async function loadMembers() {
-    const cols = 'id, username, display_name, avatar_url, accent_color, is_nitro, theme';
-    const q = (c) => window.db.from('server_members')
-      .select(`user_id, profiles!user_id(${c})`).eq('server_id', serverId);
-    // profiles.is_bot comes from supabase/profiles_is_bot.sql. Until that runs,
-    // retry without it so people still show, and everyone is treated as a member.
-    let { data, error } = await q(cols + ', is_bot');
-    if (error && /is_bot/.test(error.message || '')) ({ data, error } = await q(cols));
+    const { data, error } = await window.db.from('server_members')
+      .select('user_id, profiles!user_id(id, username, display_name, avatar_url, accent_color, is_nitro, theme)')
+      .eq('server_id', serverId);
     if (error) {
       const list = $('memList');
       if (list) list.innerHTML = '<div class="mem-sect">Could not load members</div>';
@@ -55,12 +51,11 @@
   function paintMembers() {
     const list = $('memList'); if (!list || !srv) return;
     const owner = memRows.filter((p) => p.id === srv.owner_id);
-    const bots = memRows.filter((p) => p.is_bot && p.id !== srv.owner_id).sort(memSort);
-    const people = memRows.filter((p) => !p.is_bot && p.id !== srv.owner_id).sort(memSort);
+    const people = memRows.filter((p) => p.id !== srv.owner_id).sort(memSort);
     const row = (p) => `<div class="mem-row ${memOnline(p) ? '' : 'off'}" data-uid="${UI.esc(p.id)}">${UI.avatar(p, 30)}`
-      + `<span class="mn">${UI.nxNameText(p)}</span>${p.is_bot ? '<span class="bot-tag">BOT</span>' : ''}</div>`;
+      + `<span class="mn">${UI.nxNameText(p)}</span></div>`;
     const sect = (title, arr) => arr.length ? `<div class="mem-sect">${title} · ${arr.length}</div>${arr.map(row).join('')}` : '';
-    list.innerHTML = sect('Owner', owner) + sect('Bots & apps', bots) + sect('Members', people);
+    list.innerHTML = sect('Owner', owner) + sect('Members', people);
     $('memCount').textContent = memRows.length;
   }
   function setupMembers() {
