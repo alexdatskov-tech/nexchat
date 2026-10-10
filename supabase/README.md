@@ -127,4 +127,4 @@ Run, in order, in the SQL editor (all safe to re-run):
 3. `bots.sql`: bot accounts, developer tokens and rate limits.
 
 Then deploy the API: `supabase functions deploy bot-api --no-verify-jwt`.
-Full guide, SDKs and endpoints: `docs/bot-api.md`.
+Full guide, SDKs and endpoints: `docs/bot-api.html`.

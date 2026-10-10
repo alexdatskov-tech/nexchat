@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NexChat Bot API · NexChat</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #0b0d12; color: #e6e8ee; font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 40px 22px 80px; }
+header.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 22px; border-bottom: 1px solid #1f232d; font-size: 14px; }
+header.top a { color: #9aa3b5; text-decoration: none; } header.top a:hover { color: #fff; }
+h1, h2, h3, h4 { line-height: 1.25; letter-spacing: -.01em; }
+h1 { font-size: 2.1em; margin: .2em 0 .4em; }
+h2 { font-size: 1.5em; margin: 2.2em 0 .6em; padding-bottom: .3em; border-bottom: 1px solid #1f232d; }
+h3 { font-size: 1.15em; margin: 1.8em 0 .5em; }
+a { color: #8fb3ff; }
+a.header-anchor { color: #4d5566; text-decoration: none; margin-left: .35em; opacity: 0; }
+h2:hover a.header-anchor, h3:hover a.header-anchor { opacity: 1; }
+code { font: 13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #171b24; border: 1px solid #222838; border-radius: 6px; padding: .1em .38em; }
+pre { background: #0f121a; border: 1px solid #222838; border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+pre code { background: none; border: 0; padding: 0; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 14.5px; display: block; overflow-x: auto; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1f232d; vertical-align: top; }
+th { color: #aab3c5; font-weight: 600; background: #11141c; }
+blockquote { margin: 1em 0; padding: .4em 1em; border-left: 3px solid #3b4a6b; color: #b5bdcc; background: #10131b; border-radius: 0 8px 8px 0; }
+hr { border: 0; border-top: 1px solid #1f232d; margin: 2em 0; }
+ul, ol { padding-left: 1.4em; } li { margin: .25em 0; }
+</style>
+</head>
+<body>
+<header class="top"><a href="../portal.html">← NexChat</a><span>Developer docs</span></header>
+<main>
+<h1>NexChat Bot API</h1>
+<p>Bots are normal NexChat accounts with a username and password. You make them
+in <strong>Profile → Developer</strong>, then run your bot code on any server that can
+reach the internet (a VPS, a home machine, a Raspberry Pi).</p>
+<p>Developer status is for making bots. It never gives platform admin rank.</p>
+<p>Status: <strong>phase 1</strong>. Available now: login, your profile, servers, channels,
+messages, friends. Not yet: file uploads, replies, slash commands, buttons,
+and custom bot HTML. Those are listed at the end.</p>
+<hr>
+<h2 id="1-set-up-the-backend-once" tabindex="-1">1. Set up the backend (once) <a class="header-anchor" href="#1-set-up-the-backend-once" aria-hidden="true">#</a></h2>
+<p>In the Supabase SQL editor, run these in order. Each is safe to re-run.</p>
+<ol>
+<li><code>supabase/join_by_invite.sql</code></li>
+<li><code>supabase/profiles_is_bot.sql</code></li>
+<li><code>supabase/bots.sql</code></li>
+</ol>
+<p>Then deploy the function (from the repo root, with the Supabase CLI):</p>
+<pre><code class="language-bash">supabase functions deploy bot-api --no-verify-jwt
+</code></pre>
+<p>Your base URL is:</p>
+<pre><code>https://&lt;project&gt;.supabase.co/functions/v1/bot-api
+</code></pre>
+<p>All paths below are relative to it and start with <code>/v1</code>.</p>
+<h2 id="2-make-a-developer-token-and-a-bot" tabindex="-1">2. Make a developer token and a bot <a class="header-anchor" href="#2-make-a-developer-token-and-a-bot" aria-hidden="true">#</a></h2>
+<ol>
+<li>Sign in to NexChat, open <strong>Profile → Developer</strong>.</li>
+<li>Press <strong>Create developer token</strong> and copy it. It is shown once.</li>
+<li>Under <strong>Bots</strong>, enter a username (3–24 characters: <code>a–z</code>, <code>0–9</code>, <code>_</code>),
+a display name and a password (10+ characters). Press <strong>Create bot</strong>.</li>
+</ol>
+<p>Keep the developer token secret. Anyone with it can create and delete your
+bots. Pressing <strong>Create developer token</strong> again replaces the old token.</p>
+<h2 id="3-credentials" tabindex="-1">3. Credentials <a class="header-anchor" href="#3-credentials" aria-hidden="true">#</a></h2>
+<table>
+<thead>
+<tr>
+<th>Credential</th>
+<th>Used for</th>
+<th>How to get it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Developer token <code>nxdev_…</code></td>
+<td>Managing bots: create, list, delete</td>
+<td>Profile → Developer</td>
+</tr>
+<tr>
+<td>Bot session (access token)</td>
+<td>Everything the bot does in chat</td>
+<td><code>POST /v1/auth/login</code> with the bot’s username and password</td>
+</tr>
+</tbody>
+</table>
+<p>A developer token cannot send messages. Chat actions always run as the bot,
+so the same server permissions apply to it as to any member.</p>
+<h2 id="4-endpoints" tabindex="-1">4. Endpoints <a class="header-anchor" href="#4-endpoints" aria-hidden="true">#</a></h2>
+<p>Errors come back as <code>{ &quot;error&quot;: &quot;message&quot; }</code> with an HTTP status code.</p>
+<h3 id="public" tabindex="-1">Public <a class="header-anchor" href="#public" aria-hidden="true">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method &amp; path</th>
+<th>Body</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /v1/auth/login</code></td>
+<td><code>{ username, password }</code></td>
+<td><code>{ access_token, refresh_token, expires_in, user_id }</code></td>
+</tr>
+</tbody>
+</table>
+<p>Access tokens expire after about an hour. The SDKs log in again automatically.</p>
+<h3 id="developer-token-or-developer-session-managing-bots" tabindex="-1">Developer token or developer session: managing bots <a class="header-anchor" href="#developer-token-or-developer-session-managing-bots" aria-hidden="true">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method &amp; path</th>
+<th>Body</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /v1/dev/status</code></td>
+<td></td>
+<td><code>{ is_developer, has_token, token_created_at, last_used_at }</code></td>
+</tr>
+<tr>
+<td><code>POST /v1/dev/token</code></td>
+<td></td>
+<td><code>{ token }</code>. Session only, not a developer token. Shown once</td>
+</tr>
+<tr>
+<td><code>POST /v1/bots</code></td>
+<td><code>{ username, password, display_name? }</code></td>
+<td><code>{ id, user_id, username }</code> (201)</td>
+</tr>
+<tr>
+<td><code>GET /v1/bots</code></td>
+<td></td>
+<td><code>{ bots: [...] }</code></td>
+</tr>
+<tr>
+<td><code>POST /v1/bots/delete</code></td>
+<td><code>{ bot_id }</code></td>
+<td><code>{ ok: true }</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each developer can have up to 10 bots.</p>
+<h3 id="bot-session-chat" tabindex="-1">Bot session: chat <a class="header-anchor" href="#bot-session-chat" aria-hidden="true">#</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method &amp; path</th>
+<th>Body</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /v1/me</code></td>
+<td></td>
+<td>the bot’s profile</td>
+</tr>
+<tr>
+<td><code>GET /v1/servers</code></td>
+<td></td>
+<td><code>{ servers: [{ id, name, description }] }</code></td>
+</tr>
+<tr>
+<td><code>GET /v1/servers/{serverId}/channels</code></td>
+<td></td>
+<td><code>{ channels: [...] }</code></td>
+</tr>
+<tr>
+<td><code>GET /v1/channels/{channelId}/messages?limit=50</code></td>
+<td></td>
+<td><code>{ messages: [{ id, content, created_at, author_id }] }</code>, newest first. Limit 1–100</td>
+</tr>
+<tr>
+<td><code>POST /v1/channels/{channelId}/messages</code></td>
+<td><code>{ content }</code> (1–2000 characters)</td>
+<td><code>{ id, created_at }</code> (201)</td>
+</tr>
+<tr>
+<td><code>GET /v1/friends</code></td>
+<td></td>
+<td><code>{ friendships: [...] }</code></td>
+</tr>
+<tr>
+<td><code>POST /v1/friends</code></td>
+<td><code>{ username }</code></td>
+<td><code>{ ok: true }</code></td>
+</tr>
+<tr>
+<td><code>POST /v1/friends/accept</code></td>
+<td><code>{ user_id }</code></td>
+<td><code>{ ok: true }</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="limits" tabindex="-1">Limits <a class="header-anchor" href="#limits" aria-hidden="true">#</a></h3>
+<ul>
+<li>Bot chat calls: 120 per minute per bot.</li>
+<li>Developer calls: 60 per minute per developer.</li>
+<li>Login: 10 attempts per minute per username.</li>
+<li>Going over returns <code>429</code>.</li>
+</ul>
+<h2 id="5-quick-start" tabindex="-1">5. Quick start <a class="header-anchor" href="#5-quick-start" aria-hidden="true">#</a></h2>
+<h3 id="curl" tabindex="-1">curl <a class="header-anchor" href="#curl" aria-hidden="true">#</a></h3>
+<pre><code class="language-bash">BASE=https://&lt;project&gt;.supabase.co/functions/v1/bot-api
+
+TOKEN=$(curl -s -X POST $BASE/v1/auth/login -H 'content-type: application/json' \
+  -d '{&quot;username&quot;:&quot;robo_helper&quot;,&quot;password&quot;:&quot;your-password&quot;}' \
+  | sed -n 's/.*&quot;access_token&quot;:&quot;\([^&quot;]*\)&quot;.*/\1/p')
+
+curl -s -X POST $BASE/v1/channels/&lt;channel-id&gt;/messages \
+  -H &quot;authorization: Bearer $TOKEN&quot; -H 'content-type: application/json' \
+  -d '{&quot;content&quot;:&quot;hello from a script&quot;}'
+</code></pre>
+<h3 id="node-18-no-dependencies" tabindex="-1">Node (18+, no dependencies) <a class="header-anchor" href="#node-18-no-dependencies" aria-hidden="true">#</a></h3>
+<p>Copy <code>sdk/node/nexchat.js</code> into your project.</p>
+<pre><code class="language-js">const { Bot } = require('./nexchat');
+const bot = await Bot.login({ baseUrl: BASE, username: 'robo_helper', password: '…' });
+await bot.send(channelId, 'hello');
+</code></pre>
+<p>A complete example that replies <code>pong</code> to <code>!ping</code> is in <code>examples/node-echo.js</code>.</p>
+<h3 id="python-38-no-dependencies" tabindex="-1">Python (3.8+, no dependencies) <a class="header-anchor" href="#python-38-no-dependencies" aria-hidden="true">#</a></h3>
+<p>Copy <code>sdk/python/nexchat.py</code>.</p>
+<pre><code class="language-python">from nexchat import Bot
+bot = Bot.login(base_url=BASE, username=&quot;robo_helper&quot;, password=&quot;…&quot;)
+bot.send(channel_id, &quot;hello&quot;)
+</code></pre>
+<h3 id="shell" tabindex="-1">Shell <a class="header-anchor" href="#shell" aria-hidden="true">#</a></h3>
+<p><code>sdk/shell/nexchat.sh</code> needs only <code>curl</code>:</p>
+<pre><code class="language-bash">source sdk/shell/nexchat.sh
+nx_login &quot;$BASE&quot; robo_helper &quot;$PASSWORD&quot;
+nx_send &quot;$BASE&quot; &lt;channel-id&gt; &quot;hello&quot;
+</code></pre>
+<h2 id="6-run-a-bot-on-a-vps" tabindex="-1">6. Run a bot on a VPS <a class="header-anchor" href="#6-run-a-bot-on-a-vps" aria-hidden="true">#</a></h2>
+<p>Any Linux box with Node 18+ or Python 3.8+ works. Keep the password in an
+environment file, not in code.</p>
+<pre><code class="language-ini"># /etc/systemd/system/nexchat-bot.service
+[Unit]
+Description=NexChat bot
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/nexchat-bot
+EnvironmentFile=/opt/nexchat-bot/.env
+ExecStart=/usr/bin/node examples/node-echo.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<p><code>.env</code> holds <code>BASE</code>, <code>BOT_USER</code>, <code>BOT_PASS</code> and <code>CHANNEL</code>. Then:
+<code>sudo systemctl enable --now nexchat-bot</code>.</p>
+<h2 id="7-security-notes" tabindex="-1">7. Security notes <a class="header-anchor" href="#7-security-notes" aria-hidden="true">#</a></h2>
+<ul>
+<li>The bot’s password is only ever sent to <code>/v1/auth/login</code>, over HTTPS.</li>
+<li>Developer tokens are stored as SHA-256 hashes. NexChat cannot show a token
+again after you close the dialog.</li>
+<li>Bots can only read and post where their account has access. They are
+ordinary members, not admins.</li>
+<li>Dev signup does not make you an admin. Platform admin rank is still set by
+the owner.</li>
+</ul>
+<h2 id="8-not-yet-later-phases" tabindex="-1">8. Not yet (later phases) <a class="header-anchor" href="#8-not-yet-later-phases" aria-hidden="true">#</a></h2>
+<ul>
+<li>File uploads from bots.</li>
+<li>Replying to a specific message.</li>
+<li>Slash commands and interactive buttons.</li>
+<li>Custom bot HTML. When it arrives it will run in a sandboxed frame. Outside
+requests go through a proxy that only allows hosts the server admin
+approves. Anything not on the list is blocked.</li>
+</ul>
+
+</main>
+</body>
+</html>
