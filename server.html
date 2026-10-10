@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>NexChat</title>
 <meta name="theme-color" content="#08090D" />
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=54" />
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=55" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=54" />
-<script src="assets/js/ambient.js?v=54"></script>
+<link rel="stylesheet" href="assets/css/theme.css?v=55" />
+<script src="assets/js/ambient.js?v=55"></script>
 </head>
 <body>
 
@@ -74,6 +74,7 @@
       <span class="hico" id="chIco"><i class="fa-solid fa-hashtag"></i></span>
       <b id="chName">—</b>
       <span class="topic hidden" id="chTopic"></span>
+      <button class="btn btn-quiet btn-icon mem-toggle" id="memBtn" title="Members"><i class="fa-solid fa-users"></i></button>
     </header>
 
     <div class="vroom hidden" id="vroom">
@@ -114,6 +115,11 @@
     </div>
 
   </main>
+  <aside class="members hidden" id="members" aria-label="Members">
+    <header class="mem-head"><b>Members</b><span class="mem-count" id="memCount"></span>
+      <button class="btn btn-quiet btn-icon btn-sm" id="memClose" title="Hide members"><i class="fa-solid fa-xmark"></i></button></header>
+    <div class="mem-list" id="memList"></div>
+  </aside>
 </div>
 </div>
 
@@ -220,26 +226,26 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=54"></script>
-<script src="assets/js/supabase-client.js?v=54"></script>
-<script src="assets/js/ui.js?v=54"></script>
-<script src="assets/js/glass.js?v=54"></script>
-<script src="assets/js/md.js?v=54"></script>
-<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=54"></script>
-<script src="assets/js/cloudgate.js?v=54"></script>
-<script src="assets/js/storage.js?v=54"></script>
-<script src="assets/js/tiff.js?v=54"></script>
-<script src="assets/js/viewer.js?v=54"></script>
-<script src="assets/js/ice.js?v=54"></script>
-<script src="assets/js/voice.js?v=54"></script>
-<script src="assets/js/callui.js?v=54"></script>
-<script src="assets/js/presence.js?v=54"></script>
-<script src="assets/js/guard.js?v=54"></script>
-<script src="assets/js/notify.js?v=54"></script>
-<script src="assets/js/emoji-data.js?v=54"></script>
-<script src="assets/js/emoji-picker.js?v=54"></script>
-<script src="assets/js/composer-plus.js?v=54"></script>
-<script src="assets/js/nav.js?v=54"></script>
-<script src="assets/js/server.js?v=54"></script>
+<script src="assets/js/config.js?v=55"></script>
+<script src="assets/js/supabase-client.js?v=55"></script>
+<script src="assets/js/ui.js?v=55"></script>
+<script src="assets/js/glass.js?v=55"></script>
+<script src="assets/js/md.js?v=55"></script>
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=55"></script>
+<script src="assets/js/cloudgate.js?v=55"></script>
+<script src="assets/js/storage.js?v=55"></script>
+<script src="assets/js/tiff.js?v=55"></script>
+<script src="assets/js/viewer.js?v=55"></script>
+<script src="assets/js/ice.js?v=55"></script>
+<script src="assets/js/voice.js?v=55"></script>
+<script src="assets/js/callui.js?v=55"></script>
+<script src="assets/js/presence.js?v=55"></script>
+<script src="assets/js/guard.js?v=55"></script>
+<script src="assets/js/notify.js?v=55"></script>
+<script src="assets/js/emoji-data.js?v=55"></script>
+<script src="assets/js/emoji-picker.js?v=55"></script>
+<script src="assets/js/composer-plus.js?v=55"></script>
+<script src="assets/js/nav.js?v=55"></script>
+<script src="assets/js/server.js?v=55"></script>
 </body>
 </html>

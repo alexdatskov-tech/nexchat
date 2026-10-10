@@ -28,6 +28,46 @@
   };
 
   // One page of history, oldest-first. `before` pages backwards from there.
+  /* ---- member panel: owner, bots and members; online people first ---- */
+  let memRows = [];
+  const memOnline = (p) => !!window.Presence?.isOnline(p.id);
+  const memSort = (a, b) => (memOnline(b) - memOnline(a)) || (a.username || '').localeCompare(b.username || '');
+  function setMembers(open) {
+    $('members').classList.toggle('hidden', !open);
+    try { localStorage.setItem('nx_members_open', open ? '1' : '0'); } catch {}
+  }
+  async function loadMembers() {
+    const { data, error } = await window.db.from('server_members')
+      .select('user_id, profiles!user_id(id, username, display_name, avatar_url, accent_color, is_nitro, theme, is_bot)')
+      .eq('server_id', serverId);
+    if (error) return;
+    memRows = (data || []).map((r) => r.profiles).filter(Boolean);
+    paintMembers();
+  }
+  function paintMembers() {
+    const list = $('memList'); if (!list || !srv) return;
+    const owner = memRows.filter((p) => p.id === srv.owner_id);
+    const bots = memRows.filter((p) => p.is_bot && p.id !== srv.owner_id).sort(memSort);
+    const people = memRows.filter((p) => !p.is_bot && p.id !== srv.owner_id).sort(memSort);
+    const row = (p) => `<div class="mem-row ${memOnline(p) ? '' : 'off'}" data-uid="${UI.esc(p.id)}">${UI.avatar(p, 30)}`
+      + `<span class="mn">${UI.nxNameText(p)}</span>${p.is_bot ? '<span class="bot-tag">BOT</span>' : ''}</div>`;
+    const sect = (title, arr) => arr.length ? `<div class="mem-sect">${title} · ${arr.length}</div>${arr.map(row).join('')}` : '';
+    list.innerHTML = sect('Owner', owner) + sect('Bots & apps', bots) + sect('Members', people);
+    $('memCount').textContent = memRows.length;
+  }
+  function setupMembers() {
+    $('memBtn').onclick = () => setMembers($('members').classList.contains('hidden'));
+    $('memClose').onclick = () => setMembers(false);
+    $('memList').onclick = (e) => {
+      const r = e.target.closest('[data-uid]'); if (r) UI.userCard?.(r.dataset.uid);
+    };
+    // Desktop: open by default. Phones: closed, opened as an overlay.
+    let saved = null; try { saved = localStorage.getItem('nx_members_open'); } catch {}
+    setMembers(saved === null ? window.innerWidth > 1000 : saved === '1');
+    window.Presence?.onChange(paintMembers);
+    loadMembers();
+  }
+
   async function fetchPage(cid, before) {
     let q = window.db.from('messages')
       .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
@@ -1229,6 +1269,7 @@
     $('srvName').textContent = srv.name;
     const n = srv.server_members?.[0]?.count ?? 0;
     $('srvMembers').textContent = `${n} member${n === 1 ? '' : 's'}`;
+    setupMembers();
     if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
     UI.applyServerName(srv.theme);
     // Owners may edit appearance in another tab while members stay in chat.
