@@ -35,7 +35,20 @@
 
   // ---- tabs ----
   document.querySelectorAll('.set-nav button[data-tab]').forEach((b) => {
-    b.onclick = () => {
+    b.onclick = async () => {
+      // Leaving an editable pane with unsaved changes: save, discard or stay.
+      const cur = document.querySelector('[data-pane]:not(.hidden)');
+      if (window.SettingsUI?.dirty && cur && cur.dataset.nosave === undefined && cur.dataset.pane !== b.dataset.tab) {
+        const choice = await window.SettingsUI.askLeave();
+        if (choice === 'stay') return;
+        if (choice === 'save') {
+          await $('btnSave').onclick();
+          if (window.SettingsUI.dirty) return;   // the save failed: stay so nothing is lost
+        } else {
+          hydrate();                              // discard: back to the saved values
+          window.SettingsUI.clean();
+        }
+      }
       document.querySelectorAll('.set-nav button[data-tab]').forEach((x) => x.classList.remove('on'));
       b.classList.add('on');
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
