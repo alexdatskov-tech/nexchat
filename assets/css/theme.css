@@ -2040,3 +2040,15 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 }
 .sp-addmenu button:hover, .sp-addmenu button:focus-visible { background: rgba(255,255,255,.08); outline: none; }
 .sp-addmenu i { width: 16px; text-align: center; opacity: .8; }
+
+/* ---- server page: narrower side columns, chat gets the room ---- */
+.shell > .rail { width: 216px; }
+.shell > .members { width: 216px; }
+
+/* The message bar sits in a glass dock that runs to the bottom edge, so
+   there is no dark strip under it. */
+.composer {
+  background: rgba(12,14,19,.5);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+body.glass .composer { backdrop-filter: blur(var(--glass-blur, 5px)) saturate(1.4); -webkit-backdrop-filter: blur(var(--glass-blur, 5px)) saturate(1.4); }
