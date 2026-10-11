@@ -6,9 +6,9 @@ const REPO = require('path').resolve(__dirname, '..');
 
 const channels = new Map();   // topic -> fake channel
 const removed = [];
-function fakeChannel(topic) {
+function fakeChannel(topic, opts) {
   const ch = {
-    topic, handlers: [], presence: {}, subscribed: false,
+    topic, opts: opts || {}, handlers: [], presence: {}, subscribed: false,
     on(type, filter, fn) { if (type === 'presence') this.presenceFn = fn; return this; },
     subscribe(cb) { this.subscribed = true; cb?.('SUBSCRIBED'); return this; },
     presenceState() { return this.presence; },
@@ -19,7 +19,7 @@ function fakeChannel(topic) {
   return ch;
 }
 const db = {
-  channel(topic) { return fakeChannel(topic); },
+  channel(topic, opts) { return fakeChannel(topic, opts); },
   removeChannel(ch) { removed.push(ch.topic); return Promise.resolve(); },
   from() { return { upsert() { return Promise.resolve(); }, delete() { return { eq() { return { eq() { return Promise.resolve(); } }; } }; } }; },
 };
@@ -67,6 +67,12 @@ w.me = null;
 (async () => {
   const profile = { id: 'me', username: 'alexd', display_name: 'alexd' };
   await V.join({ id: 'dm-2', name: 'x' }, null, profile, () => {}, () => {}, () => {});
+  // Presence must be enabled on the joined channel, or nobody outside the call
+  // can see it (realtime-js enables presence only with a listener or with
+  // config.presence.enabled === true).
+  const joinedCh = [...channels.values()].find((c) => c.topic === 'voice:dm-2' && c.opts?.config?.presence);
+  assert.ok(joinedCh, 'joined call channel is created with a presence config');
+  assert.equal(joinedCh.opts.config.presence.enabled, true, 'joined call publishes presence');
   assert.equal(removed.includes('voice:dm-2'), true, 'joined call is no longer watched');
   // Leaving puts it back on the watch list.
   await V.leave();
