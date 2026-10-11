@@ -177,11 +177,33 @@ window.Nav = (function () {
      screen. info = { onClick } or null. Pages set it from their call state. */
   let callChip = null;
   function setCallChip(info) { callChip = info || null; paintCallChip(); }
+
+  // Which calls to watch: every DM conversation the user has (saved by the
+  // Messages page) plus the voice channels of the server being viewed.
+  let extraWatch = [];
+  function watchIds() {
+    let dms = [];
+    try { dms = JSON.parse(localStorage.getItem('nx_dm_calls') || '[]'); } catch {}
+    return [...dms, ...extraWatch];
+  }
+  function refreshWatch() { window.Voice?.watch?.(watchIds()); }
+  function watchExtra(ids) { extraWatch = ids || []; refreshWatch(); }
+  let liveWired = false;
+  // Calls running elsewhere (you are not in them) come from presence. Tapping
+  // the icon opens that conversation and joins its call.
+  function liveChip() {
+    const st = window.Voice?.state?.();
+    const live = window.Voice?.live?.() || new Map();
+    const key = [...live.keys()].find((k) => k.startsWith('dm-') && !(st?.active && st.channel?.id === k));
+    if (!key) return null;
+    return { onClick: () => { location.href = 'dms.html?c=' + encodeURIComponent(key.slice(3)) + '&join=1'; } };
+  }
   function paintCallChip() {
     const nav = $('spaces');
     if (!nav) return;
     let b = nav.querySelector('.sp-call');
-    if (!callChip) { b?.remove(); return; }
+    const info = callChip || liveChip();
+    if (!info) { b?.remove(); return; }
     if (!b) {
       b = document.createElement('button');
       b.className = 'sp-item sp-call';
@@ -189,8 +211,9 @@ window.Nav = (function () {
       b.innerHTML = `${PIP}<i class="fa-solid fa-phone"></i><span class="sp-live" aria-hidden="true"></span>`;
       nav.querySelector('.sp-dms')?.after(b);
       if (!b.previousElementSibling) nav.prepend(b);
-      b.addEventListener('click', () => callChip?.onClick?.());
+      b.addEventListener('click', () => b._go?.());
     }
+    b._go = info.onClick;
   }
 
   /* opts: { active: 'home' | 'dms' | <serverId>, onAdd?: () => void } */
@@ -226,6 +249,8 @@ window.Nav = (function () {
       nav.addEventListener('pointerover', (e) => { const a = e.target.closest('a[href]'); if (a) warm(a.getAttribute('href')); });
     }
     paintCallChip();
+    if (!liveWired && window.Voice?.onLive) { liveWired = true; window.Voice.onLive(() => paintCallChip()); }
+    refreshWatch();
     if (early) { paintServers(store.get(SRV_KEY, [])); return; }
     mounted = true;
     try { sessionStorage.setItem(ME_KEY, JSON.stringify(me)); } catch {}
@@ -288,5 +313,5 @@ window.Nav = (function () {
 
   function onAnnouncements(f) { annListeners.add(f); if (anns) f(anns, annOk); }
 
-  return { mount, warm, setCallChip, openAnnouncements, onAnnouncements, annCard, fetchAnnouncements, openDrawer, closeDrawer, refreshServers: () => loadServers().catch(() => {}) };
+  return { mount, warm, setCallChip, refreshWatch, watchExtra, openAnnouncements, onAnnouncements, annCard, fetchAnnouncements, openDrawer, closeDrawer, refreshServers: () => loadServers().catch(() => {}) };
 })();

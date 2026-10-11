@@ -226,9 +226,11 @@
             </span>
           </div>`).join('')}</div>`;
       }
+      const liveN = !inHere && isVoice ? ((Voice.live?.() || new Map()).get(c.id) || 0) : 0;
+      const liveTag = liveN ? `<span class="vc-live" title="Call in progress: click to join">${liveN} in call</span>` : '';
       const cls = [c.id === active?.id ? 'on' : '', inHere ? 'connected' : ''].filter(Boolean).join(' ');
       return `<div class="chan ${cls}" data-id="${c.id}" data-voice="${isVoice}">
-          <i class="fa-solid ${chanIcon(c.type)}"></i><span>${MD.esc(c.name)}</span>${inHere ? '<span class="live-dot"></span>' : ''}
+          <i class="fa-solid ${chanIcon(c.type)}"></i><span>${MD.esc(c.name)}</span>${inHere ? '<span class="live-dot"></span>' : ''}${liveTag}
         </div>${occupants}`;
     };
 
@@ -252,11 +254,14 @@
     });
   }
 
+  let liveWiredSrv = false;
   async function loadChannels(selectId) {
     const { data, error } = await window.db.from('channels').select('*').eq('server_id', serverId).order('position');
     if (error) return UI.toast('Could not load channels.', true);
     channels = data;
+    window.Nav?.watchExtra?.(channels.filter((c) => c.type === 'voice' || c.type === 'stage').map((c) => c.id));
     renderChannels();
+    if (!liveWiredSrv && window.Voice?.onLive) { liveWiredSrv = true; Voice.onLive(() => renderChannels()); }
     const pick = (selectId && channels.find((c) => c.id === selectId))
       || channels.find((c) => c.type === 'text' || c.type === 'announcement');
     if (pick) open(pick); else { $('composer').classList.add('hidden'); $('msgs').innerHTML = ''; }

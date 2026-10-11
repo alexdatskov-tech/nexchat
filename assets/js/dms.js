@@ -183,6 +183,13 @@
   $('dmFilter').oninput = paintList;
 
   async function loadAll() {
+    await loadAllInner();
+    // Other pages watch these conversations for live calls (see nav.js).
+    try { localStorage.setItem('nx_dm_calls', JSON.stringify(convs.map((c) => 'dm-' + c.id))); } catch {}
+    window.Nav?.refreshWatch?.();
+  }
+
+  async function loadAllInner() {
     const [{ data: parts }, { data: fr }] = await Promise.all([
       window.db.from('dm_participants').select('conversation_id').eq('user_id', me.id),
       window.db.from('friendships').select('*').or(`user_id.eq.${me.id},friend_id.eq.${me.id}`),
@@ -1031,7 +1038,7 @@
     CallUI.markAllSpeaking(set);
   }
 
-  async function startCall(withVideo) {
+  async function startCall(withVideo, opts = {}) {
     if (!active) return;
     const cur = Voice.state();
     if (cur.active && cur.channel?.id === 'dm-' + active.id) {
@@ -1047,6 +1054,7 @@
     } catch { return; }
     showCall(true);
     if (withVideo) await Voice.toggleCam();
+    if (opts.join) return;   // joining a call that is already running: nobody is rung
 
     // Ring everyone else in the conversation.
     active.people.forEach((p) => {
@@ -1138,7 +1146,7 @@
     if (UI.hash() === '#requests') { tab = 'requests'; syncTabs(); paintList(); }
     if (want) {
       await openConv(convs.find((c) => c.id === want), prefetch);
-      if (params.get('call') === '1') startCall(false);
+      if (params.get('call') === '1' || params.get('join') === '1') startCall(false, { join: params.get('join') === '1' });
     }
   })();
 })();
