@@ -526,7 +526,11 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .dm-item .nm small { font-size: 12px; color: var(--txt-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .dm-item .btn-sm { width: 30px; height: 30px; padding: 0; border-radius: 50%; opacity: .7; }
 .dm-item:hover .btn-sm { opacity: 1; }
-.dm-item .btn-primary.btn-sm { width: auto; padding: 0 12px; opacity: 1; }
+.dm-item .btn-primary.btn-sm { opacity: 1; }
+/* Row controls keep their size; the name takes the room that is left, so a
+   narrow rail truncates the name instead of squashing the buttons. */
+.dm-item > * { flex-shrink: 0; }
+.dm-item > .nm { flex: 1 1 0; min-width: 0; }
 .dm-empty { padding: 28px 14px; text-align: center; color: var(--txt-3); font-size: 12.5px; }
 .dm-sect { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--txt-3); padding: 12px 9px 6px; }
 

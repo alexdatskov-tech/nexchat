@@ -328,8 +328,8 @@
           return `<div class="dm-item" data-u="${r.user_id}">
             ${UI.avatar(p, 34)}
             <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>wants to be friends</small></div>
-            <button class="btn btn-primary btn-sm" data-ok="${r.user_id}">Accept</button>
-            <button class="btn btn-quiet btn-sm" data-no="${r.user_id}"><i class="fa-solid fa-xmark"></i></button>
+            <button class="btn btn-primary btn-sm" data-ok="${r.user_id}" title="Accept" aria-label="Accept"><i class="fa-solid fa-check"></i></button>
+            <button class="btn btn-quiet btn-sm" data-no="${r.user_id}" title="Decline" aria-label="Decline"><i class="fa-solid fa-xmark"></i></button>
           </div>`;
         }).join('');
       }
@@ -338,9 +338,8 @@
           const p = profiles[r.friend_id] || { username: '…' };
           return `<div class="dm-item" data-u="${r.friend_id}">
             ${UI.avatar(p, 34)}
-            <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>Pending</small></div>
-            <span class="chip" style="color:var(--txt-3)"><i class="fa-regular fa-clock"></i> Waiting</span>
-            <button class="btn btn-quiet btn-sm" data-cancel="${r.friend_id}" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+            <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>Waiting for a reply</small></div>
+            <button class="btn btn-quiet btn-sm" data-cancel="${r.friend_id}" title="Cancel" aria-label="Cancel"><i class="fa-solid fa-xmark"></i></button>
           </div>`;
         }).join('');
       }
