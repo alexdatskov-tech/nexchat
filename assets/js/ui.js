@@ -191,10 +191,10 @@ window.UI = (function () {
       html: `<div class="card-deco" aria-hidden="true">${cardDecoImgs(deco)}</div>` };
   }
 
-  // The whole APNG, never cropped, centred; a blurred copy fills the card.
+  // The deco art fills the whole card; the card is shaped to the art (see
+  // .upop.has-deco / .pcard.has-deco in theme.css), so nothing is left over.
   function cardDecoImgs(src) {
-    const s = esc(src);
-    return `<img class="card-deco-bg" src="${s}" alt="" aria-hidden="true" decoding="async"><img class="card-deco-art" src="${s}" alt="" decoding="async">`;
+    return `<img class="card-deco-art" src="${esc(src)}" alt="" decoding="async">`;
   }
 
   function nxBioBox(p, innerHtml) {
