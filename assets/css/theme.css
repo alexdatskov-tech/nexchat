@@ -573,6 +573,7 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .msgs-top .big-ico:has(.av), .msgs-top .big-ico:has(.av-slot) { background: none; border: none; width: auto; height: auto; justify-content: flex-start; }
 .msgs-top h2 { font-size: 26px; margin-bottom: 4px; letter-spacing: -.03em; }
 .msgs-top p { font-size: 14px; color: var(--txt-2); margin: 0; }
+.msgs-fail { margin: auto; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--txt-3); font-size: 13px; }
 .msgs-skel { padding: 18px 20px; display: flex; flex-direction: column; gap: 18px; margin-top: auto; }
 .sk-row { display: flex; gap: 12px; }
 .sk-av { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }

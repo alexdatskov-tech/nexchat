@@ -28,6 +28,13 @@
   const intro = () => `<div class="msgs-top"><div class="big-ico">${convAvatar(active, 64)}</div>
       <h2>${MD.esc(convTitle(active))}</h2>
       <p>${active.is_group ? 'This is the very beginning of this group chat.' : 'This is the beginning of your direct messages with <b>' + MD.esc(convTitle(active)) + '</b>.'}</p></div>`;
+  // Placeholder rows only ever stand in for a page that has not arrived yet.
+  // Anything real replaces them, so they can never sit under a live message.
+  const clearSkeleton = () => $('msgs')?.querySelector('.msgs-skel')?.remove();
+  const withTimeout = (p, ms) => new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error('This conversation is taking too long to load.')), ms);
+    Promise.resolve(p).then((v) => { clearTimeout(t); res(v); }, (e) => { clearTimeout(t); rej(e); });
+  });
   const olderBadge = `<button type="button" class="msgs-older"><i class="fa-solid fa-clock-rotate-left"></i><span>Load earlier messages</span></button>`;
 
   const oldestTs = () => {
@@ -496,6 +503,14 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  function showLoadFailed(cid) {
+    const box = $('msgs');
+    if (!box) return;
+    box.innerHTML = '<div class="msgs-fail"><p>Could not load this conversation.</p>' +
+      '<button type="button" class="btn btn-ghost btn-sm" id="msgsRetry">Try again</button></div>';
+    $('msgsRetry').onclick = () => loadMsgs(cid);
+  }
+
   async function loadMsgs(cid, prefetched) {
     const box = $('msgs');
     haveOlder = false; loadingOlder = false; autofilled = 0;
@@ -513,9 +528,16 @@
     }
 
     let msgs;
-    try { msgs = (prefetched && await prefetched) || await fetchPage(cid); }
-    catch (err) { if (!cached) box.innerHTML = ''; return UI.toast(err.message, true); }
+    // The timeout must cover the prefetched request too, so it is not awaited out here.
+    const first = prefetched ? prefetched.then((v) => v || fetchPage(cid)) : fetchPage(cid);
+    try { msgs = await withTimeout(first, 15000); }
+    catch (err) {
+      if (!active || active.id !== cid) return;
+      if (!cached) showLoadFailed(cid);
+      return UI.toast(err.message, true);
+    }
     if (!active || active.id !== cid) return;
+    clearSkeleton();
     cacheProfiles(msgs);
     haveOlder = msgs.more;
 
@@ -602,6 +624,7 @@
     await profileOf(m.author_id);
     if (document.querySelector(`.m[data-id="${m.id}"]`)) return null;
     const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
+    clearSkeleton();
     const last = box.querySelector('.m:last-of-type');
     box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
     const el = box.lastElementChild;
@@ -853,6 +876,7 @@
       // Paint a pending bubble immediately: sending must never wait on the
       // network round-trip, let alone on a busy render loop.
       const box = $('msgs');
+      clearSkeleton();
       const tmp = {
         id: 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
         conversation_id: active.id, author_id: me.id,
