@@ -182,6 +182,15 @@ window.UI = (function () {
     return `<img class="bio-deco-bg" src="${s}" alt="" aria-hidden="true" loading="lazy" decoding="async"><img class="bio-deco" src="${s}" alt="" decoding="async">`;
   }
 
+  // The profile deco covers the whole profile card, not just the bio text.
+  // Returns the classes for the card and the full-card art layer behind it.
+  function cardDeco(p) {
+    const deco = nxDecoPath(p, 'bio');
+    if (!deco) return { cls: '', html: '' };
+    return { cls: ' card-deco-host has-deco',
+      html: `<div class="card-deco" aria-hidden="true"><img src="${esc(deco)}" alt="" decoding="async"></div>` };
+  }
+
   function nxBioBox(p, innerHtml) {
     const deco = nxDecoPath(p, 'bio');
     if (!deco) return innerHtml;
@@ -440,7 +449,8 @@ window.UI = (function () {
 
     const ov = document.createElement('div');
     ov.className = 'overlay';
-    ov.innerHTML = `<div class="upop">
+    const deco = cardDeco(p);
+    ov.innerHTML = `<div class="upop${deco.cls}">${deco.html}
       <div class="upop-banner" style="background:${banner}"></div>
       <div class="upop-body">
         <div class="upop-av ${p.is_nitro ? haloClass(p) : ''}"${p.is_nitro ? haloStyle(p) : ''}>${avatar(p, 68, { halo: false })}</div>
@@ -453,7 +463,7 @@ window.UI = (function () {
           ${window.Presence?.isOnline(p.id) ? 'Online' : 'Offline'}
         </div>
         ${p.custom_status ? `<div class="sect"><h5>Status</h5><p>${esc(p.custom_status)}</p></div>` : ''}
-        <div class="sect"><h5>About me</h5>${nxBioBox(p, `<p>${p.bio ? esc(p.bio) : '<span style="color:var(--txt-3)">Nothing here yet.</span>'}</p>`)}</div>
+        <div class="sect"><h5>About me</h5><p>${p.bio ? esc(p.bio) : '<span style="color:var(--txt-3)">Nothing here yet.</span>'}</p></div>
         ${roleChips}
         <div class="sect"><h5>Member since</h5><p>${new Date(p.created_at).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</p></div>
         ${actions}

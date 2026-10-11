@@ -76,11 +76,24 @@
     $('pvName').innerHTML = UI.nxNameHtml(who);
     $('pvHandle').textContent = '@' + me.username;
 
+    // The profile deco covers the whole card, as it does on the popup.
+    const card = $('pcard');
+    card.querySelector(':scope > .card-deco')?.remove();
+    card.classList.toggle('card-deco-host', !!bioDeco);
+    card.classList.toggle('has-deco', !!bioDeco);
+    if (bioDeco) {
+      const layer = document.createElement('div');
+      layer.className = 'card-deco';
+      layer.setAttribute('aria-hidden', 'true');
+      const art = document.createElement('img');
+      art.src = bioDeco;
+      layer.append(art);
+      card.prepend(layer);
+    }
+
     const bioEl = $('pvBio');
-    bioEl.classList.toggle('bio-deco-box', !!bioDeco);
     bioEl.classList.toggle('hidden', !bio && !bioDeco);
-    bioEl.innerHTML = `${bioDeco ? UI.bioDecoImgs(bioDeco) : ''}<span></span>`;
-    bioEl.querySelector('span').textContent = bio || (bioDeco ? 'Your bio sits here.' : '');
+    bioEl.textContent = bio || (bioDeco ? 'Your bio sits here.' : '');
 
     let badges = '';
     if (me.is_nitro) badges += ' <span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>';
