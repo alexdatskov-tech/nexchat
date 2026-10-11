@@ -1920,8 +1920,10 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
    keeps the text readable. The banner strip is see-through so the art shows. */
 .card-deco-host { position: relative; isolation: isolate; }
 .card-deco { position: absolute; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; border-radius: inherit; }
-.card-deco img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
-.card-deco::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.55)); }
+.card-deco img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.card-deco .card-deco-bg { object-fit: cover; filter: blur(14px) saturate(1.3) brightness(.7); transform: scale(1.08); }
+.card-deco .card-deco-art { object-fit: contain; object-position: center; }
+.card-deco::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.4)); }
 .has-deco .upop-banner, .pcard.has-deco .pcard-banner { opacity: .5; }
 
 /* Nitro shop */

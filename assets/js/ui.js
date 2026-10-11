@@ -188,7 +188,13 @@ window.UI = (function () {
     const deco = nxDecoPath(p, 'bio');
     if (!deco) return { cls: '', html: '' };
     return { cls: ' card-deco-host has-deco',
-      html: `<div class="card-deco" aria-hidden="true"><img src="${esc(deco)}" alt="" decoding="async"></div>` };
+      html: `<div class="card-deco" aria-hidden="true">${cardDecoImgs(deco)}</div>` };
+  }
+
+  // The whole APNG, never cropped, centred; a blurred copy fills the card.
+  function cardDecoImgs(src) {
+    const s = esc(src);
+    return `<img class="card-deco-bg" src="${s}" alt="" aria-hidden="true" decoding="async"><img class="card-deco-art" src="${s}" alt="" decoding="async">`;
   }
 
   function nxBioBox(p, innerHtml) {
@@ -784,5 +790,5 @@ window.UI = (function () {
     else attach();
   })();
 
-  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxNameInto, nxDecoPath, nxBioBox, bioDecoImgs, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxNameInto, nxDecoPath, nxBioBox, bioDecoImgs, cardDecoImgs, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

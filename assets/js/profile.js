@@ -85,9 +85,7 @@
       const layer = document.createElement('div');
       layer.className = 'card-deco';
       layer.setAttribute('aria-hidden', 'true');
-      const art = document.createElement('img');
-      art.src = bioDeco;
-      layer.append(art);
+      layer.innerHTML = UI.cardDecoImgs(bioDeco);
       card.prepend(layer);
     }
 
