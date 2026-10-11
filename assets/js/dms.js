@@ -982,10 +982,19 @@
     $('composer').classList.toggle('hidden', on || !active);
     if (!on) $('vstats').classList.add('hidden');
     if (on) paintRoom(Voice.state());
+    refreshAway();
+  }
+
+  // A call is running but its room is not on screen: show the floating mini
+  // call and the call icon under Messages. Both bring the room back.
+  function refreshAway(st = Voice.state()) {
+    const away = !!st.active && !inCall;
+    CallUI.paintMini(st, away, { meId: me?.id, speakSet, onAvatar: (id) => UI.userCard(id) });
+    window.Nav?.setCallChip(away ? { onClick: () => showCall(true) } : null);
   }
 
   function paintRoom(st) {
-    if (!st.active) { if (inCall) showCall(false); return; }
+    if (!st.active) { if (inCall) showCall(false); refreshAway(st); return; }
     $('vrName').textContent = active ? convTitle(active) : 'Call';
     const n = st.members.size;
     $('vrSub').textContent = n > 1 ? `${n} on the call` : 'Waiting for others to join…';
@@ -999,6 +1008,7 @@
     set('vrCam', 'live', st.cam, `<i class="fa-solid fa-video${st.cam ? '' : '-slash'}"></i>`);
     set('vrShare', 'live', st.sharing);
     CallUI.paintStage($('vrStage'), st, { meId: me.id, speakSet, onAvatar: (id) => UI.userCard(id) });
+    refreshAway(st);
   }
 
   // The connection panel is for everyone now, and every number in it is
@@ -1018,11 +1028,17 @@
 
   function onSpeaking(set) {
     speakSet = set;
-    CallUI.markSpeaking($('vrStage'), set);
+    CallUI.markAllSpeaking(set);
   }
 
   async function startCall(withVideo) {
     if (!active) return;
+    const cur = Voice.state();
+    if (cur.active && cur.channel?.id === 'dm-' + active.id) {
+      showCall(true);
+      if (withVideo && !cur.cam) await Voice.toggleCam();
+      return;
+    }
     try {
       // A DM call is just a voice room keyed on the conversation id.
       await Voice.join({ id: 'dm-' + active.id, name: convTitle(active) }, null,
@@ -1055,6 +1071,19 @@
       Voice.startShare({ surface: 'monitor', quality: 'text', audio: true });
     };
     $('vrChat').onclick = () => showCall(false);
+    CallUI.mountMini({
+      onOpen: () => showCall(true),
+      onLeave: async () => { await Voice.leave(); showCall(false); UI.toast('Call ended.'); },
+    });
+    const setFull = (on) => {
+      $('vroom').classList.toggle('vroom-full', on);
+      $('vrExpand').innerHTML = `<i class="fa-solid fa-${on ? 'down-left-and-up-right-to-center' : 'up-right-and-down-left-from-center'}"></i>`;
+      $('vrExpand').title = on ? 'Exit full window' : 'Fill the window';
+    };
+    $('vrExpand').onclick = () => setFull(!$('vroom').classList.contains('vroom-full'));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('vroom').classList.contains('vroom-full')) setFull(false);
+    });
     $('vrStats').onclick = () => { statsOpen = !statsOpen; paintStats(Voice.state().stats); };
     $('vrLeave').onclick = async () => { await Voice.leave(); showCall(false); UI.toast('Call ended.'); };
     window.addEventListener('beforeunload', () => { if (Voice.state().active) Voice.leave(); });

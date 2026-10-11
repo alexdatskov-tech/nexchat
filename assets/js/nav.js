@@ -173,6 +173,26 @@ window.Nav = (function () {
     setTimeout(() => document.addEventListener('pointerdown', away, true), 0);
   }
 
+  /* A call icon under Messages while a call is running and its room is not on
+     screen. info = { onClick } or null. Pages set it from their call state. */
+  let callChip = null;
+  function setCallChip(info) { callChip = info || null; paintCallChip(); }
+  function paintCallChip() {
+    const nav = $('spaces');
+    if (!nav) return;
+    let b = nav.querySelector('.sp-call');
+    if (!callChip) { b?.remove(); return; }
+    if (!b) {
+      b = document.createElement('button');
+      b.className = 'sp-item sp-call';
+      b.setAttribute('data-tip', 'Call in progress: back to call');
+      b.innerHTML = `${PIP}<i class="fa-solid fa-phone"></i><span class="sp-live" aria-hidden="true"></span>`;
+      nav.querySelector('.sp-dms')?.after(b);
+      if (!b.previousElementSibling) nav.prepend(b);
+      b.addEventListener('click', () => callChip?.onClick?.());
+    }
+  }
+
   /* opts: { active: 'home' | 'dms' | <serverId>, onAdd?: () => void } */
   let mounted = false;
   function mount(profile, o = {}, early = false) {
@@ -205,6 +225,7 @@ window.Nav = (function () {
       tooltips(nav);
       nav.addEventListener('pointerover', (e) => { const a = e.target.closest('a[href]'); if (a) warm(a.getAttribute('href')); });
     }
+    paintCallChip();
     if (early) { paintServers(store.get(SRV_KEY, [])); return; }
     mounted = true;
     try { sessionStorage.setItem(ME_KEY, JSON.stringify(me)); } catch {}
@@ -267,5 +288,5 @@ window.Nav = (function () {
 
   function onAnnouncements(f) { annListeners.add(f); if (anns) f(anns, annOk); }
 
-  return { mount, warm, openAnnouncements, onAnnouncements, annCard, fetchAnnouncements, openDrawer, closeDrawer, refreshServers: () => loadServers().catch(() => {}) };
+  return { mount, warm, setCallChip, openAnnouncements, onAnnouncements, annCard, fetchAnnouncements, openDrawer, closeDrawer, refreshServers: () => loadServers().catch(() => {}) };
 })();

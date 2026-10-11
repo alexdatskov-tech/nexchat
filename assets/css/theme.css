@@ -400,6 +400,10 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
   background: var(--accent); opacity: 0; transition: opacity var(--t-base) var(--ease);
 }
 .sp-item:hover, .sp-item.on { border-radius: 14px; color: var(--accent-ink); }
+/* Call in progress (room not on screen): a green phone under Messages. */
+.sp-item.sp-call { position: relative; color: var(--ok); }
+.sp-item.sp-call .sp-live { position: absolute; top: 6px; right: 8px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ok); border: 2px solid var(--bg-1); animation: vmini-pulse 1.6s ease-in-out infinite; }
 .sp-item:hover::after, .sp-item.on::after { opacity: 1; }
 .sp-item:active { transform: scale(.9); transition-duration: var(--t-fast), var(--t-fast), 90ms; }
 /* Pinned to the tile: a percentage height inside a grid item resolves against
@@ -851,16 +855,19 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .vroom-head .vr-t small { font-size: 12px; color: var(--txt-3); }
 .vroom-head .vr-right { margin-left: auto; display: flex; gap: 6px; }
 
-.vroom-stage {
-  flex: 1; min-height: 0; overflow-y: auto; padding: 18px;
-  display: grid; gap: 12px; align-content: center;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-.vroom-stage.solo { grid-template-columns: minmax(0, 720px); justify-content: center; }
-.vroom-stage.duo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.vroom-stage.has-focus { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; }
-.vroom-stage.has-focus .vtile.focus { grid-column: 1 / -1; aspect-ratio: auto; height: min(68vh, 100%); min-height: 260px; order: -1; }
-.vroom-stage.has-focus .vtile:not(.focus) { aspect-ratio: 16/10; }
+.vroom-stage { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 14px 18px; }
+/* Participants: a grid when nothing is shared; a column on the left when a
+   screen share (or a focused tile) takes the main stage. */
+.vr-strip { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; display: grid; gap: 10px; align-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.vroom-stage.solo .vr-strip { grid-template-columns: minmax(0, 720px); justify-content: center; }
+.vroom-stage.duo .vr-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.vroom-stage.has-screen .vr-strip { flex: 0 0 240px; grid-template-columns: minmax(0, 1fr); align-content: start; }
+.vr-main { display: none; min-width: 0; min-height: 0; flex: 1; }
+.vroom-stage.has-screen .vr-main { display: flex; }
+.vroom-stage.has-screen .vr-main .vtile { flex: 1; min-width: 0; aspect-ratio: auto; border-radius: var(--r-lg); }
+.vroom-stage.has-screen .vr-main .vtile.is-screen video { object-fit: contain; }
+.vroom-stage.has-screen .vr-main .vtile:not(.is-screen) { display: grid; }
 
 .vtile {
   position: relative; aspect-ratio: 16/10; border-radius: var(--r-lg); overflow: hidden;
@@ -906,10 +913,35 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .vbtn.sm { width: 40px; height: 40px; font-size: 14px; }
 .vbar-sep { width: 1px; height: 28px; background: var(--line-2); }
 
+/* Fill the window: the call covers the whole page, rails included, and the
+   participants stay on the left next to the stage. Esc or the button returns. */
+.vroom.vroom-full { position: fixed; inset: 0; z-index: 90; border-radius: 0; }
+
+/* Floating mini call: bottom-right while the room is not on screen. */
+.vmini { position: fixed; right: 18px; bottom: 18px; width: 340px; max-width: calc(100vw - 24px); z-index: 70;
+  background: #0d0f15; border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--sh-3); overflow: hidden;
+  animation: popIn var(--t-base) var(--spring); }
+.vmini.hidden { display: none; }
+.vmini-head { display: flex; align-items: center; gap: 6px; padding: 9px 9px 9px 12px; border-bottom: 1px solid var(--line); }
+.vmini-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex-shrink: 0; animation: vmini-pulse 1.6s ease-in-out infinite; }
+@keyframes vmini-pulse { 50% { opacity: .35; } }
+.vmini-t { flex: 1; min-width: 0; margin-left: 2px; }
+.vmini-t b { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vmini-t small { font-size: 11px; color: var(--txt-3); }
+.vmini-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: rgba(255,255,255,.08); color: var(--txt-1); cursor: pointer; display: grid; place-items: center; font-size: 12px; flex-shrink: 0; }
+.vmini-btn:hover { background: rgba(255,255,255,.16); }
+.vmini-btn.hang { background: var(--danger); color: #fff; }
+.vmini-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; max-height: 60vh; overflow-y: auto; }
+.vmini-grid .vtile { aspect-ratio: 16/10; border-radius: var(--r-md); }
+.vmini-grid .vtile.is-screen { grid-column: 1 / -1; order: 1; aspect-ratio: 16/9; }
+.vmini-grid .vtile .vt-av .av { width: 46px; height: 46px; font-size: 17px; }
+.vmini-grid .vt-max { display: none; }
+.vmini-grid .vtile .vt-name { left: 6px; bottom: 6px; padding: 3px 9px; font-size: 11px; max-width: calc(100% - 12px); }
+
 /* Connection panel (real getStats values) */
 .vstats {
   position: absolute; right: 16px; top: 72px; bottom: 96px; width: min(380px, calc(100% - 32px)); z-index: 5;
-  display: flex; flex-direction: column; background: rgba(13,15,21,.97);
+  display: flex; flex-direction: column; background: #0d0f15;
   border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--sh-3); overflow: hidden;
   animation: popIn var(--t-base) var(--spring);
 }
@@ -1615,7 +1647,10 @@ body.has-bg .surface { background: rgba(21,24,32,.6); backdrop-filter: blur(22px
 }
 
 @media (max-width: 640px) {
-  .vroom-stage { padding: 10px; grid-template-columns: 1fr; }
+  .vroom-stage { padding: 10px; flex-direction: column; }
+  .vroom-stage.has-screen .vr-strip { flex: 0 0 auto; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+  .vroom-stage.has-screen .vr-main { min-height: 42vh; }
+  .vmini { right: 10px; bottom: 10px; width: calc(100vw - 20px); }
   .vroom-stage.duo { grid-template-columns: 1fr; }
   .vbtn { width: 44px; height: 44px; font-size: 15px; }
   .vbtn.hang { width: 58px; }

@@ -107,6 +107,7 @@ window.Voice = { state: () => ({ active: false, members: new Map() }), leave: as
 window.Notify = { start() {} };
 window.eval(fs.readFileSync(`${REPO}/assets/js/emoji-data.js`, 'utf8'));
 window.eval(fs.readFileSync(`${REPO}/assets/js/emoji-picker.js`, 'utf8'));
+window.eval(fs.readFileSync(`${REPO}/assets/js/callui.js`, 'utf8'));
 window.eval(fs.readFileSync(`${REPO}/assets/js/server.js`, 'utf8'));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

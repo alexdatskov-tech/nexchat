@@ -17,7 +17,7 @@ window.Glass = (function () {
 
   // Every surface that becomes glass.
   const PANELS = ['.spaces', '.rail', '.dm-rail', '.chat-head', '.composer-inner', '.scard', '.hero', '.ann', '.set-nav', '.set-block',
-    '.nav-id', '.kpi', '.modal', '.upop', '.popover', '.plus-menu', '.emoji-pick', '.vroom-bar', '.vstats', '.lrow', '.island', '.toast',
+    '.nav-id', '.kpi', '.modal', '.upop', '.popover', '.plus-menu', '.emoji-pick', '.vroom-bar', '.lrow', '.island', '.toast',
     '.home-top', '.ann-sheet', '.q-item', '.style-opt', '.tray-item', '.att-file', '.aplayer', '.cblock', '.pdfv', '.msgs-older',
     '.dm-tabs', '.search-pill', '.vc-dock', '.save-bar', '.auth-panel', '.vtile', '.pcard', '.rail-foot', '.m-acts'];
   // The subset that gets refraction: fixed chrome, never over the scrolling message list.

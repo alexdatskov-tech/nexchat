@@ -20,11 +20,23 @@ window.CallUI = (function () {
   /* Tiles are created once and updated in place. A <video> is only given a
      new srcObject when the underlying track really changes, and the avatar
      stays up until the first decoded frame arrives -- no black tiles while
-     waiting for a keyframe, and no resets on every repaint. */
+     waiting for a keyframe, and no resets on every repaint.
+
+     Layout: when the grid has a .vr-strip and a .vr-main (the full call room),
+     participants go in the strip and a screen share (or a tile the user
+     focused) goes in the main stage, Google Meet style. Without those
+     containers (the floating mini call) every tile goes in the grid. */
   function paintStage(grid, st, opts) {
+    grid._last = { st, opts };
     const feeds = [...st.members.values()].flatMap((p) => feedsFor(p, st, opts.meId));
+    const strip = grid.querySelector('.vr-strip');
+    const main = grid.querySelector('.vr-main');
+    const split = !!(strip && main);
+    const focusKey = split ? (grid.dataset.focusKey || '') : '';
+    const onMain = (f) => split && (f.screen || f.key === focusKey);
     grid.classList.toggle('solo', feeds.length === 1);
     grid.classList.toggle('duo', feeds.length === 2);
+    grid.classList.toggle('has-screen', feeds.some(onMain));
     grid.dataset.count = feeds.length;
     const seen = new Set();
     feeds.forEach((f) => {
@@ -37,6 +49,9 @@ window.CallUI = (function () {
         t.innerHTML = `<video autoplay playsinline muted></video><div class="vt-av"></div>
           <div class="vt-name"></div><button class="vt-max" title="Focus"><i class="fa-solid fa-expand"></i></button>`;
         const v = t.querySelector('video');
+        // Lets the browser float this feed in a picture-in-picture window when
+        // the user switches tabs (Chromium); harmless where unsupported.
+        try { v.autoPictureInPicture = true; } catch {}
         const ready = () => t.classList.toggle('has-frame', v.videoWidth > 0);
         v.addEventListener('loadeddata', ready);
         v.addEventListener('resize', ready);
@@ -44,13 +59,12 @@ window.CallUI = (function () {
         t.querySelector('.vt-av').onclick = () => opts.onAvatar?.(f.p.id);
         t.querySelector('.vt-max').onclick = (e) => {
           e.stopPropagation();
-          const on = !t.classList.contains('focus');
-          grid.querySelectorAll('.vtile.focus').forEach((x) => x.classList.remove('focus'));
-          t.classList.toggle('focus', on);
-          grid.classList.toggle('has-focus', on);
+          grid.dataset.focusKey = grid.dataset.focusKey === f.key ? '' : f.key;
+          if (grid._last) paintStage(grid, grid._last.st, grid._last.opts);
         };
-        grid.appendChild(t);
       }
+      const host = split ? (onMain(f) ? main : strip) : grid;
+      if (t.parentNode !== host) host.appendChild(t);
       const v = t.querySelector('video');
       const track = f.stream?.getVideoTracks()[0] || null;
       const tid = track ? track.id : '';
@@ -62,6 +76,7 @@ window.CallUI = (function () {
       }
       t.classList.toggle('is-video', !!f.stream);
       t.classList.toggle('is-screen', f.screen);
+      t.classList.toggle('focus', split && f.key === focusKey);
       t.classList.toggle('mirror', f.isMe && !f.screen);
       const av = t.querySelector('.vt-av');
       if (!av.dataset.u || av.dataset.u !== f.p.id) { av.dataset.u = f.p.id; av.innerHTML = UI.avatar(f.p, 84, { halo: false }); }
@@ -70,16 +85,17 @@ window.CallUI = (function () {
       if (nm.innerHTML !== name) nm.innerHTML = name;
       t.classList.toggle('speaking', !!opts.speakSet?.has(f.p.id) && !f.p.muted);
     });
-    [...grid.children].forEach((t) => {
+    grid.querySelectorAll('.vtile').forEach((t) => {
       if (!seen.has(t.dataset.t)) {
         const v = t.querySelector('video'); if (v) v.srcObject = null;
         t.remove();
       }
     });
-    if (!grid.querySelector('.vtile.focus')) grid.classList.remove('has-focus');
+    if (focusKey && !seen.has(focusKey)) grid.dataset.focusKey = '';
   }
 
   function markSpeaking(grid, set) {
+    if (!grid) return;
     grid.querySelectorAll('.vtile').forEach((t) => {
       const uid = t.dataset.t.split(':')[0];
       const p = Voice.state().members.get(uid);
@@ -108,8 +124,8 @@ window.CallUI = (function () {
     rows.push('<div class="cs-h">Your microphone</div>');
     row('Capture', cap.channels ? `${cap.channels === 1 ? 'Mono' : cap.channels === 2 ? 'Stereo' : cap.channels + ' ch'}${cap.rate ? ' · ' + (cap.rate / 1000) + ' kHz' : ''}` : 'Unknown (browser did not report)');
     row('Processing', [cap.ec ? 'echo cancel' : null, cap.ns ? 'noise suppress' : null, cap.agc ? 'auto gain' : null].filter(Boolean).join(', ') || 'off (studio)');
-    row('Mode', s.audioMode === 'studio' ? 'Studio (128 kbps target)' : 'Voice (48 kbps target, FEC + DTX)');
-    if (s.camera) row('Camera', `${s.camera.w}×${s.camera.h} @ ${s.camera.fps} fps captured`);
+    row('Mode (requested)', s.audioMode === 'studio' ? 'Studio: 128 kbps, stereo' : 'Voice: 48 kbps, FEC + DTX');
+    if (s.camera) row('Camera (captured)', `${s.camera.w}×${s.camera.h} @ ${s.camera.fps} fps`);
 
     if (!s.peers?.length) {
       rows.push('<div class="cs-empty">Nobody else is connected yet — network stats appear once someone joins.</div>');
@@ -121,7 +137,7 @@ window.CallUI = (function () {
         const relayed = path.local === 'relay' || path.remote === 'relay';
         row('Route', `${CAND[relayed ? 'relay' : path.local] || path.local || '?'}${path.proto ? ' · ' + path.proto.toUpperCase() : ''}${relayed && path.relay ? ' (' + path.relay + ')' : ''}`, relayed ? 'warn' : 'good');
         row('Round trip', path.rtt != null ? path.rtt + ' ms' : '—', tone(path.rtt, 80, 200));
-        if (path.avail) row('Uplink estimate', mbps(path.avail), tone(-path.avail, -1500, -500));
+        if (path.avail) row('Uplink (browser estimate)', mbps(path.avail), tone(-path.avail, -1500, -500));
       } else row('Route', 'Connecting…');
 
       if (p.audioOut) {
@@ -147,7 +163,8 @@ window.CallUI = (function () {
       if (p.screenOut?.w) row('Screen sent', `${p.screenOut.w}×${p.screenOut.h} @ ${Math.round(p.screenOut.fps || 0)} fps · ${mbps(p.screenOut.kbps || 0)} · ${LIMIT[p.screenOut.limit] || '—'}`);
       if (p.screenIn?.w) row('Screen received', `${p.screenIn.w}×${p.screenIn.h} @ ${Math.round(p.screenIn.fps || 0)} fps`);
     });
-    if (s.budget && s.peers?.length) rows.push(`<div class="cs-foot">Camera budget per person: ${mbps(s.budget.kbps)} (shrinks as the call grows — everyone uploads one copy per participant).</div>`);
+    if (s.budget && s.peers?.length) rows.push(`<div class="cs-foot">Camera upload cap per person: ${mbps(s.budget.kbps)} (a requested limit, not a measurement; it shrinks as the call grows because everyone uploads one copy per participant).</div>`);
+    rows.push('<div class="cs-foot">Every number here is read from the browser\'s connection statistics about once a second. Values marked "requested" are settings we asked for.</div>');
     return rows.join('');
   }
 
@@ -166,5 +183,63 @@ window.CallUI = (function () {
       <button class="x-btn" data-cs-close><i class="fa-solid fa-xmark"></i></button></div><div class="cs-body"></div>`;
   }
 
-  return { feedsFor, paintStage, markSpeaking, statsPanel, panelShell, wirePanel };
+
+  /* ---------- floating mini call ----------
+     Shown while a call is running but its room is not on screen (the user is
+     in chat or another conversation on this page). Participants on top, the
+     screen share at the bottom. */
+  let mini = null, miniHandlers = {};
+
+  function mountMini(handlers) {
+    miniHandlers = handlers || {};
+    if (mini) return mini;
+    mini = document.createElement('aside');
+    mini.id = 'vmini';
+    mini.className = 'vmini hidden';
+    mini.innerHTML = `<div class="vmini-head"><span class="vmini-dot" aria-hidden="true"></span>
+        <div class="vmini-t"><b></b><small></small></div>
+        <button class="vmini-btn" data-m="pip" title="Float in a separate window"><i class="fa-solid fa-up-right-from-square"></i></button>
+        <button class="vmini-btn" data-m="open" title="Back to the call"><i class="fa-solid fa-expand"></i></button>
+        <button class="vmini-btn hang" data-m="leave" title="Hang up"><i class="fa-solid fa-phone-slash"></i></button></div>
+      <div class="vmini-grid"></div>`;
+    document.body.appendChild(mini);
+    mini.querySelector('[data-m="open"]').onclick = () => miniHandlers.onOpen?.();
+    mini.querySelector('[data-m="leave"]').onclick = () => miniHandlers.onLeave?.();
+    mini.querySelector('[data-m="pip"]').onclick = () => popOut();
+    return mini;
+  }
+
+  function paintMini(st, show, opts) {
+    if (!mini) return;
+    if (!show || !st.active) { mini.classList.add('hidden'); return; }
+    mini.classList.remove('hidden');
+    mini.querySelector('.vmini-t b').textContent = st.channel?.name || 'Call';
+    mini.querySelector('.vmini-t small').textContent = `${st.members.size} on the call`;
+    paintStage(mini.querySelector('.vmini-grid'), st, opts);
+  }
+
+  function markAllSpeaking(set) {
+    markSpeaking(document.getElementById('vrStage'), set);
+    markSpeaking(mini && mini.querySelector('.vmini-grid'), set);
+  }
+
+  /* Floats one call video in the browser's picture-in-picture window. Browsers
+     only allow this from a click, so it is a button; switching tabs can also
+     float the video automatically (autoPictureInPicture on each tile). */
+  async function popOut() {
+    const pick = document.querySelector('#vrStage .vtile.is-screen video, .vmini-grid .vtile.is-screen video')
+      || [...document.querySelectorAll('#vrStage video, .vmini-grid video')].find((v) => v.srcObject && v.videoWidth > 0);
+    if (!pick || !document.pictureInPictureEnabled) {
+      UI.toast('Floating video is not available in this browser.', true);
+      return;
+    }
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      await pick.requestPictureInPicture();
+    } catch {
+      UI.toast('Could not open the floating window.', true);
+    }
+  }
+
+  return { feedsFor, paintStage, markSpeaking, markAllSpeaking, statsPanel, panelShell, wirePanel, mountMini, paintMini, popOut };
 })();

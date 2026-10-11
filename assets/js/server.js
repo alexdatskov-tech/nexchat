@@ -1010,7 +1010,8 @@
     $('composer').classList.toggle('hidden', on || !active);
     $('stage').classList.add('hidden');
     if (on) paintRoom(Voice.state());
-    else if (!active) {
+    refreshAway();
+    if (!on && !active) {
       // Nothing was open behind the room — fall back to the first text channel.
       const first = channels.find((c) => c.type === 'text' || c.type === 'announcement');
       if (first) open(first);
@@ -1018,8 +1019,16 @@
     renderChannels();
   }
 
+  // A call runs but its room is not on screen: floating mini call + call icon
+  // under Messages. Both bring the room back.
+  function refreshAway(st = Voice.state()) {
+    const away = !!st.active && !vrOpen;
+    CallUI.paintMini(st, away, { meId: me?.id, speakSet, onAvatar: (id) => UI.userCard(id, { serverId }) });
+    window.Nav?.setCallChip(away ? { onClick: () => showVoiceRoom(true) } : null);
+  }
+
   function paintRoom(st) {
-    if (!st.active) return;
+    if (!st.active) { refreshAway(st); return; }
     $('vrName').textContent = st.channel.name;
     $('vrSub').textContent = `${st.members.size} connected · ${srv.name}`;
 
@@ -1035,6 +1044,7 @@
     set('vrShare', 'live', st.sharing);
     syncDock(st);
     CallUI.paintStage($('vrStage'), st, { meId: me.id, speakSet, onAvatar: (id) => UI.userCard(id, { serverId }) });
+    refreshAway(st);
   }
 
   function syncDock(st) {
@@ -1061,6 +1071,7 @@
 
   function paintVoice(st) {
     renderChannels();
+    refreshAway(st);
     const dock = $('vcDock');
     if (!st.active) {
       dock.classList.add('hidden');
@@ -1077,7 +1088,7 @@
 
   function onSpeaking(set) {
     speakSet = set;
-    if (vrOpen) CallUI.markSpeaking($('vrStage'), set);
+    CallUI.markAllSpeaking(set);
     document.querySelectorAll('.vc-user').forEach((u) => u.classList.toggle('speaking', set.has(u.dataset.u)));
   }
 
@@ -1141,6 +1152,19 @@
     $('vrShare').onclick = () => openSharePicker();
     $('vrLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
     $('vrChat').onclick = () => showVoiceRoom(false);
+    CallUI.mountMini({
+      onOpen: () => showVoiceRoom(true),
+      onLeave: async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); },
+    });
+    const setFull = (on) => {
+      $('vroom').classList.toggle('vroom-full', on);
+      $('vrExpand').innerHTML = `<i class="fa-solid fa-${on ? 'down-left-and-up-right-to-center' : 'up-right-and-down-left-from-center'}"></i>`;
+      $('vrExpand').title = on ? 'Exit full window' : 'Fill the window';
+    };
+    $('vrExpand').onclick = () => setFull(!$('vroom').classList.contains('vroom-full'));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('vroom').classList.contains('vroom-full')) setFull(false);
+    });
     $('vrStats').onclick = () => { statsOpen = !statsOpen; paintStats(Voice.state().stats); };
     $('vcDock').addEventListener('click', (e) => {
       // Tapping the dock status area re-opens the full room view.
