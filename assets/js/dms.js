@@ -325,21 +325,25 @@
       if (requests.length) {
         html += '<div class="dm-sect">Incoming</div>' + requests.map((r) => {
           const p = profiles[r.user_id] || { username: '…' };
-          return `<div class="dm-item" data-u="${r.user_id}">
+          return `<div class="dm-item req" data-u="${r.user_id}">
             ${UI.avatar(p, 34)}
             <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>wants to be friends</small></div>
-            <button class="btn btn-primary btn-sm" data-ok="${r.user_id}" title="Accept" aria-label="Accept"><i class="fa-solid fa-check"></i></button>
-            <button class="btn btn-quiet btn-sm" data-no="${r.user_id}" title="Decline" aria-label="Decline"><i class="fa-solid fa-xmark"></i></button>
+            <div class="req-acts">
+              <button class="btn btn-primary btn-sm" data-ok="${r.user_id}">Accept</button>
+              <button class="btn btn-ghost btn-sm" data-no="${r.user_id}">Decline</button>
+            </div>
           </div>`;
         }).join('');
       }
       if (outgoing.length) {
         html += '<div class="dm-sect">Sent</div>' + outgoing.map((r) => {
           const p = profiles[r.friend_id] || { username: '…' };
-          return `<div class="dm-item" data-u="${r.friend_id}">
+          return `<div class="dm-item req" data-u="${r.friend_id}">
             ${UI.avatar(p, 34)}
             <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>Waiting for a reply</small></div>
-            <button class="btn btn-quiet btn-sm" data-cancel="${r.friend_id}" title="Cancel" aria-label="Cancel"><i class="fa-solid fa-xmark"></i></button>
+            <div class="req-acts">
+              <button class="btn btn-ghost btn-sm" data-cancel="${r.friend_id}">Cancel request</button>
+            </div>
           </div>`;
         }).join('');
       }

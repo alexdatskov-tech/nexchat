@@ -509,12 +509,13 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .rail-foot .me small { font-size: 11px; color: var(--txt-3); }
 
 /* ---- DM rail --------------------------------------------------------------- */
-.dm-tabs { display: flex; gap: 4px; margin: 10px 10px 0; padding: 4px; background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 999px; }
-.dm-tabs button { flex: 1 1 auto; padding: 6px 6px; white-space: nowrap; font-size: 12px; font-weight: 600; font-family: var(--f-body);
+.dm-tabs { display: flex; gap: 2px; margin: 10px 10px 0; padding: 4px; background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 999px; }
+.dm-tabs button { flex: 1 1 0; min-width: 0; position: relative; padding: 6px 2px; white-space: nowrap; font-size: 12px; font-weight: 600; font-family: var(--f-body);
   background: none; border: none; border-radius: 999px; color: var(--txt-3); cursor: pointer; transition: background var(--t-fast), color var(--t-fast); }
 .dm-tabs button:hover { color: var(--txt-1); }
 .dm-tabs button.on { background: var(--bg-4); color: var(--txt-1); }
 .dm-tabs button .pill { background: var(--danger); color: #fff; border-radius: 99px; font-size: 9.5px; padding: 0 5px; margin-left: 3px; vertical-align: 1px; }
+.dm-tabs button .pill { position: absolute; top: -4px; right: -3px; margin: 0; }
 .dm-search { padding: 10px; }
 .dm-search .input { border-radius: 999px; padding: 8px 14px 8px 34px; font-size: 13px; background: rgba(0,0,0,.3) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236D7386' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") 13px 50% no-repeat; }
 .dm-list { flex: 1; overflow-y: auto; padding: 4px 8px 10px; }
@@ -531,6 +532,11 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
    narrow rail truncates the name instead of squashing the buttons. */
 .dm-item > * { flex-shrink: 0; }
 .dm-item > .nm { flex: 1 1 0; min-width: 0; }
+/* Friend requests: name on the first line, the actions as text pills on their
+   own line under it (same pill buttons as the rest of the app). */
+.dm-item.req { flex-wrap: wrap; }
+.dm-item.req .req-acts { flex: 0 0 100%; display: flex; gap: 8px; padding: 8px 0 2px; }
+.dm-item.req .req-acts .btn-sm { width: auto; height: auto; padding: 6px 14px; border-radius: 999px; font-size: 12.5px; opacity: 1; }
 .dm-empty { padding: 28px 14px; text-align: center; color: var(--txt-3); font-size: 12.5px; }
 .dm-sect { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--txt-3); padding: 12px 9px 6px; }
 
