@@ -361,6 +361,7 @@ const callsTo = (calls, origin, path) => calls.filter((c) => c.origin === origin
     ok(res.folders.join(',') === 'a,b,c', 'browse: folders merged and de-duplicated');
     ok(res.files.map((f) => f.key).join(',') === 'k1,k2', 'browse: files merged, de-duplicated by key');
     ok(env.calls.some((c) => c.origin === 'https://g2c.test' && c.path === '/api/browse'), 'browse: group 2 queried too');
+    ok(!env.calls.some((c) => c.origin === 'https://g1b.test' && c.path === '/api/browse'), 'browse: mirror in group 1 not queried (same storage as its sibling)');
   }
 
   /* 14. browse still works when one endpoint is down */
@@ -370,6 +371,7 @@ const callsTo = (calls, origin, path) => calls.filter((c) => c.origin === origin
     env.srv['https://g2c.test'].browse = { folders: ['c'], files: [] };
     const res = await env.CG.browse('');
     ok(res.folders.join(',') === 'c', 'browse: a dead endpoint does not hide the rest');
+    ok(env.calls.some((c) => c.origin === 'https://g1b.test' && c.path === '/api/browse'), 'browse: dead first mirror -> the other mirror answers group 1');
   }
 
   /* 15. keyOf accepts any CloudFront host, and only our category */

@@ -127,7 +127,7 @@
       <div class="se-gh">
         <div class="se-gt">
           <span class="se-num">${i + 1}</span>
-          <div><b>${esc(g.name)}</b><small>${fmt(used)} of ${fmt(cap)} used${isFull ? ' · full, uploads move to the next group' : ''}</small></div>
+          <div><b>${esc(g.name)}</b><small>${fmt(used)} of ${fmt(cap)} used${g.measured_at ? ` · measured ${new Date(g.measured_at).toLocaleDateString()}` : ' · not measured yet'}${isFull ? ' · full, uploads move to the next group' : ''}</small></div>
         </div>
         <div class="se-acts-s">
           ${arrow('g-move', g.id, -1, i > 0)}${arrow('g-move', g.id, 1, i < n - 1)}
@@ -145,13 +145,13 @@
 
   function endpointRow(g, e, j) {
     const n = g.endpoints.length;
-    const held = (Number(e.baseline_bytes) || 0) + (Number(e.tracked_bytes) || 0);
-    const measured = e.measured_at ? `measured ${new Date(e.measured_at).toLocaleDateString()}` : 'not measured yet';
+    // Endpoints in a group are mirrors of one storage, so sizes are shown per group, not per endpoint.
+    const role = n > 1 ? 'mirror of this group’s storage' : 'the group’s only way in';
     return `<div class="se-ep">
       <div class="se-em">
         <b>${esc(e.name)}</b>
         <small class="mono">${esc(e.base_url)}</small>
-        <small>login <span class="mono">${esc(e.username)}</span> · password set · ${fmt(held)} held · ${measured}</small>
+        <small>login <span class="mono">${esc(e.username)}</span> · password set · ${role}</small>
       </div>
       <div class="se-eacts">
         ${arrow('e-move', e.id, -1, j > 0)}${arrow('e-move', e.id, 1, j < n - 1)}
@@ -183,7 +183,7 @@
         <label class="se-f"><span>Name</span><input id="sfName" class="input" maxlength="60" placeholder="Group 1" value="${esc(g?.name || `Group ${(state.groups || []).length + 1}`)}"></label>
         <label class="se-f"><span>Capacity (GB)</span><input id="sfCap" class="input" type="number" min="1" step="any" value="${g ? g.capacity_gb : 100}"></label>
       </div>
-      <p class="se-hint">When this group runs out of room, uploads move to the next group. Usage counts everything NexChat stored here, plus what the endpoints already held when you measured them.</p>
+      <p class="se-hint">When this group runs out of room, uploads move to the next group. Usage counts everything NexChat stored here, plus what this group’s storage already held when you measured it. Its endpoints are mirrors of that one storage, so it is counted once.</p>
       <p class="err" id="seEditErr"></p>
       <div class="se-acts">
         <button class="btn btn-quiet btn-sm" data-act="cancel">Cancel</button>
@@ -205,7 +205,7 @@
         <label class="se-f"><span>Username</span><input id="sfUser" class="input mono" autocomplete="off" spellcheck="false" value="${esc(ep?.username || '')}"></label>
         <label class="se-f"><span>Password</span><input id="sfPass" class="input mono" type="password" autocomplete="new-password" placeholder="${ep ? 'Leave blank to keep the current password' : 'Required'}"></label>
       </div>
-      <p class="se-hint">Each endpoint is a CloudGate deployment with its own username and password. Every endpoint runs the same logic, so the same settings work for all of them.</p>
+      <p class="se-hint">An endpoint is one way into its group’s storage, with its own username and password. A second endpoint in the same group is a mirror of the same storage (for example wasmer and nx-storage), so it adds no extra space.</p>
       <p class="err" id="seEditErr"></p>
       <p class="se-res" id="seEditRes"></p>
       <div class="se-acts">
@@ -264,13 +264,13 @@
       } catch (e) { return editorErr(e.message); }
       const wasNew = !editor.id;
       closeEditor();
-      // Read what this endpoint already holds, so the group starts from the real number.
+      // Read what this group’s storage already holds, so the group starts from the real number.
       let note = 'Endpoint saved.';
       let failed = false;
       try {
         await window.CloudGate?.refresh();
         const bytes = await measureEndpoint({ name: f.name, base_url: f.base_url, username: f.username, password: f.password, id });
-        note = `Endpoint saved. It already holds ${fmt(bytes)}.`;
+        note = `Endpoint saved. The group already holds ${fmt(bytes)}.`;
       } catch (e) {
         failed = true;
         note = `Endpoint saved, but it couldn’t be measured yet: ${e.message}`;
@@ -338,7 +338,10 @@
       await window.CloudGate?.refresh();
       // Measurements were taken against the old category: take them again.
       let failed = 0;
-      for (const ep of allEndpoints(state)) {
+      // Endpoints in a group share one storage, so each group is measured once.
+      for (const g of state.groups || []) {
+        const ep = g.endpoints[0];
+        if (!ep) continue;
         try { await measureEndpoint(ep); } catch { failed++; }
       }
       toast(failed ? `Category saved. ${failed} endpoint${failed === 1 ? '' : 's'} couldn’t be measured; try Measure on each.` : `Category set to ${name}.`, failed > 0);

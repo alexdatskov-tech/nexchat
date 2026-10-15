@@ -42,7 +42,9 @@ const shape = () => JSON.parse(JSON.stringify({
   category: model.category, cdn: model.cdn, configured: model.configured,
   groups: model.groups.map((g) => ({
     id: g.id, name: g.name, capacity_gb: g.capacity_gb, capacity_bytes: g.capacity_gb * GB,
-    used_bytes: g.endpoints.reduce((n, e) => n + e.baseline_bytes + e.tracked_bytes, 0),
+    used_bytes: g.baseline_bytes,
+    baseline_bytes: g.baseline_bytes,
+    measured_at: g.measured_at,
     endpoints: g.endpoints,
   })),
 }));
@@ -50,7 +52,7 @@ const rpcs = {
   storage_admin_list: () => (listError ? { data: null, error: listError } : { data: shape(), error: null }),
   storage_admin_save_group: (a) => {
     if (a.p_id) { const g = model.groups.find((x) => x.id === a.p_id); g.name = a.p_name; g.capacity_gb = a.p_capacity_gb; return { data: g.id }; }
-    const g = { id: newId('10'), name: a.p_name, capacity_gb: a.p_capacity_gb, endpoints: [] };
+    const g = { id: newId('10'), name: a.p_name, capacity_gb: a.p_capacity_gb, endpoints: [], baseline_bytes: 0, measured_at: null };
     model.groups.push(g);
     return { data: g.id };
   },
@@ -78,8 +80,9 @@ const rpcs = {
     return { data: null };
   },
   storage_admin_set_baseline: (a) => {
-    for (const g of model.groups) for (const e of g.endpoints) if (e.id === a.p_endpoint) {
-      e.baseline_bytes = Math.max(0, a.p_measured - e.tracked_bytes); e.measured_at = new Date().toISOString();
+    // Endpoints are mirrors of one storage: the measurement belongs to the whole group.
+    for (const g of model.groups) if (g.endpoints.some((e) => e.id === a.p_endpoint)) {
+      g.baseline_bytes = Math.max(0, a.p_measured); g.measured_at = new Date().toISOString();
     }
     return { data: null };
   },
@@ -158,12 +161,26 @@ const rpcCalls = (name) => calls.filter((c) => c.name === name);
   const ep1 = model.groups[0].endpoints[0];
   ok(!!ep1 && ep1.username === 'alex' && ep1.password === 'pw-wasmer' && ep1.base_url === 'https://alexd-us1-s3.wasmer.app', 'add endpoint: saved with its own login and address (trailing slash removed)');
   ok(measured.length === 1 && measured[0] === 'https://alexd-us1-s3.wasmer.app', 'add endpoint: measured right after saving');
-  ok(Math.abs(ep1.baseline_bytes - 3.2 * GB) < 1 && ep1.measured_at, 'add endpoint: baseline set to what it already holds');
+  ok(Math.abs(model.groups[0].baseline_bytes - 3.2 * GB) < 1 && model.groups[0].measured_at, 'add endpoint: the group is measured once with what its storage already holds');
   ok(/already holds 3\.2 GB/.test(lastToast().m), 'add endpoint: toast says how much it holds');
   ok(/Next step/.test($('#seCategory').textContent) && $('#seCategory .se-next') !== null, 'after the first endpoint: NexChat asks for the category name');
   ok(w.document.activeElement && w.document.activeElement.id === 'scName', 'after the first endpoint: category field is focused');
   ok(/wasmer/.test($('#seGroups').textContent) && /login alex/.test($('#seGroups').textContent) && /password set/.test($('#seGroups').textContent), 'endpoint row shows name, login, password set (not the password)');
   ok(!/pw-wasmer/.test($('#seGroups').textContent), 'endpoint row never shows the password');
+
+  /* 4b. a second endpoint in the same group is a mirror: the same storage, counted once */
+  act(`[data-act="e-add"][data-g="${g1}"]`);
+  await flush();
+  setVal('sfName', 'alexaero-top1');
+  setVal('sfUrl', 'https://nx-storage.alexaero.top');
+  setVal('sfUser', 'alex');
+  setVal('sfPass', 'pw-nx');
+  act('[data-act="save-endpoint"]');
+  await flush();
+  ok(model.groups[0].endpoints.length === 2, 'mirror: second endpoint added to group 1');
+  ok(Math.abs(model.groups[0].baseline_bytes - 3.2 * GB) < 1, 'mirror: same storage counted once (3.2 GB, not 6.4 GB)');
+  ok(/3\.2 GB of 100 GB used/.test($('#seGroups').textContent), 'mirror: group header reads 3.2 GB of 100 GB used');
+  ok(/mirror of this group/.test($('#seGroups').textContent), 'mirror: endpoint row says it is a mirror');
 
   /* 5. category: invalid name refused, valid name saved, all endpoints measured again */
   setVal('scName', 'Bad Name');
@@ -176,7 +193,7 @@ const rpcCalls = (name) => calls.filter((c) => c.name === name);
   act('[data-act="cat-save"]');
   await flush();
   ok(model.configured && model.category === 'nexchats-us1' && model.cdn === 'd1dncmkdpaif79.cloudfront.net', 'category: saved and confirmed');
-  ok(measured.length === measuredBefore + 1, 'category: every endpoint measured again');
+  ok(measured.length === measuredBefore + 1, 'category: each group measured once (its mirrors share the storage)');
   ok(!!$('#seCategory .se-cat-view') && /nexchats-us1/.test($('#seCategory').textContent) && !/Next step/.test($('#seCategory').textContent), 'category: shows as set, no longer asking');
   ok(rpcCalls('CloudGate.refresh').length >= 2, 'changes refresh the storage client');
 
@@ -242,7 +259,10 @@ const rpcCalls = (name) => calls.filter((c) => c.name === name);
 
   act(`[data-act="e-del"][data-id="${ep1.id}"]`);
   await flush();
-  ok(model.groups[0].endpoints.length === 0 && /No endpoints in this group yet/.test($('#seGroups').textContent), 'delete endpoint: removed, empty group says so');
+  ok(model.groups[0].endpoints.length === 1, 'delete endpoint: one mirror removed, the other stays');
+  act(`[data-act="e-del"][data-id="${model.groups[0].endpoints[0].id}"]`);
+  await flush();
+  ok(model.groups[0].endpoints.length === 0 && /No endpoints in this group yet/.test($('#seGroups').textContent), 'delete endpoint: last one removed, empty group says so');
 
   /* 11. a database that has not been set up yet explains how */
   listError = { code: 'PGRST202', message: 'Could not find the function public.storage_admin_list' };

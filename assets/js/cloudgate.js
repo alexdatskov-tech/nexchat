@@ -2,8 +2,9 @@
 
    Storage is split into GROUPS. Each group has a capacity (set by an admin in
    Admin -> Storage endpoints, e.g. "Group 1 = 100 GB") and one or more
-   ENDPOINTS: deployments of the same CloudGate app, each with its own username
-   and password. All endpoints run the same logic.
+   ENDPOINTS. Endpoints in a group are MIRRORS: two ways into the same storage
+   (for example wasmer and nx-storage), each with its own username and password.
+   They run the same logic, so one answer per group is enough for reads.
 
    Uploads go to the first group that still has room. Inside a group the
    endpoints are tried in order. When a group is full, the upload moves on to
@@ -364,15 +365,32 @@ window.CloudGate = (function () {
   }
 
   /* ---- listing & management (paths relative to the category) ---- */
-  // Lists every endpoint and merges the results, so files in any group show up.
+  // Endpoints inside a group are mirrors (the same storage), so one answer per group
+  // is enough: the first endpoint that responds. Groups are different storage, so
+  // their listings are merged (folders de-duplicated, files by key).
   async function browse(path) {
-    const hits = await each('/api/browse', { query: { category: category(), path: clean(path) } });
+    await ready();
+    const list = groups();
+    if (!list.length) throw new Error('Storage is not configured.');
     const folders = new Set();
     const files = new Map();
-    hits.forEach(({ data }) => {
-      (data?.folders || []).forEach((f) => folders.add(f));
-      (data?.files || []).forEach((f) => { if (f?.key && !files.has(f.key)) files.set(f.key, f); });
-    });
+    let answered = 0;
+    let last = null;
+    for (const g of list) {
+      for (const ep of g.endpoints) {
+        try {
+          const data = await callAt(ep, '/api/browse', { query: { category: category(), path: clean(path) } });
+          (data?.folders || []).forEach((f) => folders.add(f));
+          (data?.files || []).forEach((f) => { if (f?.key && !files.has(f.key)) files.set(f.key, f); });
+          answered++;
+          break;
+        } catch (e) {
+          last = e;
+          if (!(e.transient || e.status === 401)) throw e;
+        }
+      }
+    }
+    if (!answered) throw last || new Error('Storage error');
     return { folders: [...folders].sort(), files: [...files.values()] };
   }
   // Folders exist on every endpoint, so folder changes go to all of them.

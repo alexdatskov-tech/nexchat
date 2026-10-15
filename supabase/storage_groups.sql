@@ -6,8 +6,12 @@
 -- What it adds:
 --   * storage_settings   - the category NexChat stores files in, and the CDN host
 --   * storage_groups     - capacity-limited groups (100 GB, 200 GB, ...), filled in order
---   * storage_endpoints  - each CloudGate deployment, with its own username and password
---   * storage_objects    - which endpoint holds each file, and how big it is
+--   * storage_endpoints  - ways into a group's storage, each with its own username and password
+--   * storage_objects    - which endpoint a file was uploaded through, and how big it is
+--
+-- Endpoints inside one group are MIRRORS: two addresses for the same storage. So a
+-- group is measured once (baseline_bytes), and its usage is that baseline plus the
+-- files NexChat has tracked in the group. It is never summed per endpoint.
 --
 -- Access: the tables have row level security on and NO policies, so the app only
 -- reaches them through the functions below. Admin functions need the
@@ -36,6 +40,8 @@ create table if not exists public.storage_groups (
   position int not null default 0,
   name text not null check (length(trim(name)) between 1 and 60),
   capacity_gb numeric not null check (capacity_gb > 0),
+  baseline_bytes bigint not null default 0,  -- measured usage of the group's storage before NexChat tracked files
+  measured_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -47,7 +53,7 @@ create table if not exists public.storage_endpoints (
   base_url text not null check (base_url ~ '^https?://'),
   username text not null,
   password text not null,
-  baseline_bytes bigint not null default 0,   -- measured usage before NexChat tracked files
+  baseline_bytes bigint not null default 0,   -- unused since mirrors share the group baseline (kept for old installs)
   measured_at timestamptz,
   created_at timestamptz not null default now()
 );
@@ -62,6 +68,35 @@ create table if not exists public.storage_objects (
 create index if not exists storage_objects_group_idx on public.storage_objects (group_id);
 create index if not exists storage_objects_endpoint_idx on public.storage_objects (endpoint_id);
 
+-- Earlier installs measured each endpoint and summed them, which counted a mirrored
+-- storage twice. Move to one baseline per group: the largest endpoint measurement
+-- (they match, since they are the same storage) minus the files tracked in the group.
+-- Runs once; a fresh install has nothing to move.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                 where table_schema = 'public' and table_name = 'storage_groups' and column_name = 'baseline_bytes') then
+    alter table public.storage_groups add column baseline_bytes bigint not null default 0;
+    alter table public.storage_groups add column measured_at timestamptz;
+  end if;
+end $$;
+
+-- One-time carry-over: only for groups whose baseline was never measured under the new rule.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'storage_endpoints' and column_name = 'baseline_bytes')
+     and not exists (select 1 from public.storage_groups where measured_at is not null) then
+    update public.storage_groups g set
+      baseline_bytes = greatest(0,
+        coalesce((select max(e.baseline_bytes + coalesce((select sum(o.size) from public.storage_objects o where o.endpoint_id = e.id), 0))
+                  from public.storage_endpoints e where e.group_id = g.id), 0)
+        - coalesce((select sum(o.size) from public.storage_objects o where o.group_id = g.id), 0)),
+      measured_at = (select max(e.measured_at) from public.storage_endpoints e where e.group_id = g.id)
+    where exists (select 1 from public.storage_endpoints e where e.group_id = g.id and e.measured_at is not null);
+  end if;
+end $$;
+
 alter table public.storage_settings enable row level security;
 alter table public.storage_groups enable row level security;
 alter table public.storage_endpoints enable row level security;
@@ -73,7 +108,7 @@ alter table public.storage_objects enable row level security;
 create or replace function public.storage_group_used(p_group uuid)
 returns bigint language sql stable security definer set search_path = public as $$
   select (
-    coalesce((select sum(e.baseline_bytes) from public.storage_endpoints e where e.group_id = p_group), 0)
+    coalesce((select g.baseline_bytes from public.storage_groups g where g.id = p_group), 0)
     + coalesce((select sum(o.size) from public.storage_objects o where o.group_id = p_group), 0)
   )::bigint;
 $$;
@@ -154,16 +189,16 @@ begin
           'capacity_gb', g.capacity_gb,
           'capacity_bytes', (g.capacity_gb * 1073741824)::bigint,
           'used_bytes', public.storage_group_used(g.id),
+          'baseline_bytes', g.baseline_bytes,
+          'measured_at', g.measured_at,
+          'tracked_bytes', coalesce((select sum(o.size) from public.storage_objects o where o.group_id = g.id), 0),
           'endpoints', coalesce((
             select jsonb_agg(jsonb_build_object(
               'id', e.id,
               'name', e.name,
               'base_url', e.base_url,
               'username', e.username,
-              'password', e.password,
-              'baseline_bytes', e.baseline_bytes,
-              'measured_at', e.measured_at,
-              'tracked_bytes', coalesce((select sum(o.size) from public.storage_objects o where o.endpoint_id = e.id), 0)
+              'password', e.password
             ) order by e.position, e.created_at)
             from public.storage_endpoints e where e.group_id = g.id
           ), '[]'::jsonb)
@@ -283,18 +318,21 @@ begin
 end $$;
 
 -- The app measures an endpoint's real usage (GET /api/stats) and sends it here.
--- Files NexChat already tracked are subtracted, so nothing is counted twice.
+-- The endpoint is a way into its group's storage, so the group takes the measurement.
+-- Files NexChat already tracked in the group are subtracted, so nothing is counted twice.
 create or replace function public.storage_admin_set_baseline(p_endpoint uuid, p_measured bigint)
 returns bigint language plpgsql security definer set search_path = public as $$
-declare v_base bigint;
+declare v_group uuid; v_base bigint;
 begin
   if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
-  update public.storage_endpoints e set
+  select e.group_id into v_group from public.storage_endpoints e where e.id = p_endpoint;
+  if v_group is null then raise exception 'endpoint not found'; end if;
+  update public.storage_endpoints set measured_at = now() where id = p_endpoint;
+  update public.storage_groups g set
     baseline_bytes = greatest(0, coalesce(p_measured, 0)
-      - coalesce((select sum(o.size) from public.storage_objects o where o.endpoint_id = e.id), 0)),
+      - coalesce((select sum(o.size) from public.storage_objects o where o.group_id = g.id), 0)),
     measured_at = now()
-  where e.id = p_endpoint
-  returning e.baseline_bytes into v_base;
-  if v_base is null then raise exception 'endpoint not found'; end if;
+  where g.id = v_group
+  returning g.baseline_bytes into v_base;
   return v_base;
 end $$;
