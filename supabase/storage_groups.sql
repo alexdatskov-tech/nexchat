@@ -15,12 +15,22 @@
 --
 -- Access: the tables have row level security on and NO policies, so the app only
 -- reaches them through the functions below. Admin functions need the
--- manage_storage permission. Client functions need a signed-in user.
+-- manage_storage_endpoints permission (Owner tab). Client functions need a signed-in user.
 --
 -- Known limit: storage_client_config() returns the endpoint logins to every
 -- signed-in browser, because the browser signs its own uploads. Moving the
 -- signing into an Edge Function would keep the logins off the client.
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 0. Owner control: the permission that allows managing storage endpoints.
+--    Sudo admins have it by default; admins must be granted it. It appears as a
+--    switch in Owner -> "What each role can do". Existing choices are never overwritten.
+-- -----------------------------------------------------------------------------
+insert into public.platform_role_perms (role, perm, allowed) values
+  ('sudo',  'manage_storage_endpoints', true),
+  ('admin', 'manage_storage_endpoints', false)
+on conflict (role, perm) do nothing;
 
 -- -----------------------------------------------------------------------------
 -- 1. Tables
@@ -171,12 +181,12 @@ begin
 end $$;
 
 -- -----------------------------------------------------------------------------
--- 4. Admin functions (manage_storage)
+-- 4. Admin functions (manage_storage_endpoints)
 -- -----------------------------------------------------------------------------
 create or replace function public.storage_admin_list()
 returns jsonb language plpgsql security definer set search_path = public as $$
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   return (
     select jsonb_build_object(
       'category', s.category,
@@ -213,7 +223,7 @@ end $$;
 create or replace function public.storage_admin_set_category(p_category text, p_cdn text default null)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   if p_category is null or p_category !~ '^[a-z0-9][a-z0-9_-]{0,62}$' then
     raise exception 'category must be lowercase letters, numbers, - or _ (up to 63 characters)';
   end if;
@@ -228,7 +238,7 @@ create or replace function public.storage_admin_save_group(p_id uuid, p_name tex
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   if p_name is null or length(trim(p_name)) = 0 then raise exception 'give the group a name'; end if;
   if p_capacity_gb is null or p_capacity_gb <= 0 then raise exception 'capacity must be more than 0 GB'; end if;
   if p_id is null then
@@ -248,7 +258,7 @@ end $$;
 create or replace function public.storage_admin_delete_group(p_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   delete from public.storage_groups where id = p_id;
   perform public.nx_audit('storage_group_delete', null, jsonb_build_object('id', p_id));
 end $$;
@@ -259,7 +269,7 @@ create or replace function public.storage_admin_save_endpoint(
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid; v_base text;
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   v_base := rtrim(trim(coalesce(p_base_url, '')), '/');
   if v_base !~ '^https?://[^/]+' then raise exception 'the endpoint address must start with https://'; end if;
   if p_name is null or length(trim(p_name)) = 0 then raise exception 'give the endpoint a name'; end if;
@@ -293,7 +303,7 @@ end $$;
 create or replace function public.storage_admin_delete_endpoint(p_id uuid)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   delete from public.storage_endpoints where id = p_id;
   perform public.nx_audit('storage_endpoint_delete', null, jsonb_build_object('id', p_id));
 end $$;
@@ -302,7 +312,7 @@ end $$;
 create or replace function public.storage_admin_reorder_groups(p_ids uuid[])
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   update public.storage_groups g set position = u.ord::int
   from unnest(p_ids) with ordinality as u(id, ord)
   where g.id = u.id;
@@ -311,7 +321,7 @@ end $$;
 create or replace function public.storage_admin_reorder_endpoints(p_ids uuid[])
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   update public.storage_endpoints e set position = u.ord::int
   from unnest(p_ids) with ordinality as u(id, ord)
   where e.id = u.id;
@@ -324,7 +334,7 @@ create or replace function public.storage_admin_set_baseline(p_endpoint uuid, p_
 returns bigint language plpgsql security definer set search_path = public as $$
 declare v_group uuid; v_base bigint;
 begin
-  if not public.nx_can('manage_storage') then raise exception 'you are not allowed to manage storage'; end if;
+  if not public.nx_can('manage_storage_endpoints') then raise exception 'you are not allowed to manage storage'; end if;
   select e.group_id into v_group from public.storage_endpoints e where e.id = p_endpoint;
   if v_group is null then raise exception 'endpoint not found'; end if;
   update public.storage_endpoints set measured_at = now() where id = p_endpoint;

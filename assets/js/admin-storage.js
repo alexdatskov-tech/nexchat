@@ -5,7 +5,7 @@
    password), and the category NexChat stores its files under.
 
    Everything is saved through the functions in supabase/storage_groups.sql,
-   which check the manage_storage permission. CloudGate tests and measures an
+   which check the manage_storage_endpoints permission (Owner tab). CloudGate tests and measures an
    endpoint with the login typed here. After each change the storage client is
    refreshed, so new uploads follow the new layout straight away. */
 (function () {

@@ -213,6 +213,7 @@
     { k: 'delete_users', ic: 'fa-user-xmark', t: 'Delete accounts', d: 'Permanently remove an account and its data.' },
     { k: 'post_announcements', ic: 'fa-bullhorn', t: 'Post announcements', d: 'Post, pin and delete announcements for everyone.' },
     { k: 'manage_storage', ic: 'fa-hard-drive', t: 'Manage drive storage', d: 'Change how much space a user’s drive gets, and answer storage requests.' },
+    { k: 'manage_storage_endpoints', ic: 'fa-server', t: 'Manage storage endpoints', d: 'Add storage groups and endpoints, their logins, and the category NexChat uses.' },
     { k: 'review_appeals', ic: 'fa-gavel', t: 'Review ban appeals', d: 'Accept or decline appeals from banned accounts.' },
     { k: 'view_audit', ic: 'fa-clock-rotate-left', t: 'View the audit log', d: 'See every staff action.' },
   ];
