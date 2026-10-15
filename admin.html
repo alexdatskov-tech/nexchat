@@ -8,6 +8,42 @@
 <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=67" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="assets/css/theme.css?v=71" />
+<style>
+  /* Admin -> Storage endpoints (admin-storage.js) */
+  .se-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px 16px; margin-bottom: 12px; }
+  .se-card.se-next { border-color: color-mix(in srgb, var(--tc, #7c5cff) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc, #7c5cff) 14%, transparent); }
+  .se-cat { display: flex; flex-direction: column; gap: 8px; }
+  .se-cat-view { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .se-cat-view > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .se-cat small, .se-em small, .se-gt small { color: var(--txt-3); font-size: 12px; }
+  .se-cat b.mono { font-size: 15px; }
+  .se-hint { color: var(--txt-3); font-size: 12.5px; line-height: 1.5; margin: 0; }
+  .se-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .se-f { display: flex; flex-direction: column; gap: 5px; flex: 1 1 160px; min-width: 0; }
+  .se-f.se-wide { flex: 2 1 260px; }
+  .se-f > span { font-size: 12px; color: var(--txt-3); }
+  .se-acts { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .se-foot { display: flex; justify-content: flex-start; margin: 4px 0 0; }
+  .se-gh { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .se-gt { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .se-gt > div { display: flex; flex-direction: column; min-width: 0; }
+  .se-num { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-3, rgba(255,255,255,.06)); font-weight: 600; font-size: 13px; flex: 0 0 auto; }
+  .se-acts-s, .se-eacts { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .se-bar { height: 8px; border-radius: 99px; background: rgba(255,255,255,.07); overflow: hidden; margin-bottom: 12px; }
+  .se-bar span { display: block; height: 100%; border-radius: 99px; background: var(--tc, #7c5cff); transition: width .3s ease; }
+  .se-bar.is-full span { background: #e5484d; }
+  .se-ep { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+  .se-em { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 260px; }
+  .se-em > b { font-size: 14px; }
+  .se-em small.mono { overflow-wrap: anywhere; }
+  .se-eacts .btn { white-space: nowrap; }
+  .se-editor { border-color: color-mix(in srgb, var(--tc, #7c5cff) 45%, transparent); }
+  .se-eh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .se-eh small { color: var(--txt-3); }
+  .se-res { font-size: 13px; color: var(--txt-2); margin: 0; min-height: 0; }
+  .se-res:empty { display: none; }
+  .se-cat code { font-size: 12px; }
+</style>
 <script src="assets/js/ambient.js?v=67"></script>
 </head>
 <body>
@@ -43,6 +79,7 @@
     <div class="grp-label">Queues</div>
     <button data-tab="nitro"><span class="ni-ico c3"><i class="fa-solid fa-bolt"></i></span><span class="nt"><b>Nitro requests</b><small>Approve or decline</small></span><span id="pendCount"></span></button>
     <button data-tab="storage" class="hidden" data-perm="manage_storage"><span class="ni-ico c6"><i class="fa-solid fa-hard-drive"></i></span><span class="nt"><b>Storage requests</b><small>More drive space</small></span><span id="storeCount"></span></button>
+    <button data-tab="endpoints" class="hidden" data-perm="manage_storage"><span class="ni-ico c6"><i class="fa-solid fa-server"></i></span><span class="nt"><b>Storage endpoints</b><small>Groups, logins, category</small></span></button>
     <button data-tab="appeals" class="hidden" data-perm="review_appeals"><span class="ni-ico c8"><i class="fa-solid fa-gavel"></i></span><span class="nt"><b>Ban appeals</b><small>Second chances</small></span><span id="appealCount"></span></button>
   </nav>
 
@@ -147,6 +184,14 @@
       <div id="storeRows"></div>
     </section>
 
+    <section class="set-inner hidden" data-pane="endpoints">
+      <header class="pane-head"><span class="ph-ico c6"><i class="fa-solid fa-server"></i></span><div><h2>Storage endpoints</h2><div class="sub">Groups fill in order. When group 1 is full, uploads move to group 2, then group 3, and so on. Every endpoint has its own username and password.</div></div></header>
+      <div id="seCategory"></div>
+      <div id="seEditor"></div>
+      <div id="seGroups"></div>
+      <div class="se-foot"><button class="btn btn-primary btn-sm" data-act="g-add"><i class="fa-solid fa-plus"></i> Add group</button></div>
+    </section>
+
     <section class="set-inner hidden" data-pane="appeals">
       <header class="pane-head"><span class="ph-ico c8"><i class="fa-solid fa-gavel"></i></span><div><h2>Ban appeals</h2><div class="sub">Accepting an appeal lifts the ban straight away.</div></div></header>
       <div id="appealRows"></div>
@@ -185,18 +230,19 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/js/config.js?v=67"></script>
+<script src="assets/js/config.js?v=68"></script>
 <script src="assets/js/supabase-client.js?v=67"></script>
 <script src="assets/js/ui.js?v=67"></script>
 <script src="assets/js/glass.js?v=67"></script>
 <script src="assets/js/md.js?v=67"></script>
 <script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=67"></script>
-<script src="assets/js/cloudgate.js?v=67"></script>
+<script src="assets/js/cloudgate.js?v=68"></script>
 <script src="assets/js/storage.js?v=67"></script>
 <script src="assets/js/presence.js?v=67"></script>
 <script src="assets/js/guard.js?v=67"></script>
 <script src="assets/js/notify.js?v=67"></script>
 <script src="assets/js/nav.js?v=67"></script>
+<script src="assets/js/admin-storage.js?v=68"></script>
 <script src="assets/js/admin.js?v=67"></script>
 </body>
 </html>

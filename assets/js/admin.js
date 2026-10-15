@@ -13,6 +13,7 @@
       if (b.dataset.tab === 'overview') loadOverview();
       if (b.dataset.tab === 'nitro') loadRequests();
       if (b.dataset.tab === 'storage') loadStorage();
+      if (b.dataset.tab === 'endpoints') window.AdminStorage?.load();
       if (b.dataset.tab === 'servers') loadServers();
       if (b.dataset.tab === 'roles') loadRoles();
       if (b.dataset.tab === 'audit') loadAudit();

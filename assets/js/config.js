@@ -18,16 +18,15 @@ window.NEXCHAT_CONFIG = {
   // This login ships to every browser, so treat the bucket as readable by
   // anyone who looks; private drive files are encrypted before upload.
   CLOUDGATE: {
-    // Tried in order. If one can't be reached (or answers 5xx), the next one
-    // takes over. Every endpoint must run the same CloudGate API, with the
-    // same login and category. The fallback is a placeholder: point it at a
-    // second deployment of cloudgate-wasmer when you have one.
+    // Used only until storage groups are set up in Admin -> Storage endpoints
+    // (supabase/storage_groups.sql). Then the database list is used instead.
+    // Each endpoint has its own login. An endpoint without a username and
+    // password is skipped. Every endpoint runs the same CloudGate API.
     endpoints: [
-      { name: 'wasmer', endpoint: 'https://alexd-us1-s3.wasmer.app' },
-      { name: 'fallback', endpoint: 'https://cloudgate-fallback.placeholder.invalid' },
+      { name: 'wasmer', endpoint: 'https://alexd-us1-s3.wasmer.app', user: 'admin', pass: 'admin!' },
+      // nx-storage: fill in the username and password (or set them in Admin -> Storage endpoints).
+      { name: 'nx-storage', endpoint: 'https://nx-storage.alexaero.top' },
     ],
-    user: 'admin',
-    pass: 'admin!',
     category: 'nexchats-us1',
     cdn: 'd1dncmkdpaif79.cloudfront.net',
     // Default My Drive size for a user with no quota of their own yet. Admins
