@@ -416,6 +416,7 @@
     else UI.toast(`${active.people.length + 1} people in this group.`);
   };
 
+  const lastRow = (box) => { const rows = box.querySelectorAll('.m:not(.sending)'); return rows[rows.length - 1] || null; };
   const grouped = (pa, pt, m) => pa === m.author_id && (new Date(m.created_at) - new Date(pt)) < 5 * 60 * 1000;
 
   function setGrouped(el, grp) {
@@ -625,7 +626,7 @@
     if (document.querySelector(`.m[data-id="${m.id}"]`)) return null;
     const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
     clearSkeleton();
-    const last = box.querySelector('.m:last-of-type');
+    const last = lastRow(box);
     box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
     const el = box.lastElementChild;
     wire(el);
@@ -884,8 +885,8 @@
       };
       let el = null;
       if (box && box.querySelector('.m')) {
-        const last = box.querySelector('.m:last-of-type');
-        box.insertAdjacentHTML('beforeend', row(tmp, grouped(last.dataset.au, last.dataset.ts, tmp)));
+        const last = lastRow(box);
+        box.insertAdjacentHTML('beforeend', row(tmp, last ? grouped(last.dataset.au, last.dataset.ts, tmp) : false));
         el = box.lastElementChild;
         el.classList.add('sending');
         wire(el);
@@ -900,6 +901,7 @@
         return UI.toast(error.message, true);
       }
       el?.remove();
+      regroup();
       // Swaps the pending bubble for the real row. Dedupes against the
       // realtime echo and the catch-up poll, whichever got there first.
       await appendMessage(msg);
