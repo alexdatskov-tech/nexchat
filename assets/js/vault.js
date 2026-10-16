@@ -87,5 +87,14 @@ window.Vault = (function () {
 
   const plainSize = (stored) => Math.max(0, stored - OVERHEAD);
 
-  return { key, encName, decName, encBlob, decBytes, plainSize, OVERHEAD };
+  /* Share keys: a random 256-bit key per shared folder (see drive-share.js). */
+  async function importRaw(raw) {
+    return crypto.subtle.importKey('raw', unb64u(raw), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  }
+  async function newRawKey() {
+    const raw = b64u(rand(32));
+    return { raw, key: await importRaw(raw) };
+  }
+
+  return { key, encName, decName, encBlob, decBytes, plainSize, OVERHEAD, importRaw, newRawKey };
 })();
