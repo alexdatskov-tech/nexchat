@@ -316,7 +316,7 @@
     // 'offline' for every account, so it can't mean "invisible").
     const pref = me.theme?.status;
     chosen = pref === 'invisible' ? 'offline' : ['online', 'idle', 'dnd'].includes(pref) ? pref : 'online';
-    pchan = window.db.channel('nx-presence', { config: { presence: { key: me.id } } });
+    pchan = window.db.channel('nx-presence', { config: { presence: { key: me.id }, private: !!NX.privateRT } });
     pchan.on('presence', { event: 'sync' }, recompute)
       .on('presence', { event: 'join' }, recompute)
       .on('presence', { event: 'leave' }, recompute)

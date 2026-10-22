@@ -480,7 +480,7 @@
   function subscribeServer() {
     if (srvChan) window.db.removeChannel(srvChan);
     const sid = srv.id;
-    srvChan = window.db.channel('srv:' + sid + ':' + NX.uid())
+    srvChan = window.db.channel('srv:' + sid, { config: { private: !!NX.privateRT } })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channels', filter: `server_id=eq.${sid}` }, () => refreshQuietly(sid))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_sessions', filter: `server_id=eq.${sid}` }, () => loadVoiceSessions())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'server_members', filter: `server_id=eq.${sid}` }, () => { const e = cache.get(sid); if (e) e.members = null; members = null; paintMembers(); })

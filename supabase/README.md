@@ -1,5 +1,32 @@
 # Backend setup
 
+## 0. NexChat v3 (run this first on an existing project)
+
+1. **`nexchat_v3.sql`** in Supabase -> SQL editor. Safe to re-run. It:
+   - closes security holes: users unbanning themselves or granting themselves
+     Nitro, joining any server or DM without an invite, forging friendships,
+     moving messages between channels, rejoining a server they're banned from,
+     kicking/banning a server owner, owners lifting a platform lock, and anyone
+     overwriting other people's storage records;
+   - makes calls, typing indicators and call rings use **private realtime
+     channels** that only members can join (after everyone has the v3 app,
+     turn off *Allow public access* in Realtime -> Settings);
+   - adds read state, unread counts and `nx_inbox()` (the app loads in one
+     request);
+   - drops the unused bot platform tables/columns, `permission_flags`,
+     `nx_migrations` and `custom_emojis`.
+   The app also works without it (unread state then lives on each device), so
+   order doesn't matter, but run it before going live.
+2. **Storage proxy** (strongly recommended: today the CloudGate login ships to
+   every browser, so anyone can delete stored files). Deploy
+   `functions/cloudgate-proxy` (instructions at the top of its `index.ts`),
+   set `CLOUDGATE.proxy` in `assets/js/config.js`, remove the user/pass from
+   `CLOUDGATE.endpoints`, run **`nexchat_v3_storage_lockdown.sql`**, then change
+   the CloudGate password.
+3. The old `bot-api` Edge Function can be deleted (Edge Functions -> bot-api).
+
+The sections below are the earlier setup steps, kept for new projects.
+
 ## 1. Announcements (required for the megaphone / Home feed)
 
 Open Supabase → **SQL editor**, paste `announcements.sql`, run it. It is safe

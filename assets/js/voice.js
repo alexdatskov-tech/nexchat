@@ -532,7 +532,7 @@ window.Voice = (function () {
     }
 
     syncWatch();   // we are in this call now: stop watching it as an outsider
-    sig = window.db.channel('voice:' + channel.id, { config: { broadcast: { self: false, ack: false }, presence: { key: me.id, enabled: true } } });
+    sig = window.db.channel('voice:' + channel.id, { config: { broadcast: { self: false, ack: false }, presence: { key: me.id, enabled: true }, private: !!window.NX?.privateRT } });
 
     sig.on('broadcast', { event: 'sig' }, async ({ payload: m }) => {
       if (!m || !chan || m.from === me.id || (m.to && m.to !== me.id)) return;
@@ -675,7 +675,7 @@ window.Voice = (function () {
       if (id === joined || watching.has(id)) continue;
       const w = { ch: null, count: 0 };
       // enabled: presence is only published/received when the channel says so.
-      w.ch = window.db.channel('voice:' + id, { config: { presence: { enabled: true } } });
+      w.ch = window.db.channel('voice:' + id, { config: { presence: { enabled: true }, private: !!window.NX?.privateRT } });
       w.ch.on('presence', { event: 'sync' }, () => {
         w.count = Object.keys(w.ch.presenceState() || {}).length;
         notifyLive();

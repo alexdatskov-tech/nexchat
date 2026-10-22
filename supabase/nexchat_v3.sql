@@ -18,6 +18,11 @@
 -- 6. Read state for DMs and channels, plus nx_inbox(): everything the app
 --    shell needs (servers, conversations, unread counts, friendships) in a
 --    single request.
+-- 7. Invites honour server bans and use limits; kicks/bans can't target the
+--    owner or yourself.
+-- 8. Platform locks, 1:1 DMs and storage records can't be tampered with.
+-- 9. Private realtime channels for calls, typing and call rings.
+-- 10. Drops the unused bot tables and columns.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -39,9 +44,6 @@ begin
        or new.ban_reason is distinct from old.ban_reason
        or new.is_nitro is distinct from old.is_nitro
        or new.nitro_since is distinct from old.nitro_since
-       or new.is_bot is distinct from old.is_bot
-       or new.is_developer is distinct from old.is_developer
-       or new.bot_owner_id is distinct from old.bot_owner_id
        or new.created_at is distinct from old.created_at then
       raise exception 'That profile field can only be changed by staff.';
     end if;
@@ -126,6 +128,10 @@ begin
   end if;
   if new.author_id is distinct from old.author_id or new.created_at is distinct from old.created_at then
     raise exception 'Messages cannot be re-attributed.';
+  end if;
+  if tg_table_name = 'messages' and current_user in ('authenticated', 'anon')
+     and new.is_pinned is distinct from old.is_pinned then
+    raise exception 'Use nx_set_pinned() to pin messages.';
   end if;
   return new;
 end $$;
@@ -264,6 +270,7 @@ begin
   if v_me is null then raise exception 'Sign in first.'; end if;
 
   select jsonb_build_object(
+    'v', 3,
     'servers', coalesce((
       select jsonb_agg(jsonb_build_object(
         'id', s.id, 'name', s.name, 'icon_url', s.icon_url, 'owner_id', s.owner_id,
@@ -345,5 +352,234 @@ grant execute on function public.nx_mark_channel_read(uuid) to authenticated;
 grant execute on function public.nx_mark_dm_read(uuid) to authenticated;
 grant execute on function public.nx_set_pinned(uuid, boolean) to authenticated;
 grant execute on function public.nx_card(public.profiles) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 7. Invites respect bans and use limits; kicks and bans can't hit the owner
+-- ---------------------------------------------------------------------------
+create or replace function public.join_server_by_invite(p_code text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inv public.invites%rowtype;
+begin
+  if auth.uid() is null then raise exception 'Sign in first.'; end if;
+  select * into v_inv from public.invites where code = trim(p_code) limit 1 for update;
+  if v_inv.id is null then raise exception 'That invite code does not exist.'; end if;
+  if v_inv.expires_at is not null and v_inv.expires_at < now() then raise exception 'That invite has expired.'; end if;
+  if exists (select 1 from public.server_members m where m.server_id = v_inv.server_id and m.user_id = auth.uid()) then
+    return v_inv.server_id;
+  end if;
+  if exists (select 1 from public.server_bans b where b.server_id = v_inv.server_id and b.user_id = auth.uid()) then
+    raise exception 'You are banned from that server.';
+  end if;
+  if v_inv.max_uses is not null and v_inv.max_uses > 0 and coalesce(v_inv.uses, 0) >= v_inv.max_uses then
+    raise exception 'That invite has been used up.';
+  end if;
+  insert into public.server_members (server_id, user_id) values (v_inv.server_id, auth.uid()) on conflict do nothing;
+  update public.invites set uses = coalesce(uses, 0) + 1 where id = v_inv.id;
+  return v_inv.server_id;
+end $$;
+
+create or replace function public.kick_member(p_server_id uuid, p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (public.has_permission(p_server_id, auth.uid(), 32) or public.is_platform_admin(auth.uid())) then
+    raise exception 'not authorized';
+  end if;
+  if p_user_id = auth.uid() then raise exception 'You can''t kick yourself; leave the server instead.'; end if;
+  if exists (select 1 from public.servers s where s.id = p_server_id and s.owner_id = p_user_id) then
+    raise exception 'The server owner can''t be kicked.';
+  end if;
+  delete from public.server_members where server_id = p_server_id and user_id = p_user_id;
+  insert into public.audit_log (server_id, actor_id, action, target_id) values (p_server_id, auth.uid(), 'kick_member', p_user_id);
+end $$;
+
+create or replace function public.ban_member(p_server_id uuid, p_user_id uuid, p_reason text default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (public.has_permission(p_server_id, auth.uid(), 64) or public.is_platform_admin(auth.uid())) then
+    raise exception 'not authorized';
+  end if;
+  if p_user_id = auth.uid() then raise exception 'You can''t ban yourself.'; end if;
+  if exists (select 1 from public.servers s where s.id = p_server_id and s.owner_id = p_user_id) then
+    raise exception 'The server owner can''t be banned.';
+  end if;
+  insert into public.server_bans (server_id, user_id, banned_by, reason)
+  values (p_server_id, p_user_id, auth.uid(), p_reason)
+  on conflict (server_id, user_id) do update set reason = excluded.reason, banned_by = excluded.banned_by;
+  delete from public.server_members where server_id = p_server_id and user_id = p_user_id;
+  insert into public.audit_log (server_id, actor_id, action, target_id, details)
+  values (p_server_id, auth.uid(), 'ban_member', p_user_id, jsonb_build_object('reason', p_reason));
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 8. Records that only staff (or nobody) may flip from the browser
+-- ---------------------------------------------------------------------------
+-- A server's platform lock is set by staff; owners can't lift it themselves.
+create or replace function public.nx_lock_server_fields()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user in ('authenticated', 'anon') and new.is_platform_locked is distinct from old.is_platform_locked
+     and not public.nx_is_platform_admin() then
+    raise exception 'Only NexChat staff can lock or unlock a server.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_lock_server_fields on public.servers;
+create trigger trg_lock_server_fields before update on public.servers
+  for each row execute function public.nx_lock_server_fields();
+
+-- A 1:1 DM can't be turned into a group (that would let either side add people).
+create or replace function public.nx_lock_dm_fields()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.is_group is distinct from old.is_group or new.created_by is distinct from old.created_by then
+    raise exception 'That conversation setting can''t be changed.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_lock_dm_fields on public.dm_conversations;
+create trigger trg_lock_dm_fields before update on public.dm_conversations
+  for each row execute function public.nx_lock_dm_fields();
+
+-- Storage usage records belong to whoever uploaded the file.
+alter table public.storage_objects add column if not exists owner_id uuid references public.profiles(id) on delete set null;
+create or replace function public.storage_record(p_key text, p_group uuid, p_endpoint uuid, p_size bigint)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'sign in first'; end if;
+  insert into public.storage_objects (key, group_id, endpoint_id, size, owner_id)
+  values (p_key, p_group, p_endpoint, greatest(coalesce(p_size, 0), 0), auth.uid())
+  on conflict (key) do update set group_id = excluded.group_id, endpoint_id = excluded.endpoint_id, size = excluded.size
+  where public.storage_objects.owner_id is null or public.storage_objects.owner_id = auth.uid() or public.nx_rank(auth.uid()) >= 1;
+end $$;
+create or replace function public.storage_forget(p_key text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'sign in first'; end if;
+  delete from public.storage_objects
+  where key = p_key and (owner_id is null or owner_id = auth.uid() or public.nx_rank(auth.uid()) >= 1);
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 9. Private realtime channels (calls, typing, call rings)
+-- The app joins these with { private: true }; Realtime checks the policies
+-- below when a channel is joined. Topics:
+--   nx-presence            everyone signed in
+--   nx-call:<user id>      only that user listens; people who share a DM or a
+--                          friendship with them may ring
+--   voice:dm-<conv id>     participants of that conversation
+--   voice:<channel id>     members of that channel's server (and staff who
+--                          can view every server)
+--   chat:dm:<conv id>      participants (typing indicators)
+--   chat:channel:<id>      members of the server
+--   nx-inbox:<user id>     that user (database change feed)
+--   srv:<server id>        members of that server (database change feed)
+-- Once every client runs v3, turn OFF "Allow public access" in
+-- Realtime -> Settings so only these private channels exist.
+-- ---------------------------------------------------------------------------
+create or replace function public.nx_topic_ok(p_topic text, p_write boolean)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+  v_id uuid;
+  v_rest text;
+  uuid_re constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+begin
+  if v_me is null or p_topic is null then return false; end if;
+  if p_topic = 'nx-presence' then return true; end if;
+  if p_topic = 'nx-inbox:' || v_me::text then return true; end if;
+  if p_topic like 'srv:%' then
+    v_rest := substr(p_topic, 5);
+    if v_rest !~ uuid_re then return false; end if;
+    return public.is_server_member(v_rest::uuid, v_me) or public.nx_can('view_all_servers');
+  end if;
+
+  if p_topic like 'nx-call:%' then
+    v_rest := substr(p_topic, 9);
+    if v_rest !~ uuid_re then return false; end if;
+    v_id := v_rest::uuid;
+    if v_id = v_me then return true; end if;
+    if not p_write then return false; end if;
+    return exists (select 1 from public.dm_participants a join public.dm_participants b on b.conversation_id = a.conversation_id
+                   where a.user_id = v_me and b.user_id = v_id)
+        or exists (select 1 from public.friendships f where f.status = 'accepted'
+                   and ((f.user_id = v_me and f.friend_id = v_id) or (f.user_id = v_id and f.friend_id = v_me)));
+  end if;
+
+  if p_topic like 'voice:dm-%' or p_topic like 'chat:dm:%' then
+    v_rest := case when p_topic like 'voice:dm-%' then substr(p_topic, 10) else substr(p_topic, 9) end;
+    if v_rest !~ uuid_re then return false; end if;
+    return public.is_dm_participant(v_rest::uuid, v_me);
+  end if;
+
+  if p_topic like 'voice:%' or p_topic like 'chat:channel:%' then
+    v_rest := case when p_topic like 'voice:%' then substr(p_topic, 7) else substr(p_topic, 14) end;
+    if v_rest !~ uuid_re then return false; end if;
+    return exists (
+      select 1 from public.channels c
+      where c.id = v_rest::uuid
+        and ((public.is_server_member(c.server_id, v_me) and not public.channel_hidden_for(c.id, v_me))
+             or public.nx_can('view_all_servers'))
+    );
+  end if;
+
+  return false;
+end $$;
+grant execute on function public.nx_topic_ok(text, boolean) to authenticated;
+
+drop policy if exists nx_realtime_read on realtime.messages;
+create policy nx_realtime_read on realtime.messages for select to authenticated
+  using (realtime.messages.extension in ('broadcast', 'presence') and public.nx_topic_ok((select realtime.topic()), false));
+drop policy if exists nx_realtime_write on realtime.messages;
+create policy nx_realtime_write on realtime.messages for insert to authenticated
+  with check (realtime.messages.extension in ('broadcast', 'presence') and public.nx_topic_ok((select realtime.topic()), true));
+
+-- ---------------------------------------------------------------------------
+-- 10. Remove leftovers nothing uses any more
+-- The bot platform was removed from the app; permission_flags, nx_migrations
+-- and custom_emojis were never used. (The bot-api Edge Function can be
+-- deleted from Supabase -> Edge Functions too.)
+-- ---------------------------------------------------------------------------
+drop function if exists public.bot_rate_take(text, integer);
+drop table if exists public.bot_rate;
+drop table if exists public.dev_tokens;
+drop table if exists public.bots;
+drop table if exists public.permission_flags;
+drop table if exists public.nx_migrations;
+drop table if exists public.custom_emojis;
+alter table public.profiles drop column if exists bot_owner_id;
+alter table public.profiles drop column if exists is_bot;
+alter table public.profiles drop column if exists is_developer;
 
 select 'nexchat_v3 ok' as result;

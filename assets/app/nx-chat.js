@@ -240,7 +240,8 @@
       if (this.sub) return;
       const a = this.a;
       this.subOk = false;
-      this.sub = window.db.channel(`chat:${this.key}:${NX.uid()}`, { config: { broadcast: { self: false } } })
+      // One shared topic per conversation, so typing indicators reach everyone in it.
+      this.sub = window.db.channel(`chat:${this.key}`, { config: { broadcast: { self: false }, private: !!NX.privateRT } })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: a.table, filter: `${a.fk}=eq.${a.id}` }, async ({ new: m }) => {
           if (this.byId.has(m.id)) return;
           // Our own message echoing back while its send is still in flight:

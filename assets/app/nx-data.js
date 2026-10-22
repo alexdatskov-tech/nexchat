@@ -45,6 +45,8 @@
   async function loadInbox() {
     const { data, error, missing: gone } = await rpc('nx_inbox');
     if (!error && data) {
+      // Private realtime channels need the policies from nexchat_v3.sql.
+      NX.privateRT = Number(data.v) >= 3;
       D.servers = data.servers || [];
       D.dms = (data.dms || []).map((c) => ({ ...c, people: (c.people || []).map((p) => people().put(p)) }));
       D.friendships = (data.friendships || []).map((f) => { if (f.other) people().put(f.other); return f; });
@@ -315,7 +317,7 @@
   function startLive() {
     const me = D.me.id;
     if (live) db().removeChannel(live);
-    live = db().channel('nx-inbox:' + me)
+    live = db().channel('nx-inbox:' + me, { config: { private: !!NX.privateRT } })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dm_messages' }, ({ new: m }) => onDmMessage(m))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: m }) => onChannelMessage(m))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships' }, (p) => onFriendship(p))
@@ -421,7 +423,7 @@
   /* ---------- incoming calls ---------- */
   let callChan = null;
   function startCalls() {
-    callChan = db().channel('nx-call:' + D.me.id)
+    callChan = db().channel('nx-call:' + D.me.id, { config: { private: !!NX.privateRT } })
       .on('broadcast', { event: 'ring' }, ({ payload }) => {
         if (!payload || payload.to !== D.me.id || D.blocked.has(payload.from)) return;
         if (window.Voice?.state().active && window.Voice.state().channel?.id === 'dm-' + payload.conversation) return;
@@ -438,7 +440,7 @@
       .subscribe();
   }
   function ring(uid, payload) {
-    const ch = db().channel('nx-call:' + uid);
+    const ch = db().channel('nx-call:' + uid, { config: { private: !!NX.privateRT } });
     ch.subscribe((s) => {
       if (s !== 'SUBSCRIBED') return;
       ch.send({ type: 'broadcast', event: 'ring', payload: { ...payload, to: uid, from: D.me.id } });

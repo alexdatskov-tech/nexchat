@@ -18,6 +18,11 @@ window.NEXCHAT_CONFIG = {
   // This login ships to every browser, so treat the bucket as readable by
   // anyone who looks; private drive files are encrypted before upload.
   CLOUDGATE: {
+    // Server-side proxy that keeps the storage logins off the browser
+    // (supabase/functions/cloudgate-proxy). Once it is deployed, set:
+    //   proxy: 'https://xqzibelnvjlmavgrpyve.supabase.co/functions/v1/cloudgate-proxy',
+    // and remove user/pass from the endpoints below.
+    proxy: '',
     // Used only until storage groups are set up in Admin -> Storage endpoints
     // (supabase/storage_groups.sql). Then the database list is used instead.
     // Each endpoint has its own login. An endpoint without a username and

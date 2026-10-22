@@ -43,7 +43,20 @@ window.CloudGate = (function () {
   const full = new Set(); // group ids that answered "full" this session
 
   const normBase = (s) => String(s || '').trim().replace(/\/+$/, '');
-  const isUsable = (e) => /^https?:\/\//.test(e.base) && !!e.user && !!e.pass;
+  // With the server-side proxy (CLOUDGATE.proxy, supabase/functions/cloudgate-proxy)
+  // the logins stay on the server, so an endpoint needs no user/pass here.
+  const proxyUrl = () => cfgBase()?.proxy || '';
+  const isUsable = (e) => /^https?:\/\//.test(e.base) && (!!proxyUrl() || (!!e.user && !!e.pass));
+  async function viaProxy(ep, path, { method = 'GET', body, query, test } = {}) {
+    const { data } = await window.db.auth.getSession();
+    const token = data?.session?.access_token;
+    const c = window.NEXCHAT_CONFIG || {};
+    return fetch(proxyUrl(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', apikey: c.SUPABASE_ANON_KEY, authorization: 'Bearer ' + (token || c.SUPABASE_ANON_KEY) },
+      body: JSON.stringify({ endpoint_id: ep?.id || null, path, method, body: body || undefined, query: query || undefined, test }),
+    });
+  }
 
   // The endpoints listed in config.js, as one group with no capacity limit.
   function fromConfig() {
@@ -136,7 +149,8 @@ window.CloudGate = (function () {
     try {
       await ready();
       const ep = endpoints()[0];
-      if (ep) fetch(ep.base + '/api/stats', { headers: { authorization: auth(ep) } }).catch(() => {});
+      if (proxyUrl()) viaProxy(ep, '/ping').catch(() => {});
+      else if (ep) fetch(ep.base + '/api/stats', { headers: { authorization: auth(ep) } }).catch(() => {});
     } catch {}
   }
 
@@ -172,13 +186,13 @@ window.CloudGate = (function () {
 
   const auth = (ep) => 'Basic ' + btoa(unescape(encodeURIComponent(`${ep.user}:${ep.pass}`)));
 
-  async function callAt(ep, path, { method = 'GET', body, query } = {}) {
+  async function callAt(ep, path, { method = 'GET', body, query, test } = {}) {
     const url = new URL(ep.base + path);
     Object.entries(query || {}).forEach(([k, v]) => v != null && url.searchParams.set(k, v));
     const r = await retry(async () => {
       let res;
       try {
-        res = await fetch(url, {
+        res = proxyUrl() ? await viaProxy(ep, path, { method, body, query, test }) : await fetch(url, {
           method,
           headers: { authorization: auth(ep), ...(body ? { 'content-type': 'application/json' } : {}) },
           body: body ? JSON.stringify(body) : undefined,
@@ -366,7 +380,8 @@ window.CloudGate = (function () {
       const { out } = await onOwner(key, async (ep) => {
         let r;
         try {
-          r = await fetch(ep.base + '/api/download?key=' + encodeURIComponent(key), { headers: { authorization: auth(ep) } });
+          r = proxyUrl() ? await viaProxy(ep, '/api/download', { query: { key } })
+            : await fetch(ep.base + '/api/download?key=' + encodeURIComponent(key), { headers: { authorization: auth(ep) } });
         } catch { throw failure(`Storage unreachable (${ep.name})`, { transient: true }); }
         if (!r.ok) throw failure(`Download failed (${r.status})`, { status: r.status, transient: r.status >= 500 });
         return r.arrayBuffer();
@@ -450,10 +465,15 @@ window.CloudGate = (function () {
 
   /* ---- admin: checking an endpoint and measuring its real usage ---- */
   // Connects with the given login and returns the app's /api/stats (no secrets echoed).
-  const probe = (ep) => callAt(asEndpoint(ep), '/api/stats');
+  // In proxy mode a login typed into the admin console is sent once for the test.
+  const statsOf = (ep) => {
+    const e = asEndpoint(ep);
+    return callAt({ ...e, id: ep.id }, '/api/stats', proxyUrl() && e.user && e.pass ? { test: { base: e.base, user: e.user, pass: e.pass } } : {});
+  };
+  const probe = (ep) => statsOf(ep);
   // Bytes this endpoint holds in our category, as the app reports it.
   async function measure(ep) {
-    const stats = await callAt(asEndpoint(ep), '/api/stats');
+    const stats = await statsOf(ep);
     return Number(stats?.folder_stats?.[category()]?.size_bytes) || 0;
   }
 
