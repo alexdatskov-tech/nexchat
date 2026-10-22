@@ -1,40 +1,68 @@
 /* Shared frame for full-screen pages (user settings, server settings, admin).
 
    const pg = NX.pageShell(host, {
-     sections: [{ title: 'User settings', items: [{ id: 'profile', label: 'Profile', icon: 'fa-user' }, …] }],
+     sections: [{ title: 'User settings', items: [{ id: 'profile', label: 'Profile', icon: 'fa-user', tint: '#7c6cff' }, …] }],
      active: 'profile',
      onSelect: (id) => …,        // called when a nav item is clicked
+     brand: '<html>',            // top of the sidebar (user card, server card, console logo)
+     kind: 'settings' | 'admin' | 'server',
      wide: false,                // wider content column (tables)
    });
    pg.body      -> the content element to render the active tab into
    pg.setActive(id)
    pg.dirty(bool, { onSave, onReset })  -> shows / hides the "unsaved changes" bar
-   pg.guard()   -> true when it is fine to leave (no unsaved changes, or the bar shook) */
+   pg.guard()   -> true when it is fine to leave (no unsaved changes, or the bar shook)
+   pg.hero({ icon, title, sub, tint, actions }) -> html for a tab header */
 (function () {
   const { esc } = NX;
+  const TINTS = ['#7c6cff', '#3b9ef5', '#2fbf87', '#e8659a', '#f0b232', '#5ac8d8', '#f2555a', '#a78bfa', '#94a3b8'];
+
   NX.pageShell = (host, o) => {
+    let n = 0;
+    const items = [];
+    host.className = `page pg-${o.kind || 'settings'}`;
     host.innerHTML = `
-      <nav class="page-nav"><div class="page-nav-in">${o.sections.map((s) => `
-        ${s.title ? `<h6>${esc(s.title)}</h6>` : '<div class="sep"></div>'}
-        ${s.items.filter((i) => !i.hidden).map((i) => `<button type="button" data-id="${esc(i.id)}" class="${i.danger ? 'danger' : ''}">${i.icon ? `<i class="fa-solid ${i.icon}"></i>` : ''}<span class="grow">${esc(i.label)}</span>${i.count ? `<span class="count">${i.count}</span>` : ''}</button>`).join('')}`).join('')}
-      </div></nav>
-      <div class="page-body"><div class="page-close"><button type="button" aria-label="Close"><i class="fa-solid fa-xmark"></i></button><span>ESC</span></div>
-        <div class="page-body-in${o.wide ? ' wide' : ''}"></div></div>`;
-    const body = host.querySelector('.page-body-in');
+      <aside class="pg-side">
+        <div class="pg-side-in">
+          ${o.brand ? `<div class="pg-brand">${o.brand}</div>` : ''}
+          <label class="pg-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Search" aria-label="Search settings"></label>
+          <nav class="pg-nav">${o.sections.map((s) => `<div class="pg-group">
+            ${s.title ? `<h6>${esc(s.title)}</h6>` : '<div class="pg-sep"></div>'}
+            ${s.items.filter((i) => !i.hidden).map((i) => { items.push(i); const t = i.tint || (i.danger ? '#f2555a' : TINTS[n++ % TINTS.length]); return `<button type="button" data-id="${esc(i.id)}" data-label="${esc(i.label.toLowerCase())}" class="${i.danger ? 'danger' : ''}" style="--t:${t}">
+              <span class="pg-ico"><i class="fa-solid ${i.icon || 'fa-circle'}"></i></span><span class="grow">${esc(i.label)}</span>${i.count ? `<span class="count">${i.count}</span>` : ''}${i.badge ? `<span class="pg-badge">${esc(i.badge)}</span>` : ''}<i class="fa-solid fa-chevron-right pg-chev"></i></button>`; }).join('')}</div>`).join('')}
+          </nav>
+          <div class="pg-foot">NexChat v3 · <span class="kbd">Esc</span> to close</div>
+        </div>
+      </aside>
+      <main class="pg-main">
+        <header class="pg-top">
+          <button class="icon-btn pg-back" type="button" aria-label="Back"><i class="fa-solid fa-arrow-left"></i></button>
+          <div class="pg-crumb"><span class="pg-crumb-sec"></span><i class="fa-solid fa-chevron-right"></i><b></b></div>
+          <button class="pg-close" type="button" aria-label="Close" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
+        </header>
+        <div class="pg-scroll"><div class="pg-content${o.wide ? ' wide' : ''}"></div></div>
+      </main>`;
+    const body = host.querySelector('.pg-content');
     let dirty = null;
+    const secOf = (id) => o.sections.find((s) => s.items.some((i) => i.id === id));
     const api = {
       body,
       setActive(id) {
-        host.querySelectorAll('.page-nav [data-id]').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
-        host.querySelector('.page-body').scrollTop = 0;
+        host.querySelectorAll('.pg-nav [data-id]').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+        const it = items.find((i) => i.id === id);
+        host.querySelector('.pg-crumb b').textContent = it?.label || '';
+        host.querySelector('.pg-crumb-sec').textContent = secOf(id)?.title || '';
+        host.querySelector('.pg-scroll').scrollTop = 0;
+        host.classList.add('pg-open');
       },
+      showNav() { host.classList.remove('pg-open'); },
       dirty(on, handlers) {
         dirty = on ? handlers : null;
-        let bar = body.querySelector('.save-bar');
+        let bar = host.querySelector('.save-bar');
         if (!on) { bar?.remove(); return; }
         if (!bar) {
-          bar = NX.h(`<div class="save-bar"><span class="grow">Careful — you have unsaved changes!</span><button class="btn btn-quiet btn-sm" data-r>Reset</button><button class="btn btn-ok btn-sm" data-s>Save changes</button></div>`);
-          body.appendChild(bar);
+          bar = NX.h(`<div class="save-bar"><i class="fa-solid fa-circle-exclamation"></i><span class="grow">Careful — you have unsaved changes!</span><button class="btn btn-quiet btn-sm" data-r>Reset</button><button class="btn btn-ok btn-sm" data-s>Save changes</button></div>`);
+          host.querySelector('.pg-main').appendChild(bar);
         }
         bar.querySelector('[data-r]').onclick = () => dirty?.onReset?.();
         bar.querySelector('[data-s]').onclick = async (e) => {
@@ -46,19 +74,46 @@
       },
       guard() {
         if (!dirty) return true;
-        const bar = body.querySelector('.save-bar');
+        const bar = host.querySelector('.save-bar');
         if (bar) { bar.classList.remove('shake'); void bar.offsetWidth; bar.classList.add('shake'); }
         return false;
       },
+      hero: (h) => `<div class="pg-hero" style="--t:${h.tint || 'var(--accent)'}"><span class="pg-hero-ico"><i class="fa-solid ${h.icon || 'fa-gear'}"></i></span>
+        <div class="grow"><h1>${esc(h.title)}</h1><p>${h.sub || ''}</p></div>${h.actions || ''}</div>`,
     };
-    host.querySelector('.page-nav').addEventListener('click', (e) => {
+    // Any tab that starts with a plain <h1 class="page-title"> (and optional
+    // <p class="lead">) gets the hero header in the active item's colour.
+    let activeId = o.active;
+    const heroify = () => {
+      const h = body.querySelector(':scope > h1.page-title');
+      if (!h) return;
+      const it = items.find((i) => i.id === activeId);
+      const btn = host.querySelector(`.pg-nav [data-id="${CSS.escape(activeId || '')}"]`);
+      const lead = h.nextElementSibling?.classList.contains('lead') ? h.nextElementSibling : null;
+      const hero = NX.h(api.hero({ icon: it?.icon, tint: btn?.style.getPropertyValue('--t') || 'var(--accent)', title: '', sub: '' }));
+      hero.querySelector('h1').innerHTML = h.innerHTML;
+      if (lead) { hero.querySelector('p').innerHTML = lead.innerHTML; lead.remove(); } else hero.querySelector('p').remove();
+      h.replaceWith(hero);
+    };
+    new MutationObserver(heroify).observe(body, { childList: true });
+    const setActive0 = api.setActive;
+    api.setActive = (id) => { activeId = id; setActive0(id); };
+    host.querySelector('.pg-nav').addEventListener('click', (e) => {
       const b = e.target.closest('[data-id]');
       if (!b) return;
       if (!api.guard()) return;
       o.onSelect?.(b.dataset.id);
+      host.classList.add('pg-open');
     });
-    host.querySelector('.page-close button').onclick = () => { if (api.guard()) NX.closePage(); };
+    host.querySelector('.pg-search input').addEventListener('input', (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      host.querySelectorAll('.pg-nav [data-id]').forEach((b) => { b.hidden = !!q && !b.dataset.label.includes(q); });
+      host.querySelectorAll('.pg-group').forEach((g) => { g.hidden = !!q && !g.querySelector('[data-id]:not([hidden])'); });
+    });
+    host.querySelector('.pg-close').onclick = () => { if (api.guard()) NX.closePage(); };
+    host.querySelector('.pg-back').onclick = () => { if (api.guard()) api.showNav(); };
     api.setActive(o.active);
+    if (NX.isNarrow() && o.startOnNav) host.classList.remove('pg-open');
     return api;
   };
 

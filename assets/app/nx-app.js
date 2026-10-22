@@ -320,10 +320,20 @@
   }
 
   /* ---------- theme: wallpaper + glass + accent ---------- */
+  // Glass needs something behind it; without a wallpaper it gets this scene.
+  const GLASS_DEFAULT_BG = 'radial-gradient(70% 70% at 85% 10%,#4b2a99,transparent 60%),radial-gradient(60% 60% at 10% 90%,#0e6b74,transparent 60%),radial-gradient(50% 50% at 50% 50%,#2a1546,transparent 70%),#07080c';
   function applyTheme() {
     const t = NX.me?.theme || {};
     const root = document.documentElement.style;
     document.body.classList.toggle('glass', t.ui_style === 'glass');
+    document.body.classList.toggle('compact', t.density === 'compact');
+    document.body.classList.toggle('reduce-motion', !!t.reduce_motion);
+    if (t.chat_fs) root.setProperty('--chat-fs', t.chat_fs + 'px'); else root.removeProperty('--chat-fs');
+    // The app accent (a server's own accent wins while that server is open).
+    NX.userAccent = /^#[0-9a-f]{6}$/i.test(t.ui_accent || '') ? t.ui_accent : null;
+    if (!document.documentElement.dataset.srvAccent) {
+      if (NX.userAccent) root.setProperty('--accent', NX.userAccent); else root.removeProperty('--accent');
+    }
     const key = (() => {
       if (!t.dash_wallpaper_key) return '';
       if (!t.dash_bg) return t.dash_wallpaper_key;
@@ -342,7 +352,7 @@
     };
     if (key && window.Store) {
       window.Store.signKey(key).then((u) => set(`url("${u}")`)).catch(() => set(null));
-    } else set(t.dash_bg || null);
+    } else set(t.dash_bg || (t.ui_style === 'glass' ? GLASS_DEFAULT_BG : null));
   }
   NX.applyTheme = applyTheme;
 

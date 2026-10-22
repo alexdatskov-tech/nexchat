@@ -102,32 +102,37 @@
 
   function setCount(id, n) {
     counts[id] = n;
-    const b = host?.querySelector(`.page-nav [data-id="${id}"]`);
+    const b = host?.querySelector(`.pg-nav [data-id="${id}"]`);
     if (!b) return;
     b.querySelector('.count')?.remove();
     if (n) b.insertAdjacentHTML('beforeend', `<span class="count">${n > 99 ? '99+' : n}</span>`);
   }
 
+  const TAB_TINT = { overview: '#7c6cff', users: '#3b9ef5', servers: '#2fbf87', announce: '#e8659a', roles: '#a78bfa', audit: '#94a3b8', owner: '#f0b232', nitro: '#f0b232', storage: '#5ac8d8', endpoints: '#3b9ef5', appeals: '#f2555a' };
   function head(title, sub, extra = '') {
-    return `<div class="adm-head"><div class="grow"><h1 class="page-title" style="margin:0">${esc(title)}</h1>${sub ? `<p class="lead" style="margin:4px 0 0">${sub}</p>` : ''}</div>${extra}</div>`;
+    const it = TABS().flatMap((x) => x.items).find((i) => i.id === tab);
+    return pg ? pg.hero({ icon: it?.icon, tint: TAB_TINT[tab] || 'var(--accent)', title, sub, actions: extra })
+      : `<h1 class="page-title">${esc(title)}</h1>`;
   }
 
   async function enter(h, parts) {
     host = h; alive = true;
     host.classList.add('adm-page');
     if (myRank() < 1) {
-      host.innerHTML = `<div class="page-body"><div class="page-close"><button type="button" aria-label="Close"><i class="fa-solid fa-xmark"></i></button><span>ESC</span></div>
-        <div class="page-body-in" style="margin:auto">${emptyBox('fa-shield-halved', 'Admins only', 'This area is for NexChat platform staff.')}<div style="display:flex;justify-content:center"><button class="btn btn-primary" data-home>Back to NexChat</button></div></div></div>`;
-      host.querySelector('.page-close button').onclick = () => NX.closePage();
+      host.style.display = 'flex'; host.style.alignItems = 'center'; host.style.justifyContent = 'center';
+      host.innerHTML = `<div style="max-width:420px">${emptyBox('fa-shield-halved', 'Admins only', 'This area is for NexChat platform staff.')}<div style="display:flex;justify-content:center"><button class="btn btn-primary" data-home>Back to NexChat</button></div></div>`;
       host.querySelector('[data-home]').onclick = () => NX.closePage();
       return;
     }
-    host.innerHTML = `<div class="page-body" style="display:flex;align-items:center;justify-content:center"><span class="spinner"></span></div>`;
+    host.innerHTML = `<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center"><span class="spinner"></span></div>`;
     await loadPerms();
     if (!alive) return;
     tab = parts[1] && visibleTabs().includes(parts[1]) ? parts[1] : 'overview';
+    const rk = myRank();
     pg = NX.pageShell(host, {
-      sections: TABS(), active: tab, wide: true,
+      sections: TABS(), active: tab, wide: true, kind: 'admin',
+      brand: `<div class="pb-logo"><span class="lg"><i class="fa-solid fa-shield-halved"></i></span><div class="grow" style="min-width:0"><b>Admin console</b><small style="display:flex;gap:6px;align-items:center;margin-top:3px">${P().roleBadge(NX.me)}<span class="ellipsis">${esc(P().nameOf(NX.me))}</span></small></div></div>
+`,
       onSelect: (id) => NX.go('admin/' + id),
     });
     body = pg.body;
@@ -207,14 +212,14 @@
     ]);
     if (!still('overview')) return;
     const kpis = [
-      { k: 'Members', v: users.length, ic: 'fa-users', sub: `+${week} this week`, go: 'users' },
-      { k: 'Online now', v: online, ic: 'fa-signal', sub: 'live presence' },
-      { k: 'Servers', v: servers, ic: 'fa-server', sub: 'across the platform', go: can('view_all_servers') ? 'servers' : null },
-      { k: 'Nitro', v: users.filter((u) => u.is_nitro).length, ic: 'fa-bolt', sub: `${pendNitro ?? 0} pending`, go: 'nitro' },
-      { k: 'Banned', v: users.filter((u) => u.is_banned).length, ic: 'fa-ban', sub: `${pendAppeals ?? 0} appeals open`, go: can('review_appeals') ? 'appeals' : null },
-      { k: 'Staff', v: users.filter((u) => R(u) > 0).length, ic: 'fa-shield-halved', sub: anns == null ? 'announcements not set up' : `${anns} announcements`, go: 'roles' },
+      { t: '#3b9ef5', k: 'Members', v: users.length, ic: 'fa-users', sub: `+${week} this week`, go: 'users' },
+      { t: '#2fbf87', k: 'Online now', v: online, ic: 'fa-signal', sub: 'live presence' },
+      { t: '#7c6cff', k: 'Servers', v: servers, ic: 'fa-server', sub: 'across the platform', go: can('view_all_servers') ? 'servers' : null },
+      { t: '#f0b232', k: 'Nitro', v: users.filter((u) => u.is_nitro).length, ic: 'fa-bolt', sub: `${pendNitro ?? 0} pending`, go: 'nitro' },
+      { t: '#f2555a', k: 'Banned', v: users.filter((u) => u.is_banned).length, ic: 'fa-ban', sub: `${pendAppeals ?? 0} appeals open`, go: can('review_appeals') ? 'appeals' : null },
+      { t: '#a78bfa', k: 'Staff', v: users.filter((u) => R(u) > 0).length, ic: 'fa-shield-halved', sub: anns == null ? 'announcements not set up' : `${anns} announcements`, go: 'roles' },
     ];
-    body.querySelector('#admKpis').innerHTML = kpis.map((x) => `<div class="stat${x.go ? ' adm-click' : ''}"${x.go ? ` data-goto="${x.go}"` : ''}>
+    body.querySelector('#admKpis').innerHTML = kpis.map((x) => `<div class="stat${x.go ? ' adm-click' : ''}" style="--t:${x.t}"${x.go ? ` data-goto="${x.go}"` : ''}>
       <div class="k"><i class="fa-solid ${x.ic}"></i>${esc(x.k)}</div><div class="v">${x.v == null ? '—' : Number(x.v).toLocaleString()}</div><small>${esc(x.sub)}</small></div>`).join('');
     const queue = [];
     const qi = (go, ic, t, s) => `<button class="adm-q" data-goto="${go}"><span class="adm-qi"><i class="fa-solid ${ic}"></i></span><span class="grow"><b>${t}</b><small>${s}</small></span><i class="fa-solid fa-chevron-right muted"></i></button>`;

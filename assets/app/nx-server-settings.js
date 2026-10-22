@@ -91,7 +91,10 @@
       return;
     }
     if (!ok.includes(tab)) tab = ok[0];
-    pg = NX.pageShell(host, { sections: tabs(), active: tab, onSelect: (id) => NX.go(`s/${sid}/settings/${id}`) });
+    pg = NX.pageShell(host, {
+      sections: tabs(), active: tab, kind: 'server', onSelect: (id) => NX.go(`s/${sid}/settings/${id}`),
+      brand: `<div class="pb-logo"><span class="lg" style="${srv.icon_url ? 'background:var(--bg-4)' : ''};overflow:hidden">${srv.icon_url ? `<img ${NX.people.imgAttr(srv.icon_url)} alt="" style="width:100%;height:100%;object-fit:cover">` : esc((srv.name || '?')[0].toUpperCase())}</span><div class="grow" style="min-width:0"><b class="ellipsis" style="display:block">${esc(srv.name)}</b><small>Server settings</small></div></div>`,
+    });
     render();
   }
   function update(parts) {

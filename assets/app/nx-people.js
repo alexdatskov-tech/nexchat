@@ -68,10 +68,18 @@
     const n = p.theme?.name_style;
     if (!n || typeof n !== 'object') return null;
     const font = NX_FONTS.includes(n.font) ? n.font : 'normal';
-    return {
+    const out = {
       font, color: HEX.test(n.color || '') ? n.color : null, color2: HEX.test(n.color2 || '') ? n.color2 : null,
       glow: HEX.test(n.glow || '') ? n.glow : null, italic: !!n.italic, shimmer: !!n.shimmer, bold: !!n.bold || font === 'bold',
     };
+    // ASCII art is meant to pop: without colours of its own it gets the
+    // animated rainbow, and it always glows.
+    if (font === 'ascii') {
+      if (!out.color && !out.color2) out.rainbow = true;
+      if (!out.glow) out.glow = out.color || '#a78bfa';
+      out.bold = true;
+    }
+    return out;
   }
   const FANCY = { bold: { up: 0x1D400, lo: 0x1D41A, dg: 0x1D7CE }, script: { up: 0x1D4D0, lo: 0x1D4EA }, double: { up: 0x1D538, lo: 0x1D552, dg: 0x1D7D8 } };
   const DOUBLE_HOLES = { C: 0x2102, H: 0x210D, N: 0x2115, P: 0x2119, Q: 0x211A, R: 0x211D, Z: 0x2124 };
@@ -93,12 +101,14 @@
     if (!ns) return roleCol ? `color:${roleCol};` : '';
     let css = '';
     const base = ns.color || roleCol;
-    const grad = ns.color2 ? `linear-gradient(90deg, ${base || '#fff'}, ${ns.color2})` : null;
+    const grad = ns.rainbow ? 'linear-gradient(90deg,#ff4d8d,#ffb347,#facc15,#4ade80,#38bdf8,#a78bfa,#ff4d8d)'
+      : ns.color2 ? `linear-gradient(90deg, ${base || '#fff'}, ${ns.color2}, ${base || '#fff'})` : null;
     if (grad) css += `background:${grad};-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;`;
     else if (base) css += `color:${base};`;
-    if (ns.shimmer && grad) css += 'background-size:220% auto;animation:nxShimmer 3.2s linear infinite;';
+    if ((ns.shimmer || ns.rainbow) && grad) css += 'background-size:200% auto;animation:nxShimmer 3.2s linear infinite;';
     if (ns.glow && !noGlow) css += `filter:drop-shadow(0 0 4px ${ns.glow}) drop-shadow(0 0 10px ${ns.glow});`;
     if (ns.bold) css += 'font-weight:800;';
+    if (ns.font === 'ascii') css += 'font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.03em;';
     if (ns.italic && !noItalic) css += 'font-style:italic;padding-right:.2em;';
     return css;
   }
@@ -122,10 +132,14 @@
     2: ['110', '001', '010', '100', '111'], 3: ['110', '001', '010', '001', '110'], 4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '110', '001', '110'],
     6: ['011', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'], 8: ['111', '101', '111', '101', '111'], 9: ['111', '101', '111', '001', '110'],
     ' ': ['000', '000', '000', '000', '000'], '?': ['110', '001', '011', '000', '010'],
+    _: ['000', '000', '000', '000', '111'], '-': ['000', '000', '111', '000', '000'], '.': ['000', '000', '000', '000', '010'],
+    '!': ['010', '010', '010', '000', '010'], '\'': ['010', '010', '000', '000', '000'], '+': ['000', '010', '111', '010', '000'],
+    '*': ['101', '010', '101', '000', '000'], '#': ['101', '111', '101', '111', '101'], '@': ['111', '101', '111', '100', '111'],
+    '&': ['010', '101', '010', '101', '011'], '(': ['001', '010', '010', '010', '001'], ')': ['100', '010', '010', '010', '100'],
   };
   function asciiArt(text) {
     const rows = ['', '', '', '', ''];
-    [...String(text || '').toUpperCase().slice(0, 12)].forEach((ch, i) => {
+    [...String(text || '').toUpperCase().slice(0, 14)].forEach((ch, i) => {
       const g = PIXEL[ch] || PIXEL['?'];
       for (let r = 0; r < 5; r++) rows[r] += (i ? ' ' : '') + g[r].replace(/0/g, ' ').replace(/1/g, '\u2588');
     });
@@ -147,6 +161,15 @@
     return v;
   }
 
+  // Optimised copies (assets/deco/opt, ~3x smaller animated WebP, plus a
+  // still frame for grids). Falls back to the original file if missing.
+  function decoSrc(path, still) {
+    const m = /^assets\/deco\/(pfp|profile)\/([\w-]+)\.png$/i.exec(path || '');
+    return m ? `assets/deco/opt/${m[1]}/${m[2]}${still ? '.still' : ''}.webp` : path;
+  }
+  function decoImg(path, cls, still) {
+    return `<img class="${cls}" src="${esc(decoSrc(path, still))}" onerror="this.onerror=null;this.src='${esc(path)}'" alt="" loading="lazy" decoding="async">`;
+  }
   const IMG_EXT = /\.(gif|apng|png|jpe?g|webp|avif)($|\?)/i;
   function haloImage(p) {
     const raw = (p?.banner_gif_url || '').trim();
@@ -205,7 +228,7 @@
       ? `<span class="av" style="width:${size}px;height:${size}px"><img ${imgAttr(p.avatar_url)} alt="" loading="lazy" decoding="async"></span>`
       : `<span class="av" style="width:${size}px;height:${size}px;font-size:${fs}px;background:${tint(p)}">${esc(initial(nameOf(p)))}</span>`;
     const deco = o.deco !== false && size >= 24 ? decoPath(p, 'pfp') : null;
-    let out = deco ? `<span class="av-decoed">${inner}<img class="av-deco" src="${esc(deco)}" alt="" loading="lazy" decoding="async"></span>` : inner;
+    let out = deco ? `<span class="av-decoed">${inner}${decoImg(deco, 'av-deco', o.still)}</span>` : inner;
     if (p.is_nitro && o.halo !== false && size >= 24) out = `<span class="${haloClass(p)}"${haloStyle(p)}>${out}</span>`;
     if (o.presence && p.id) out = `<span class="av-slot${size < 30 ? ' sm' : ''}">${out}${presenceDot(p.id)}</span>`;
     return out;
@@ -366,7 +389,7 @@
     if (deco) el.classList.add('has-deco', 'card-deco-host');
     const st = presenceOf(uid);
     el.innerHTML = `
-      ${deco ? `<div class="card-deco" aria-hidden="true"><img src="${esc(deco)}" alt="" decoding="async"></div>` : ''}
+      ${deco ? `<div class="card-deco" aria-hidden="true">${decoImg(deco, '')}</div>` : ''}
       <div class="uc-banner" style="${bannerCss}"${p.banner_url ? ` data-bg="${esc(p.banner_url)}"` : ''}></div>
       <div class="uc-av">${avatar(p, 84, { presence: true })}</div>
       <div class="uc-body">
@@ -423,7 +446,7 @@
 
   NX.people = {
     CARD, put, get, need, fetchFull, nameOf, name, nameText, nameCss, bigName, nameStyle, fancy, asciiArt, NX_FONTS,
-    avatar, decoPath, haloClass, haloStyle, haloCss, haloImage, rank, roleBadge, roleIcon, ROLE_NAMES, imgAttr, tint,
+    avatar, decoPath, decoSrc, decoImg, haloClass, haloStyle, haloCss, haloImage, rank, roleBadge, roleIcon, ROLE_NAMES, imgAttr, tint,
     startPresence, setStatus, myStatus, presenceOf, isOnline, presenceDot, refreshDots, STATUS_LABEL, STATUS_COLOR,
     card, all: () => [...cache.values()],
   };

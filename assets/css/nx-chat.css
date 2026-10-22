@@ -260,3 +260,11 @@
   .m.tapped > .m-acts { display: flex; }
   .rx.add { opacity: 1; }
 }
+
+/* appearance options */
+.m-text { font-size: var(--chat-fs, 15px); }
+body.compact .m { margin-top: 6px; padding-top: 1px; padding-bottom: 1px; }
+body.compact .m.grp { margin-top: 0; }
+body.compact .m-text { line-height: 1.32; }
+body.compact .day { margin: 10px 16px 4px; }
+body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }

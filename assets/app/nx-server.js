@@ -131,10 +131,16 @@
   }
   NX.serverNameStyle = srvNameStyle;
   // A server can override the accent colour while it is open.
+  function resetAccent() {
+    const root = document.documentElement;
+    delete root.dataset.srvAccent;
+    if (NX.userAccent) root.style.setProperty('--accent', NX.userAccent); else root.style.removeProperty('--accent');
+  }
   function applyAccent() {
     const a = srv?.theme?.accent;
-    if (/^#[0-9a-f]{6}$/i.test(a || '')) document.documentElement.style.setProperty('--accent', a);
-    else document.documentElement.style.removeProperty('--accent');
+    const root = document.documentElement;
+    if (/^#[0-9a-f]{6}$/i.test(a || '')) { root.style.setProperty('--accent', a); root.dataset.srvAccent = '1'; }
+    else resetAccent();
   }
   function paintChannels() {
     const host = side?.querySelector('#chanList');
@@ -545,7 +551,7 @@
       if (host?.querySelector('.call')) NX.call.unmount(host);
       if (srvChan) { window.db.removeChannel(srvChan); srvChan = null; }
       srv = null; active = null; side = null; main = null;
-      document.documentElement.style.removeProperty('--accent');
+      resetAccent();
       window.Voice?.watch?.(D().dms.map((c) => 'dm-' + c.id));
     },
     viewingKey: () => (active && !isVoice(active) ? 'channel:' + active.id : null),

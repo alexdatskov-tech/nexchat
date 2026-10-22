@@ -289,12 +289,49 @@ body.has-bg .main { background: rgba(19, 20, 25, var(--chat-dim, .42)); -webkit-
 body.has-bg .main-head { background: rgba(14, 15, 19, .35); }
 body.has-bg .members, body.has-bg .side-panel { background: rgba(14, 15, 19, .72); }
 body.has-bg .composer .cbox { background: rgba(26, 28, 34, .82); }
-/* Glass: every panel is frosted over the wallpaper. */
-body.glass.has-bg .rail { background: rgba(8, 9, 12, .5); -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); }
-body.glass.has-bg .side { background: rgba(14, 15, 19, .5); -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); border-right-color: rgba(255, 255, 255, .08); }
-body.glass.has-bg .me-panel { background: rgba(8, 9, 12, .35); }
-body.glass.has-bg .members, body.glass.has-bg .side-panel, body.glass.has-bg .home-aside { background: rgba(14, 15, 19, .45); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
-body.glass.has-bg .composer .cbox { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .1); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
-body.glass.has-bg .s-item.on { background: rgba(255, 255, 255, .1); }
+/* ---- Liquid glass ----------------------------------------------------------
+   Panels float as frosted cards over the wallpaper: a light edge, a soft top
+   highlight, heavy blur with boosted saturation, and gaps between panels. */
+body.glass { --glass-bg: rgba(16, 17, 24, .42); --glass-bg-2: rgba(255, 255, 255, .055); --glass-edge: rgba(255, 255, 255, .1); --glass-hi: inset 0 1px 0 rgba(255, 255, 255, .09); --glass-blur: blur(26px) saturate(1.6); }
+body.glass.has-bg .app { padding: 8px 8px 8px 0; gap: 8px; }
+body.glass.has-bg .rail { background: transparent; }
+body.glass.has-bg .side, body.glass.has-bg .main {
+  background: var(--glass-bg); border: 1px solid var(--glass-edge); border-radius: 18px; overflow: hidden;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-hi), 0 20px 50px -20px rgba(0, 0, 0, .6);
+}
+body.glass.has-bg .main { background: rgba(14, 15, 21, calc(var(--chat-dim, .42) * .9)); }
+body.glass.has-bg .side-head, body.glass.has-bg .main-head { background: rgba(255, 255, 255, .025); border-bottom-color: var(--glass-edge); }
+body.glass.has-bg .me-panel { background: rgba(0, 0, 0, .18); border-top: 1px solid var(--glass-edge); }
+body.glass.has-bg .voice-panel { background: rgba(61, 214, 140, .06); border-top-color: var(--glass-edge); }
+body.glass.has-bg .members, body.glass.has-bg .side-panel, body.glass.has-bg .home-aside { background: rgba(255, 255, 255, .025); border-left-color: var(--glass-edge); }
+body.glass.has-bg .composer .cbox { background: var(--glass-bg-2); border-color: var(--glass-edge); box-shadow: var(--glass-hi); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+body.glass.has-bg .s-item:hover, body.glass.has-bg .mem:hover, body.glass.has-bg .person:hover { background: rgba(255, 255, 255, .06); }
+body.glass.has-bg .s-item.on { background: rgba(255, 255, 255, .11); box-shadow: var(--glass-hi); }
+body.glass.has-bg .m:hover { background: rgba(255, 255, 255, .035); }
+body.glass.has-bg .r-btn { background: rgba(255, 255, 255, .08); box-shadow: var(--glass-hi); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+body.glass.has-bg .r-btn.home img { filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .4)); }
+body.glass.has-bg .side-search, body.glass.has-bg .f-search .input { background: rgba(0, 0, 0, .25); }
+body.glass.has-bg .hero, body.glass.has-bg .ann, body.glass.has-bg .active-card, body.glass.has-bg .srv-card, body.glass.has-bg .att-file, body.glass.has-bg .aplayer, body.glass.has-bg .rx { background: var(--glass-bg-2); border-color: var(--glass-edge); box-shadow: var(--glass-hi); }
+body.glass.has-bg .m-acts { background: rgba(24, 26, 34, .75); border-color: var(--glass-edge); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+/* overlays get the same treatment */
+body.glass .modal, body.glass .menu, body.glass .ucard, body.glass .emoji-pick, body.glass .island, body.glass .toast, body.glass .mini-call {
+  background: rgba(18, 19, 26, .72); border: 1px solid var(--glass-edge); -webkit-backdrop-filter: blur(30px) saturate(1.6); backdrop-filter: blur(30px) saturate(1.6); box-shadow: var(--glass-hi), var(--shadow-pop);
+}
+body.glass .modal-foot { background: rgba(0, 0, 0, .18); border-top-color: var(--glass-edge); }
+body.glass .ucard .uc-body { background: rgba(0, 0, 0, .3); }
+body.glass .overlay { background: rgba(4, 5, 8, .45); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 body.has-bg .home-aside { background: transparent; }
-@media (max-width: 860px) { body.has-bg .drawer .side { background: rgba(14, 15, 19, .92); } }
+@media (max-width: 860px) {
+  body.has-bg .drawer .side { background: rgba(14, 15, 19, .92); }
+  body.glass.has-bg .app { padding: 0; gap: 0; }
+  body.glass.has-bg .main { border-radius: 0; border: 0; }
+  body.glass.has-bg .drawer .side { border-radius: 0 18px 18px 0; background: rgba(16, 17, 24, .7); }
+  body.glass.has-bg .drawer .rail { background: rgba(8, 9, 12, .7); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+}
+@media (max-width: 860px) {
+  .main-head .h-title { flex-shrink: 0; }
+  .home .main-head .h-title, .main-head .tabs ~ .h-acts { }
+  .main-head:has(.tabs) .h-title { display: none; }
+  .main-head .tabs { margin-left: 0 !important; scrollbar-width: none; }
+  .main-head .tabs .sep { display: none; }
+}
