@@ -39,7 +39,7 @@ window.Voice = (function () {
   const meters = new Map();
   let stats = { res: '', fps: 0, vkbps: 0, akbps: 0, rtt: 0, codec: '', peers: [] };
 
-  const state = () => ({ active: !!chan, channel: chan, muted, deaf, cam, sharing, members, stats, audioMode: audioMode() });
+  const state = () => ({ active: !!chan, channel: chan, serverId: srvId, muted, deaf, cam, sharing, members, stats, audioMode: audioMode(), peers });
 
   /* ---------- audio ----------
      "voice" (default): echo cancellation, noise suppression and AGC on. The

@@ -31,7 +31,7 @@ window.CloudGate = (function () {
   const cfgBase = () => (window.NEXCHAT_CONFIG || {}).CLOUDGATE || null;
   const DEFAULT_CATEGORY = 'nexchats-us1';
   const DEFAULT_CDN = 'd1dncmkdpaif79.cloudfront.net';
-  const FRESH_MS = 60 * 1000;
+  const FRESH_MS = 5 * 60 * 1000;
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   /* Runtime state: { category, cdn, configured, groups: [{ id, name, capacity, used, endpoints }] }.
@@ -117,10 +117,27 @@ window.CloudGate = (function () {
     return loading;
   }
 
-  // Waits for a fresh-enough group list before a write (or a browse).
+  // Returns the group list without waiting when one is already loaded; a stale
+  // list is refreshed in the background (stale-while-revalidate), so an upload
+  // never sits behind a database round trip.
   async function ready() {
-    if (!runtime || lastFailed || Date.now() - loadedAt > FRESH_MS) await refresh();
+    if (!runtime || lastFailed) await refresh();
+    else if (Date.now() - loadedAt > FRESH_MS) refresh();
     return current();
+  }
+
+  // Wakes the first endpoint up (Wasmer apps cold-start in ~2 s) so the
+  // presign for the next upload answers immediately. Called when a file is
+  // picked or the composer is focused.
+  let warmedAt = 0;
+  async function warm() {
+    if (Date.now() - warmedAt < 4 * 60 * 1000) return;
+    warmedAt = Date.now();
+    try {
+      await ready();
+      const ep = endpoints()[0];
+      if (ep) fetch(ep.base + '/api/stats', { headers: { authorization: auth(ep) } }).catch(() => {});
+    } catch {}
   }
 
   const current = () => runtime || fromConfig();
@@ -265,7 +282,7 @@ window.CloudGate = (function () {
     });
   }
 
-  const MULTIPART_OVER = 24 * 1024 * 1024;
+  const MULTIPART_OVER = 16 * 1024 * 1024;
 
   // One complete upload to one endpoint. Multipart stays pinned to that endpoint.
   async function uploadTo(ep, p, filename, blob, onProgress, signal) {
@@ -283,7 +300,7 @@ window.CloudGate = (function () {
             loaded[i] = part.size; report();
           }
         };
-        await Promise.all([worker(), worker(), worker(), worker()]);
+        await Promise.all(Array.from({ length: Math.min(6, m.partUrls.length) }, worker));
         // Its upload id lives on this endpoint, so it must complete here.
         const done = await callAt(ep, '/api/upload/multipart/complete', { method: 'POST', body: { key: m.key, uploadId: m.uploadId } });
         return { key: done.key, url: done.url || m.publicUrl, size: blob.size, type: m.contentType };
@@ -445,6 +462,6 @@ window.CloudGate = (function () {
   return {
     enabled, endpoints, groups, category, join, keyOf, isOurs, publicUrl,
     upload, fetchBytes, browse, createFolder, renameFolder, deleteFolder, renameFile, deleteFile, exists,
-    refresh, ready, probe, measure, asEndpoint,
+    refresh, ready, warm, probe, measure, asEndpoint,
   };
 })();

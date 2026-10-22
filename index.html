@@ -2,82 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#040406" />
-<title>nexchat</title>
-<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg?v=67" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+<meta name="theme-color" content="#08090c" />
+<meta name="description" content="NexChat: chat, call and share with your people." />
+<title>NexChat</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/logo.svg" />
+<link rel="preconnect" href="https://xqzibelnvjlmavgrpyve.supabase.co" crossorigin />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-<link rel="stylesheet" href="assets/css/theme.css?v=71" />
+<link rel="stylesheet" href="assets/css/nx-base.css?v=300" />
+<link rel="stylesheet" href="assets/css/nx-app.css?v=300" />
+<link rel="stylesheet" href="assets/css/nx-chat.css?v=300" />
+<link rel="stylesheet" href="assets/css/nx-overlay.css?v=300" />
+<link rel="stylesheet" href="assets/css/nx-pages.css?v=300" />
+<link rel="stylesheet" href="assets/css/nx-settings.css?v=300" />
+<link rel="stylesheet" href="assets/css/nx-ssettings.css?v=300" />
+<link rel="stylesheet" href="assets/css/nx-admin.css?v=300" />
+<link rel="stylesheet" href="assets/css/drive.css?v=300" />
 </head>
-<body class="auth-body">
-  <!-- Ambient scene: drifting colour, grain, and chat bubbles floating up. -->
-  <div class="night" aria-hidden="true">
-    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
-    <div class="bubbles" id="bubbles"></div>
-    <div class="grain"></div>
-  </div>
+<body>
+<div class="boot" id="boot"><img class="mark" src="assets/img/logo.svg" alt="" /></div>
+<noscript><p style="padding:40px;color:#fff;font-family:sans-serif">NexChat needs JavaScript.</p></noscript>
 
-  <main class="auth-page">
-    <div class="auth-card">
-      <header class="auth-brand">
-        <div class="mark"><img src="assets/img/logo.svg?v=67" alt="" /></div>
-        <h1>nexchat</h1>
-      </header>
-
-      <div class="auth-panel">
-        <div class="segmented">
-          <span class="seg-ind" aria-hidden="true"></span>
-          <button id="tabIn" class="on" type="button">Sign in</button>
-          <button id="tabUp" type="button">New here?</button>
-        </div>
-
-        <form id="formIn" class="auth-form">
-          <label class="ifield">
-            <i class="fa-solid fa-at"></i>
-            <input id="inUser" type="text" autocomplete="username" placeholder="username" required />
-          </label>
-          <label class="ifield">
-            <i class="fa-solid fa-lock"></i>
-            <input id="inPass" type="password" autocomplete="current-password" placeholder="password" required />
-            <button type="button" class="peek" data-peek="inPass" title="Show password"><i class="fa-regular fa-eye"></i></button>
-          </label>
-          <p class="err" id="errIn"></p>
-          <button type="submit" id="btnIn" class="btn btn-primary btn-go">Let me in</button>
-        </form>
-
-        <form id="formUp" class="auth-form hidden">
-          <label class="ifield">
-            <i class="fa-solid fa-at"></i>
-            <input id="upUser" type="text" autocomplete="username" placeholder="pick a username" maxlength="32" required />
-          </label>
-          <p class="err" id="errUser"></p>
-          <label class="ifield">
-            <i class="fa-solid fa-lock"></i>
-            <input id="upPass" type="password" autocomplete="new-password" placeholder="password (8+ characters)" required />
-            <button type="button" class="peek" data-peek="upPass" title="Show password"><i class="fa-regular fa-eye"></i></button>
-          </label>
-          <label class="ifield">
-            <i class="fa-solid fa-check-double"></i>
-            <input id="upPass2" type="password" autocomplete="new-password" placeholder="same again" required />
-          </label>
-          <p class="hint">No email, no password reset — write it down somewhere.</p>
-          <p class="err" id="errUp"></p>
-          <button type="submit" id="btnUp" class="btn btn-primary btn-go">Create my account</button>
-        </form>
-      </div>
-
-      <p class="auth-foot">a hobby project · be nice ✌️</p>
-    </div>
-  </main>
-
-  <div class="toast" id="toast"></div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/config.js?v=68"></script>
-  <script src="assets/js/supabase-client.js?v=67"></script>
-  <script src="assets/js/ui.js?v=67"></script>
-  <script src="assets/js/guard.js?v=67"></script>
-  <script src="assets/js/auth.js?v=67"></script>
-  <script src="assets/js/auth-fx.js?v=67"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+<script src="assets/js/config.js?v=300"></script>
+<script src="assets/js/supabase-client.js?v=300"></script>
+<!-- storage: CloudGate for new files, the legacy signer for old iDrive links -->
+<script src="assets/js/vendor/core/runtime/net/xhr-transport-polyfill.min.js?v=300"></script>
+<script src="assets/js/cloudgate.js?v=300"></script>
+<script src="assets/js/storage.js?v=300"></script>
+<script src="assets/js/tiff.js?v=300"></script>
+<!-- calls -->
+<script src="assets/js/ice.js?v=300"></script>
+<script src="assets/js/voice.js?v=300"></script>
+<!-- app -->
+<script src="assets/app/nx-core.js?v=300"></script>
+<script src="assets/app/nx-md.js?v=300"></script>
+<script src="assets/app/nx-people.js?v=300"></script>
+<script src="assets/app/nx-data.js?v=300"></script>
+<script src="assets/app/nx-files.js?v=300"></script>
+<script src="assets/app/nx-emoji.js?v=300"></script>
+<script src="assets/app/nx-composer.js?v=300"></script>
+<script src="assets/app/nx-chat.js?v=300"></script>
+<script src="assets/app/nx-call.js?v=300"></script>
+<script src="assets/app/nx-home.js?v=300"></script>
+<script src="assets/app/nx-server.js?v=300"></script>
+<script src="assets/app/nx-page.js?v=300"></script>
+<!-- pages: user settings (+ encrypted drive), server settings, admin console -->
+<script src="assets/js/vault.js?v=300"></script>
+<script src="assets/js/drive-share.js?v=300"></script>
+<script src="assets/js/drive.js?v=300"></script>
+<script src="assets/app/nx-settings.js?v=300"></script>
+<script src="assets/app/nx-server-settings.js?v=300"></script>
+<script src="assets/app/nx-admin.js?v=300"></script>
+<script src="assets/app/nx-app.js?v=300"></script>
 </body>
 </html>

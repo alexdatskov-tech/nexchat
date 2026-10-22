@@ -88,9 +88,14 @@ window.ICE = (function () {
     let chosen;
     if (manual) {
       chosen = manual.slice(0, 3);
-    } else {
-      const ranked = await rank(STUN, opts.force);
+    } else if (opts.force) {
+      const ranked = await rank(STUN, true);
       chosen = ranked.slice(0, 2).map((r) => r.url);
+    } else {
+      // Probing 16 servers before every join added up to 2.5 s to joining a
+      // call. Two well-known STUN servers are all ICE needs; probing is now
+      // only done when asked for (Settings -> Developer).
+      chosen = ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'];
     }
     return [{ urls: chosen }, ...turn()];
   }

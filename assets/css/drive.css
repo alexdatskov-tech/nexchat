@@ -265,3 +265,4 @@
   height: 38px; box-sizing: border-box; padding: 0 30px 0 12px; border: 1px solid transparent;
   font: 500 13px var(--f-body); }
 .drv-sel-wrap > .drv-sel { grid-area: 1 / 1; width: 0; min-width: 100%; }
+.drv-sel-wrap > .drv-sel { min-width: max(100%, 112px); }

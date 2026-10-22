@@ -86,7 +86,7 @@
     'use strict';
     var OWNER = 'alexdatskov-tech', REPO = 'nexchat';
     // Tried in order when resolving which commit to load.
-    var REFS = ['claude/dm-files-ui-overhaul-mf661d', 'main'];
+    var REFS = ['main'];
     var HOME = 'index.html';
 
     var $ = function (id) { return document.getElementById(id); };
@@ -118,7 +118,7 @@
       var r = await fetch(b + HOME, { cache: 'no-cache' });
       if (!r.ok) return false;
       var t = await r.text();
-      return /NexChat/.test(t) && /assets\/js\/ui\.js/.test(t);
+      return /NexChat/.test(t) && /assets\/(app|js)\//.test(t);
     }
 
     async function latestSha(ref) {
