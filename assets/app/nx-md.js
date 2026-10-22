@@ -10,8 +10,8 @@ window.MD = (function () {
   function inline(t, ctx) {
     const links = [];
     const keep = (html) => `\u0001${links.push(html) - 1}\u0001`;
-    t = t.replace(/\[([^\]\n]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) => keep(`<a href="${url}" target="_blank" rel="noopener noreferrer" title="${url}">${label}</a>`));
-    t = t.replace(/(^|[\s(])(https?:\/\/[^\s<]+)/g, (_, pre, url) => {
+    t = t.replace(/\[([^\]\n\u0000\u0001]{1,200})\]\((https?:\/\/[^\s)\u0000\u0001]+)\)/g, (_, label, url) => keep(`<a href="${url}" target="_blank" rel="noopener noreferrer" title="${url}">${label}</a>`));
+    t = t.replace(/(^|[\s(])(https?:\/\/[^\s<\u0000\u0001]+)/g, (_, pre, url) => {
       let trail = '';
       const m = url.match(/[.,!?;:)\]'"]+$/);
       if (m && !(m[0].includes(')') && url.includes('('))) { trail = m[0]; url = url.slice(0, -trail.length); }
