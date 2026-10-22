@@ -144,6 +144,78 @@ window.Nav = (function () {
     document.querySelector('.rail-scrim')?.remove();
   }
 
+  /* The green "+": a small menu with Create and Join. Pages that own the
+     modals pass onCreate / onJoin; other pages open the portal with a flag. */
+  function addMenu(anchor, o) {
+    const old = document.getElementById('spAddMenu');
+    if (old) { old.remove(); return; }
+    const m = document.createElement('div');
+    m.id = 'spAddMenu';
+    m.className = 'sp-addmenu';
+    m.innerHTML = '<button type="button" data-k="create"><i class="fa-solid fa-plus"></i> Create a server</button>'
+      + '<button type="button" data-k="join"><i class="fa-solid fa-right-to-bracket"></i> Join with a code</button>';
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    m.style.left = (r.right + 12) + 'px';
+    m.style.top = Math.max(8, Math.min(r.top, innerHeight - 120)) + 'px';
+    m.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-k]');
+      if (!b) return;
+      m.remove();
+      if (b.dataset.k === 'create') (o.onCreate ? o.onCreate() : UI.go('portal.html?new=1'));
+      else (o.onJoin ? o.onJoin() : UI.go('portal.html?join=1'));
+    });
+    const away = (e) => {
+      if (m.contains(e.target) || e.target === anchor) return;
+      m.remove();
+      document.removeEventListener('pointerdown', away, true);
+    };
+    setTimeout(() => document.addEventListener('pointerdown', away, true), 0);
+  }
+
+  /* A call icon under Messages while a call is running and its room is not on
+     screen. info = { onClick } or null. Pages set it from their call state. */
+  let callChip = null;
+  function setCallChip(info) { callChip = info || null; paintCallChip(); }
+
+  // Which calls to watch: every DM conversation the user has (saved by the
+  // Messages page) plus the voice channels of the server being viewed.
+  let extraWatch = [];
+  function watchIds() {
+    let dms = [];
+    try { dms = JSON.parse(localStorage.getItem('nx_dm_calls') || '[]'); } catch {}
+    return [...dms, ...extraWatch];
+  }
+  function refreshWatch() { window.Voice?.watch?.(watchIds()); }
+  function watchExtra(ids) { extraWatch = ids || []; refreshWatch(); }
+  let liveWired = false;
+  // Calls running elsewhere (you are not in them) come from presence. Tapping
+  // the icon opens that conversation and joins its call.
+  function liveChip() {
+    const st = window.Voice?.state?.();
+    const live = window.Voice?.live?.() || new Map();
+    const key = [...live.keys()].find((k) => k.startsWith('dm-') && !(st?.active && st.channel?.id === k));
+    if (!key) return null;
+    return { onClick: () => { location.href = 'dms.html?c=' + encodeURIComponent(key.slice(3)) + '&join=1'; } };
+  }
+  function paintCallChip() {
+    const nav = $('spaces');
+    if (!nav) return;
+    let b = nav.querySelector('.sp-call');
+    const info = callChip || liveChip();
+    if (!info) { b?.remove(); return; }
+    if (!b) {
+      b = document.createElement('button');
+      b.className = 'sp-item sp-call';
+      b.setAttribute('data-tip', 'Call in progress: back to call');
+      b.innerHTML = `${PIP}<i class="fa-solid fa-phone"></i><span class="sp-live" aria-hidden="true"></span>`;
+      nav.querySelector('.sp-dms')?.after(b);
+      if (!b.previousElementSibling) nav.prepend(b);
+      b.addEventListener('click', () => b._go?.());
+    }
+    b._go = info.onClick;
+  }
+
   /* opts: { active: 'home' | 'dms' | <serverId>, onAdd?: () => void } */
   let mounted = false;
   function mount(profile, o = {}, early = false) {
@@ -169,13 +241,16 @@ window.Nav = (function () {
       if (servers) $('spServers').innerHTML = servers;
     }
     nav.querySelector('.sp-ann').onclick = openAnnouncements;
-    nav.querySelector('.sp-add').onclick = () => (o.onAdd ? o.onAdd() : UI.go('portal.html?new=1'));
+    nav.querySelector('.sp-add').onclick = (e) => addMenu(e.currentTarget, o);
     if (!nav.dataset.wired) {
       nav.dataset.wired = '1';
       nav.addEventListener('click', (e) => { if (e.target.closest('a.sp-item, a.sp-me')) closeDrawer(); });
       tooltips(nav);
       nav.addEventListener('pointerover', (e) => { const a = e.target.closest('a[href]'); if (a) warm(a.getAttribute('href')); });
     }
+    paintCallChip();
+    if (!liveWired && window.Voice?.onLive) { liveWired = true; window.Voice.onLive(() => paintCallChip()); }
+    refreshWatch();
     if (early) { paintServers(store.get(SRV_KEY, [])); return; }
     mounted = true;
     try { sessionStorage.setItem(ME_KEY, JSON.stringify(me)); } catch {}
@@ -238,5 +313,5 @@ window.Nav = (function () {
 
   function onAnnouncements(f) { annListeners.add(f); if (anns) f(anns, annOk); }
 
-  return { mount, warm, openAnnouncements, onAnnouncements, annCard, fetchAnnouncements, openDrawer, closeDrawer, refreshServers: () => loadServers().catch(() => {}) };
+  return { mount, warm, setCallChip, refreshWatch, watchExtra, openAnnouncements, onAnnouncements, annCard, fetchAnnouncements, openDrawer, closeDrawer, refreshServers: () => loadServers().catch(() => {}) };
 })();

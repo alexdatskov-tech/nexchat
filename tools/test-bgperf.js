@@ -50,7 +50,14 @@ ok('  opacity raised to stay legible without blur', /rgba\([^)]*0?\.8\d?\)/.test
 /* ---- 4. only the static chrome keeps a blur ---- */
 const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
 const bfCount = (bare.match(/backdrop-filter\s*:/g) || []).length;
-ok('backdrop-filter use is bounded', bfCount <= 14, `${bfCount} declarations`);
+// 14 is the budget for the static chrome. The chat input bar is the one
+// deliberate addition (+2: the standard property and its -webkit- twin): it is a
+// small pill that floats over the messages, so its blur covers about one row of
+// the list, not the whole scroller. Nothing that scrolls is blurred (see below).
+ok('backdrop-filter use is bounded', bfCount <= 16, `${bfCount} declarations`);
+const composerBlur = (bare.match(/(^|\})\s*\.composer-inner\s*\{[^}]*\}/g) || []).filter((r) => /backdrop-filter/.test(r));
+ok('  the only composer blur is the input bar', composerBlur.length === 1, `${composerBlur.length} rule(s)`);
+ok('  the message list itself is never blurred', !/\.msgs\s*\{[^}]*backdrop-filter/.test(bare));
 // The old portal topbar is gone; the chat header is the frosted chrome now.
 // It sits above the message list (not over it), so its backdrop never scrolls.
 const chatHead = rule('.chat-head');

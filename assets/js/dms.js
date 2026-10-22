@@ -28,6 +28,13 @@
   const intro = () => `<div class="msgs-top"><div class="big-ico">${convAvatar(active, 64)}</div>
       <h2>${MD.esc(convTitle(active))}</h2>
       <p>${active.is_group ? 'This is the very beginning of this group chat.' : 'This is the beginning of your direct messages with <b>' + MD.esc(convTitle(active)) + '</b>.'}</p></div>`;
+  // Placeholder rows only ever stand in for a page that has not arrived yet.
+  // Anything real replaces them, so they can never sit under a live message.
+  const clearSkeleton = () => $('msgs')?.querySelector('.msgs-skel')?.remove();
+  const withTimeout = (p, ms) => new Promise((res, rej) => {
+    const t = setTimeout(() => rej(new Error('This conversation is taking too long to load.')), ms);
+    Promise.resolve(p).then((v) => { clearTimeout(t); res(v); }, (e) => { clearTimeout(t); rej(e); });
+  });
   const olderBadge = `<button type="button" class="msgs-older"><i class="fa-solid fa-clock-rotate-left"></i><span>Load earlier messages</span></button>`;
 
   const oldestTs = () => {
@@ -183,6 +190,13 @@
   $('dmFilter').oninput = paintList;
 
   async function loadAll() {
+    await loadAllInner();
+    // Other pages watch these conversations for live calls (see nav.js).
+    try { localStorage.setItem('nx_dm_calls', JSON.stringify(convs.map((c) => 'dm-' + c.id))); } catch {}
+    window.Nav?.refreshWatch?.();
+  }
+
+  async function loadAllInner() {
     const [{ data: parts }, { data: fr }] = await Promise.all([
       window.db.from('dm_participants').select('conversation_id').eq('user_id', me.id),
       window.db.from('friendships').select('*').or(`user_id.eq.${me.id},friend_id.eq.${me.id}`),
@@ -318,22 +332,25 @@
       if (requests.length) {
         html += '<div class="dm-sect">Incoming</div>' + requests.map((r) => {
           const p = profiles[r.user_id] || { username: '…' };
-          return `<div class="dm-item" data-u="${r.user_id}">
+          return `<div class="dm-item req" data-u="${r.user_id}">
             ${UI.avatar(p, 34)}
             <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>wants to be friends</small></div>
-            <button class="btn btn-primary btn-sm" data-ok="${r.user_id}">Accept</button>
-            <button class="btn btn-quiet btn-sm" data-no="${r.user_id}"><i class="fa-solid fa-xmark"></i></button>
+            <div class="req-acts">
+              <button class="btn btn-primary btn-sm" data-ok="${r.user_id}">Accept</button>
+              <button class="btn btn-ghost btn-sm" data-no="${r.user_id}">Decline</button>
+            </div>
           </div>`;
         }).join('');
       }
       if (outgoing.length) {
         html += '<div class="dm-sect">Sent</div>' + outgoing.map((r) => {
           const p = profiles[r.friend_id] || { username: '…' };
-          return `<div class="dm-item" data-u="${r.friend_id}">
+          return `<div class="dm-item req" data-u="${r.friend_id}">
             ${UI.avatar(p, 34)}
-            <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>Pending</small></div>
-            <span class="chip" style="color:var(--txt-3)"><i class="fa-regular fa-clock"></i> Waiting</span>
-            <button class="btn btn-quiet btn-sm" data-cancel="${r.friend_id}" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+            <div class="nm"><b>${MD.esc(p.display_name || p.username)}</b><small>Waiting for a reply</small></div>
+            <div class="req-acts">
+              <button class="btn btn-ghost btn-sm" data-cancel="${r.friend_id}">Cancel request</button>
+            </div>
           </div>`;
         }).join('');
       }
@@ -399,6 +416,7 @@
     else UI.toast(`${active.people.length + 1} people in this group.`);
   };
 
+  const lastRow = (box) => { const rows = box.querySelectorAll('.m:not(.sending)'); return rows[rows.length - 1] || null; };
   const grouped = (pa, pt, m) => pa === m.author_id && (new Date(m.created_at) - new Date(pt)) < 5 * 60 * 1000;
 
   function setGrouped(el, grp) {
@@ -415,7 +433,7 @@
       first.outerHTML = `<div class="m-av" data-u="${uid}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
       if (!el.querySelector('.m-head')) {
         el.querySelector('.m-main').insertAdjacentHTML('afterbegin',
-          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;${UI.nxNameCss(p)}">${UI.nxNameText(p)}</span>
            ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
            <span class="m-time">${UI.timeLabel(ts)}</span></div>`);
       }
@@ -448,7 +466,7 @@
       ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`
       : `<div class="m-av" data-u="${m.author_id}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
     const head = grp ? '' :
-      `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+      `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;${UI.nxNameCss(p)}">${UI.nxNameText(p)}</span>
        ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
        <span class="m-time">${UI.timeLabel(m.created_at)}</span></div>`;
     return `<div class="m ${grp ? 'grp' : ''}" data-id="${m.id}" data-au="${m.author_id}" data-ts="${m.created_at}">
@@ -486,6 +504,14 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  function showLoadFailed(cid) {
+    const box = $('msgs');
+    if (!box) return;
+    box.innerHTML = '<div class="msgs-fail"><p>Could not load this conversation.</p>' +
+      '<button type="button" class="btn btn-ghost btn-sm" id="msgsRetry">Try again</button></div>';
+    $('msgsRetry').onclick = () => loadMsgs(cid);
+  }
+
   async function loadMsgs(cid, prefetched) {
     const box = $('msgs');
     haveOlder = false; loadingOlder = false; autofilled = 0;
@@ -503,9 +529,16 @@
     }
 
     let msgs;
-    try { msgs = (prefetched && await prefetched) || await fetchPage(cid); }
-    catch (err) { if (!cached) box.innerHTML = ''; return UI.toast(err.message, true); }
+    // The timeout must cover the prefetched request too, so it is not awaited out here.
+    const first = prefetched ? prefetched.then((v) => v || fetchPage(cid)) : fetchPage(cid);
+    try { msgs = await withTimeout(first, 15000); }
+    catch (err) {
+      if (!active || active.id !== cid) return;
+      if (!cached) showLoadFailed(cid);
+      return UI.toast(err.message, true);
+    }
     if (!active || active.id !== cid) return;
+    clearSkeleton();
     cacheProfiles(msgs);
     haveOlder = msgs.more;
 
@@ -592,7 +625,8 @@
     await profileOf(m.author_id);
     if (document.querySelector(`.m[data-id="${m.id}"]`)) return null;
     const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 180;
-    const last = box.querySelector('.m:last-of-type');
+    clearSkeleton();
+    const last = lastRow(box);
     box.insertAdjacentHTML('beforeend', row(m, last ? grouped(last.dataset.au, last.dataset.ts, m) : false));
     const el = box.lastElementChild;
     wire(el);
@@ -843,6 +877,7 @@
       // Paint a pending bubble immediately: sending must never wait on the
       // network round-trip, let alone on a busy render loop.
       const box = $('msgs');
+      clearSkeleton();
       const tmp = {
         id: 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
         conversation_id: active.id, author_id: me.id,
@@ -850,8 +885,8 @@
       };
       let el = null;
       if (box && box.querySelector('.m')) {
-        const last = box.querySelector('.m:last-of-type');
-        box.insertAdjacentHTML('beforeend', row(tmp, grouped(last.dataset.au, last.dataset.ts, tmp)));
+        const last = lastRow(box);
+        box.insertAdjacentHTML('beforeend', row(tmp, last ? grouped(last.dataset.au, last.dataset.ts, tmp) : false));
         el = box.lastElementChild;
         el.classList.add('sending');
         wire(el);
@@ -866,6 +901,7 @@
         return UI.toast(error.message, true);
       }
       el?.remove();
+      regroup();
       // Swaps the pending bubble for the real row. Dedupes against the
       // realtime echo and the catch-up poll, whichever got there first.
       await appendMessage(msg);
@@ -982,10 +1018,19 @@
     $('composer').classList.toggle('hidden', on || !active);
     if (!on) $('vstats').classList.add('hidden');
     if (on) paintRoom(Voice.state());
+    refreshAway();
+  }
+
+  // A call is running but its room is not on screen: show the floating mini
+  // call and the call icon under Messages. Both bring the room back.
+  function refreshAway(st = Voice.state()) {
+    const away = !!st.active && !inCall;
+    CallUI.paintMini(st, away, { meId: me?.id, speakSet, onAvatar: (id) => UI.userCard(id) });
+    window.Nav?.setCallChip(away ? { onClick: () => showCall(true) } : null);
   }
 
   function paintRoom(st) {
-    if (!st.active) { if (inCall) showCall(false); return; }
+    if (!st.active) { if (inCall) showCall(false); refreshAway(st); return; }
     $('vrName').textContent = active ? convTitle(active) : 'Call';
     const n = st.members.size;
     $('vrSub').textContent = n > 1 ? `${n} on the call` : 'Waiting for others to join…';
@@ -999,6 +1044,7 @@
     set('vrCam', 'live', st.cam, `<i class="fa-solid fa-video${st.cam ? '' : '-slash'}"></i>`);
     set('vrShare', 'live', st.sharing);
     CallUI.paintStage($('vrStage'), st, { meId: me.id, speakSet, onAvatar: (id) => UI.userCard(id) });
+    refreshAway(st);
   }
 
   // The connection panel is for everyone now, and every number in it is
@@ -1018,11 +1064,17 @@
 
   function onSpeaking(set) {
     speakSet = set;
-    CallUI.markSpeaking($('vrStage'), set);
+    CallUI.markAllSpeaking(set);
   }
 
-  async function startCall(withVideo) {
+  async function startCall(withVideo, opts = {}) {
     if (!active) return;
+    const cur = Voice.state();
+    if (cur.active && cur.channel?.id === 'dm-' + active.id) {
+      showCall(true);
+      if (withVideo && !cur.cam) await Voice.toggleCam();
+      return;
+    }
     try {
       // A DM call is just a voice room keyed on the conversation id.
       await Voice.join({ id: 'dm-' + active.id, name: convTitle(active) }, null,
@@ -1031,6 +1083,7 @@
     } catch { return; }
     showCall(true);
     if (withVideo) await Voice.toggleCam();
+    if (opts.join) return;   // joining a call that is already running: nobody is rung
 
     // Ring everyone else in the conversation.
     active.people.forEach((p) => {
@@ -1055,6 +1108,19 @@
       Voice.startShare({ surface: 'monitor', quality: 'text', audio: true });
     };
     $('vrChat').onclick = () => showCall(false);
+    CallUI.mountMini({
+      onOpen: () => showCall(true),
+      onLeave: async () => { await Voice.leave(); showCall(false); UI.toast('Call ended.'); },
+    });
+    const setFull = (on) => {
+      $('vroom').classList.toggle('vroom-full', on);
+      $('vrExpand').innerHTML = `<i class="fa-solid fa-${on ? 'down-left-and-up-right-to-center' : 'up-right-and-down-left-from-center'}"></i>`;
+      $('vrExpand').title = on ? 'Exit full window' : 'Fill the window';
+    };
+    $('vrExpand').onclick = () => setFull(!$('vroom').classList.contains('vroom-full'));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('vroom').classList.contains('vroom-full')) setFull(false);
+    });
     $('vrStats').onclick = () => { statsOpen = !statsOpen; paintStats(Voice.state().stats); };
     $('vrLeave').onclick = async () => { await Voice.leave(); showCall(false); UI.toast('Call ended.'); };
     window.addEventListener('beforeunload', () => { if (Voice.state().active) Voice.leave(); });
@@ -1081,7 +1147,7 @@
     }
     profiles[me.id] = me;
     $('meAv').innerHTML = UI.avatar(me, 28);
-    $('meName').textContent = me.display_name || me.username;
+    UI.nxNameInto($('meName'), me);
     $('meHandle').textContent = '@' + me.username;
     composer(); newModal(); callUI();
 
@@ -1109,7 +1175,7 @@
     if (UI.hash() === '#requests') { tab = 'requests'; syncTabs(); paintList(); }
     if (want) {
       await openConv(convs.find((c) => c.id === want), prefetch);
-      if (params.get('call') === '1') startCall(false);
+      if (params.get('call') === '1' || params.get('join') === '1') startCall(false, { join: params.get('join') === '1' });
     }
   })();
 })();

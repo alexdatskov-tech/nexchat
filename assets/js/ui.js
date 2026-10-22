@@ -35,8 +35,172 @@ window.UI = (function () {
     const inner = profile?.avatar_url
       ? `<div class="av" style="width:${size}px;height:${size}px;"><img src="${esc(profile.avatar_url)}" alt=""></div>`
       : `<div class="av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;${bg}">${initial(name)}</div>`;
-    if (profile?.is_nitro && o.halo !== false) return `<span class="${haloClass(profile)}"${haloStyle(profile)}>${inner}</span>`;
-    return inner;
+    // Nitro avatar decoration: an animated frame laid over the picture.
+    const deco = nxDecoPath(profile, 'pfp');
+    const framed = deco && o.deco !== false
+      ? `<span class="av-decoed">${inner}<img class="av-deco" src="${esc(deco)}" alt="" loading="lazy"></span>`
+      : inner;
+    if (profile?.is_nitro && o.halo !== false) return `<span class="${haloClass(profile)}"${haloStyle(profile)}>${framed}</span>`;
+    return framed;
+  }
+
+  /* ---- Nitro extras: name styles, avatar and bio decorations ----
+     Everything here is stored in profile.theme and only shown while the
+     account is Nitro. Values are checked on the way in, so a hand-edited row
+     can't inject CSS or paths. */
+  const NX_FONTS = ['normal', 'bold', 'script', 'double', 'ascii'];
+  const HEX = /^#[0-9a-f]{6}$/i;
+
+  function nxNameStyle(p) {
+    if (!p?.is_nitro) return null;
+    const n = p.theme?.name_style;
+    if (!n || typeof n !== 'object') return null;
+    const font = NX_FONTS.includes(n.font) ? n.font : 'normal';
+    return {
+      font,
+      color: HEX.test(n.color || '') ? n.color : null,
+      color2: HEX.test(n.color2 || '') ? n.color2 : null,
+      glow: HEX.test(n.glow || '') ? n.glow : null,
+      italic: !!n.italic,
+      shimmer: !!n.shimmer,
+      bold: !!n.bold || font === 'bold',
+    };
+  }
+
+  // Unicode lettering: these are real text characters, so they copy, search and
+  // wrap like normal names. Bold, script and double-struck share the same layout.
+  const NX_FANCY = {
+    bold:   { up: 0x1D400, lo: 0x1D41A, dg: 0x1D7CE },
+    script: { up: 0x1D4D0, lo: 0x1D4EA },
+    double: { up: 0x1D538, lo: 0x1D552, dg: 0x1D7D8 },
+  };
+  const NX_DOUBLE_HOLES = { C: 0x2102, H: 0x210D, N: 0x2115, P: 0x2119, Q: 0x211A, R: 0x211D, Z: 0x2124 };
+  function nxFancy(text, font) {
+    const m = NX_FANCY[font];
+    if (!m) return text;
+    return [...text].map((ch) => {
+      const c = ch.codePointAt(0);
+      if (c >= 65 && c <= 90) {
+        if (font === 'double' && NX_DOUBLE_HOLES[ch]) return String.fromCodePoint(NX_DOUBLE_HOLES[ch]);
+        return String.fromCodePoint(m.up + c - 65);
+      }
+      if (c >= 97 && c <= 122) return String.fromCodePoint(m.lo + c - 97);
+      if (c >= 48 && c <= 57 && m.dg) return String.fromCodePoint(m.dg + c - 48);
+      return ch;
+    }).join('');
+  }
+
+  // Inline CSS for a name: colour or gradient, glow, weight, slant, shimmer.
+  // noGlow: compact spots (footer, page header) clip the glow into a box, so it is skipped there.
+  function nxNameCss(p, noItalic, noGlow) {
+    const ns = nxNameStyle(p);
+    const accent = p?.accent_color || 'var(--txt-1)';
+    if (!ns) return `color:${accent};`;
+    let css = '';
+    const grad = ns.color2 ? `linear-gradient(90deg, ${ns.color || accent}, ${ns.color2})` : null;
+    if (grad) css += `background:${grad};-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;`;
+    else css += `color:${ns.color || accent};`;
+    if (ns.shimmer && grad) css += 'background-size:220% auto;animation:nxShimmer 3.2s linear infinite;';
+    if (ns.glow && !noGlow) css += `filter:drop-shadow(0 0 4px ${ns.glow}) drop-shadow(0 0 12px ${ns.glow});`;
+    if (ns.bold) css += 'font-weight:800;';
+    // Italic glyphs overhang their advance width, which clips the gradient fill: pad the right edge.
+    if (ns.italic && !noItalic) css += 'font-style:italic;padding-right:.2em;';
+    return css;
+  }
+
+  // The name as text, for lists and messages. ASCII art only shows on the
+  // profile card and the user card; everywhere else it falls back to plain text.
+  function nxNameText(p) {
+    const name = p?.display_name || p?.username || '?';
+    const ns = nxNameStyle(p);
+    return esc(ns && ns.font !== 'ascii' ? nxFancy(name, ns.font) : name);
+  }
+
+  // Block-letter art for the ASCII style. 3 x 5 pixel glyphs, drawn with blocks.
+  const NX_PIXEL = {
+    A: ['010', '101', '111', '101', '101'], B: ['110', '101', '110', '101', '110'],
+    C: ['011', '100', '100', '100', '011'], D: ['110', '101', '101', '101', '110'],
+    E: ['111', '100', '110', '100', '111'], F: ['111', '100', '110', '100', '100'],
+    G: ['011', '100', '101', '101', '011'], H: ['101', '101', '111', '101', '101'],
+    I: ['111', '010', '010', '010', '111'], J: ['001', '001', '001', '101', '010'],
+    K: ['101', '101', '110', '101', '101'], L: ['100', '100', '100', '100', '111'],
+    M: ['101', '111', '111', '101', '101'], N: ['110', '101', '101', '101', '101'],
+    O: ['010', '101', '101', '101', '010'], P: ['110', '101', '110', '100', '100'],
+    Q: ['010', '101', '101', '110', '011'], R: ['110', '101', '110', '101', '101'],
+    S: ['011', '100', '010', '001', '110'], T: ['111', '010', '010', '010', '010'],
+    U: ['101', '101', '101', '101', '111'], V: ['101', '101', '101', '101', '010'],
+    W: ['101', '101', '111', '111', '101'], X: ['101', '101', '010', '101', '101'],
+    Y: ['101', '101', '010', '010', '010'], Z: ['111', '001', '010', '100', '111'],
+    0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'],
+    2: ['110', '001', '010', '100', '111'], 3: ['110', '001', '010', '001', '110'],
+    4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '110', '001', '110'],
+    6: ['011', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'],
+    8: ['111', '101', '111', '101', '111'], 9: ['111', '101', '111', '001', '110'],
+    ' ': ['000', '000', '000', '000', '000'], '?': ['110', '001', '011', '000', '010'],
+  };
+  function nxAsciiArt(text) {
+    const rows = ['', '', '', '', ''];
+    [...String(text || '').toUpperCase().slice(0, 12)].forEach((ch, i) => {
+      const g = NX_PIXEL[ch] || NX_PIXEL['?'];
+      for (let r = 0; r < 5; r++) {
+        rows[r] += (i ? ' ' : '') + g[r].replace(/0/g, ' ').replace(/1/g, '\u2588');
+      }
+    });
+    return rows.join('\n');
+  }
+
+  // The name block for the profile card and user card: ASCII art or the styled text.
+  // Own-name labels (rail, portal greeting): same styling as chat, always a single line.
+  function nxNameInto(el, p) {
+    if (!el) return;
+    el.innerHTML = `<span class="nx-name" style="${esc(nxNameCss(p, true, true))}">${nxNameText(p)}</span>`;
+  }
+
+  function nxNameHtml(p, cls) {
+    const ns = nxNameStyle(p);
+    if (ns?.font === 'ascii') {
+      return `<pre class="nx-ascii ${cls || ''}" style="${esc(nxNameCss(p, true))}" aria-label="${nxNameText(p)}">${esc(nxAsciiArt(p.display_name || p.username))}</pre>`;
+    }
+    return `<span class="nx-name ${cls || ''}" style="${esc(nxNameCss(p))}">${nxNameText(p)}</span>`;
+  }
+
+  // Decorations are files under assets/deco/. Only that folder is accepted.
+  function nxDecoPath(p, kind) {
+    if (!p?.is_nitro) return null;
+    const folder = kind === 'pfp' ? 'assets/deco/pfp/' : 'assets/deco/profile/';
+    const v = kind === 'pfp' ? p.theme?.pfp_deco : p.theme?.bio_deco;
+    if (typeof v !== 'string' || !v.startsWith(folder) || v.includes('..')) return null;
+    if (!/^[\w./-]+\.(png|apng|gif|webp)$/i.test(v)) return null;
+    return v;
+  }
+
+  // Wraps the bio text in its banner overlay when one is equipped.
+  // Full banner, never cropped, centred; a blurred copy of the same art fills
+  // the rest of the card so the whole bio is covered.
+  function bioDecoImgs(src) {
+    const s = esc(src);
+    return `<img class="bio-deco-bg" src="${s}" alt="" aria-hidden="true" loading="lazy" decoding="async"><img class="bio-deco" src="${s}" alt="" decoding="async">`;
+  }
+
+  // The profile deco covers the whole profile card, not just the bio text.
+  // Returns the classes for the card and the full-card art layer behind it.
+  function cardDeco(p) {
+    const deco = nxDecoPath(p, 'bio');
+    if (!deco) return { cls: '', html: '' };
+    return { cls: ' card-deco-host has-deco',
+      html: `<div class="card-deco" aria-hidden="true">${cardDecoImgs(deco)}</div>` };
+  }
+
+  // The deco art fills the whole card; the card is shaped to the art (see
+  // .upop.has-deco / .pcard.has-deco in theme.css), so nothing is left over.
+  function cardDecoImgs(src) {
+    return `<img class="card-deco-art" src="${esc(src)}" alt="" decoding="async">`;
+  }
+
+  function nxBioBox(p, innerHtml) {
+    const deco = nxDecoPath(p, 'bio');
+    if (!deco) return innerHtml;
+    return `<div class="bio-deco-box">${bioDecoImgs(deco)}${innerHtml}</div>`;
   }
 
   /* ---- Nitro halo ----
@@ -159,6 +323,8 @@ window.UI = (function () {
     }
     const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    // New images go to CloudGate (permanent CloudFront URL) when configured.
+    if (window.CloudGate?.enabled()) return (await window.Store.put(`nexchat/${bucket}/${path}`, file)).url;
     // Browsers leave file.type empty for .tiff and most font files, and Storage
     // then stores them as octet-stream, which breaks <img> and @font-face.
     const contentType = file.type || window.Store?.mimeOf(file.name) || 'application/octet-stream';
@@ -289,13 +455,14 @@ window.UI = (function () {
 
     const ov = document.createElement('div');
     ov.className = 'overlay';
-    ov.innerHTML = `<div class="upop">
+    const deco = cardDeco(p);
+    ov.innerHTML = `<div class="upop${deco.cls}">${deco.html}
       <div class="upop-banner" style="background:${banner}"></div>
       <div class="upop-body">
         <div class="upop-av ${p.is_nitro ? haloClass(p) : ''}"${p.is_nitro ? haloStyle(p) : ''}>${avatar(p, 68, { halo: false })}</div>
-        <h3>${esc(name)}
+        <h3>${nxNameHtml(p)}
           ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>' : ''}
-          ${p.is_platform_admin ? '<span class="badge badge-admin">Admin</span>' : ''}</h3>
+          ${roleBadge(p)}</h3>
         <div class="handle">@${esc(p.username)}</div>
         <div class="presence-line" style="margin-top:6px;color:${window.Presence?.isOnline(p.id) ? 'var(--accent)' : 'var(--txt-3)'}">
           <span class="pdot ${window.Presence?.isOnline(p.id) ? 'on' : 'off'}" data-pd="${p.id}"></span>
@@ -460,18 +627,40 @@ window.UI = (function () {
     return '';
   }
 
+  /* Wallpapers are cached on the user's device, keyed by the stable storage
+     key (never the signed URL, which changes every time). A repeat visit reads
+     the image from Cache Storage and skips the sign-and-download round trip
+     that made the chat background take seconds to appear. */
+  const WP_CACHE = 'nx-wallpapers-v1';
   const wallpaperUrls = new Map();
+  const wpRequest = (key) => new Request('https://wallpaper.nexchat.invalid/' + encodeURIComponent(key));
   function wallpaperUrl(key) {
-    const cached = wallpaperUrls.get(key);
-    if (cached && cached.until > Date.now()) return cached.promise;
-    const entry = { until: Date.now() + 6 * 3600 * 1000 };
-    entry.promise = Promise.resolve().then(() => window.Store.signKey(key))
-      .then((url) => {
+    if (wallpaperUrls.has(key)) return wallpaperUrls.get(key);
+    const load = (async () => {
+      const cache = 'caches' in window ? await caches.open(WP_CACHE).catch(() => null) : null;
+      if (cache) {
+        const hit = await cache.match(wpRequest(key)).catch(() => null);
+        if (hit) return URL.createObjectURL(await hit.blob());
+      }
+      const type = /\.jpe?g$/i.test(key) ? 'image/jpeg' : /\.gif$/i.test(key) ? 'image/gif'
+        : /\.webp$/i.test(key) ? 'image/webp' : /\.avif$/i.test(key) ? 'image/avif' : 'image/png';
+      let blob;
+      try {
+        if (!window.CloudGate?.enabled()) throw new Error('not managed');
+        blob = new Blob([await window.CloudGate.fetchBytes(key)], { type });
+      } catch {
+        const url = await window.Store.signKey(key);
         if (!url) throw new Error('Could not load wallpaper.');
-        return url;
-      }).catch((err) => { wallpaperUrls.delete(key); throw err; });
-    wallpaperUrls.set(key, entry);
-    return entry.promise;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Could not load wallpaper.');
+        blob = new Blob([await res.arrayBuffer()], { type });
+      }
+      if (cache) await cache.put(wpRequest(key), new Response(blob, { headers: { 'content-type': type } })).catch(() => {});
+      return URL.createObjectURL(blob);
+    })();
+    wallpaperUrls.set(key, load);
+    load.catch(() => wallpaperUrls.delete(key));
+    return load;
   }
 
   let backgroundVersion = 0, backgroundTimer = null;
@@ -479,6 +668,22 @@ window.UI = (function () {
      grid, the profile editor, DMs and server channels all read the same
      profiles.theme keys, so the wallpaper follows the user around the app
      instead of only dressing the portal. */
+  /* Platform ranks: owner 3, sudo admin 2, admin 1, everyone else 0.
+     Mirrors nx_rank() in supabase/roles_and_powers.sql, which is what really
+     decides; the UI only uses this to hide buttons that would be refused. */
+  function rank(p) {
+    if (!p) return 0;
+    return { owner: 3, sudo: 2, admin: 1 }[p.platform_role] || (p.is_platform_admin ? 1 : 0);
+  }
+  const ROLE_NAMES = ['', 'Admin', 'Sudo Admin', 'Owner'];
+  const roleName = (p) => ROLE_NAMES[rank(p)];
+  function roleBadge(p) {
+    const r = rank(p);
+    if (!r) return '';
+    const ic = ['', 'fa-shield-halved', 'fa-user-shield', 'fa-crown'][r];
+    return `<span class="badge badge-role r${r}"><i class="fa-solid ${ic}"></i> ${ROLE_NAMES[r]}</span>`;
+  }
+
   /* Cursor-driven motion (tilts, spotlights). A CSS transition restarted on
      every pointermove stutters and trails the cursor; instead the values
      ease toward their target once per frame, independent of refresh rate,
@@ -551,7 +756,8 @@ window.UI = (function () {
     // The chat column's own extra treatment, on top of whatever the wallpaper
     // already has. Defaults match the CSS fallbacks so a profile saved before
     // these keys existed looks exactly the same as it did.
-    const cBlur = t.chat_blur ?? CHAT_BLUR_DEFAULT;
+    // Liquid glass starts at a 5px frosted blur; the classic style keeps 12px.
+    const cBlur = t.chat_blur ?? (t.ui_style === 'glass' ? 5 : CHAT_BLUR_DEFAULT);
     root.setProperty('--chat-blur', cBlur + 'px');
     root.setProperty('--chat-dim', (t.chat_dim ?? CHAT_DIM_DEFAULT) / 100);
     document.body.classList.toggle('chat-blur', cBlur > 0);
@@ -569,5 +775,20 @@ window.UI = (function () {
     root.setProperty('--srv-name-font', resolveNameFont(theme));
   }
 
-  return { params, hash, go, pageUrl, smooth, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
+  /* The chat composer floats over the message list (glass), so the list
+     needs to know how tall it is to leave room for the last message. */
+  (function trackComposerHeight() {
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const h = Math.round(e.target.getBoundingClientRect().height);
+        if (h > 0) document.documentElement.style.setProperty('--composer-h', h + 'px');
+      }
+    });
+    const attach = () => document.querySelectorAll('.composer').forEach((el) => ro.observe(el));
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach);
+    else attach();
+  })();
+
+  return { nxNameStyle, nxNameCss, nxNameText, nxNameHtml, nxNameInto, nxDecoPath, nxBioBox, bioDecoImgs, cardDecoImgs, nxAsciiArt, nxFancy, NX_FONTS, params, hash, go, pageUrl, smooth, rank, roleName, roleBadge, applyStyle, cssString, wallpaperKey, wallpaperUrl, toast, esc, initial, avatar, requireSession, myProfile, upload, confirmDialog, timeLabel, userCard, roleIcon, island, applyServerName, applyBackground, nameFontStack, resolveNameFont, loadGoogleFont, loadFontFile, googleFontHref, googleFontFamily, haloClass, haloStyle, haloStyleText, haloImage, haloCss, NAME_FONTS, CHAT_BLUR_DEFAULT, CHAT_DIM_DEFAULT };
 })();

@@ -31,16 +31,6 @@
   }
 
   /* ---- rotating tagline ---- */
-  const TAGS = ['your people are already here.', 'servers, dms, calls. no fuss.', 'the group chat, but better.', 'hop in, it’s late anyway.'];
-  const tag = document.getElementById('authTag');
-  if (tag && !reduce) {
-    let i = 0;
-    setInterval(() => {
-      tag.classList.add('out');
-      setTimeout(() => { i = (i + 1) % TAGS.length; tag.textContent = TAGS[i]; tag.classList.remove('out'); }, 350);
-    }, 4200);
-  }
-
   /* ---- show / hide password ---- */
   document.querySelectorAll('[data-peek]').forEach((b) => {
     b.onclick = () => {

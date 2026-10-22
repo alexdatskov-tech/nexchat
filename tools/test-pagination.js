@@ -156,7 +156,7 @@ function boot(htmlFile, url, db, extraScripts = []) {
   window.Notify = { start() {}, ring() {} };
   window.__nx_tp = { put: async () => ({ url: '', type: '' }), del: async () => {} };
   window.db = db;
-  for (const f of ['ui.js', 'md.js', 'storage.js', 'viewer.js', ...extraScripts]) {
+  for (const f of ['ui.js', 'md.js', 'storage.js', 'viewer.js', 'callui.js', ...extraScripts]) {
     window.eval(fs.readFileSync(`${REPO}/assets/js/${f}`, 'utf8'));
   }
   return { dom, window };

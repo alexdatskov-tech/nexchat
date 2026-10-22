@@ -12,6 +12,29 @@ window.NEXCHAT_CONFIG = {
   // `nexchat-storage` Edge Function is deployed (see supabase/README.md), set:
   //   STORAGE_ENDPOINT: 'https://xqzibelnvjlmavgrpyve.supabase.co/functions/v1/nexchat-storage',
   STORAGE_ENDPOINT: '',
+  // CloudGate on Wasmer: where every NEW upload goes (chat files, avatars,
+  // icons, wallpapers, and each user's encrypted drive). Old iDrive e2 links
+  // already in the database keep working through the signer above.
+  // This login ships to every browser, so treat the bucket as readable by
+  // anyone who looks; private drive files are encrypted before upload.
+  CLOUDGATE: {
+    // Used only until storage groups are set up in Admin -> Storage endpoints
+    // (supabase/storage_groups.sql). Then the database list is used instead.
+    // Each endpoint has its own login. An endpoint without a username and
+    // password is skipped. Every endpoint runs the same CloudGate API.
+    endpoints: [
+      { name: 'wasmer', endpoint: 'https://alexd-us1-s3.wasmer.app', user: 'admin', pass: 'admin!' },
+      // nx-storage: fill in the username and password (or set them in Admin -> Storage endpoints).
+      { name: 'nx-storage', endpoint: 'https://nx-storage.alexaero.top' },
+    ],
+    category: 'nexchats-us1',
+    cdn: 'd1dncmkdpaif79.cloudfront.net',
+    // Default My Drive size for a user with no quota of their own yet. Admins
+    // change it per user (Admin -> Users, or Storage requests).
+    driveQuotaGB: 5,
+    // Largest single file in My Drive, in GB.
+    driveMaxFileGB: 5,
+  },
   // TURN relays (optional). Only used when two people can't connect directly
   // (strict NAT / school & office networks). A free public relay is the
   // fallback; your own TURN (e.g. a free Metered or Cloudflare TURN key) is

@@ -106,7 +106,7 @@
     if (heroStats.servers) lines.push(`You're in ${heroStats.servers} server${heroStats.servers === 1 ? '' : 's'}. Pick one and jump in.`);
     if (heroStats.ann) lines.push(`${heroStats.ann} new announcement${heroStats.ann === 1 ? '' : 's'} from the team.`);
     lines.push(h < 5 ? 'Still up? Somebody’s always around.' : h < 12 ? 'Fresh start. Catch up on what you missed.'
-      : h < 18 ? 'Afternoon check-in: see what’s new.' : 'Evening crew is getting online.');
+      : h < 18 ? 'Afternoon check-in: see what’s new.' : 'Your servers and DMs, all in one place.');
     lines.push('Start a call, share your screen, or just say hi.');
     return lines;
   }
@@ -259,9 +259,9 @@
     window.Guard?.start(me);
     window.Presence?.start(me);
     applyDashboardBg(me.theme);
-    window.Nav?.mount(me, { active: 'home', onAdd: openCreate });
+    window.Nav?.mount(me, { active: 'home', onCreate: openCreate, onJoin: openJoin });
     $('meAv').innerHTML = UI.avatar(me, 22, { halo: false });
-    $('meName').textContent = me.display_name || me.username;
+    UI.nxNameInto($('meName'), me);
     const h = new Date().getHours();
     $('greet').textContent = h < 5 ? 'Up late?' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     if (me.is_platform_admin) $('adminLink').style.display = '';
@@ -274,6 +274,7 @@
     const inv = UI.params().get('invite');
     if (inv) { openJoin(); $('jCode').value = inv; }
     else if (UI.params().get('new')) openCreate();
+    else if (UI.params().get('join')) openJoin();
 
     await load();
   })();

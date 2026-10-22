@@ -94,6 +94,7 @@ for (const f of ['ui.js', 'md.js', 'viewer.js', 'presence.js']) {
 }
 window.Voice = { state: () => ({ active: false, members: new Map() }), leave: async () => {}, join: async () => {} };
 window.Notify = { start() {} };
+window.eval(fs.readFileSync(`${REPO}/assets/js/callui.js`, 'utf8'));
 window.eval(fs.readFileSync(`${REPO}/assets/js/server.js`, 'utf8'));
 
 global.__chans = []; global.__pstate = {};

@@ -28,6 +28,49 @@
   };
 
   // One page of history, oldest-first. `before` pages backwards from there.
+  /* ---- member panel: owner and members; online people first ---- */
+  let memRows = [];
+  const memOnline = (p) => !!window.Presence?.isOnline(p.id);
+  const memSort = (a, b) => (memOnline(b) - memOnline(a)) || (a.username || '').localeCompare(b.username || '');
+  function setMembers(open) {
+    $('members').classList.toggle('hidden', !open);
+    try { localStorage.setItem('nx_members_open', open ? '1' : '0'); } catch {}
+  }
+  async function loadMembers() {
+    const { data, error } = await window.db.from('server_members')
+      .select('user_id, profiles!user_id(id, username, display_name, avatar_url, accent_color, is_nitro, theme)')
+      .eq('server_id', serverId);
+    if (error) {
+      const list = $('memList');
+      if (list) list.innerHTML = '<div class="mem-sect">Could not load members</div>';
+      return;
+    }
+    memRows = (data || []).map((r) => r.profiles).filter(Boolean);
+    paintMembers();
+  }
+  function paintMembers() {
+    const list = $('memList'); if (!list || !srv) return;
+    const owner = memRows.filter((p) => p.id === srv.owner_id);
+    const people = memRows.filter((p) => p.id !== srv.owner_id).sort(memSort);
+    const row = (p) => `<div class="mem-row ${memOnline(p) ? '' : 'off'}" data-uid="${UI.esc(p.id)}">${UI.avatar(p, 30)}`
+      + `<span class="mn">${UI.nxNameText(p)}</span></div>`;
+    const sect = (title, arr) => arr.length ? `<div class="mem-sect">${title} · ${arr.length}</div>${arr.map(row).join('')}` : '';
+    list.innerHTML = sect('Owner', owner) + sect('Members', people);
+    $('memCount').textContent = memRows.length;
+  }
+  function setupMembers() {
+    $('memBtn').onclick = () => setMembers($('members').classList.contains('hidden'));
+    $('memClose').onclick = () => setMembers(false);
+    $('memList').onclick = (e) => {
+      const r = e.target.closest('[data-uid]'); if (r) UI.userCard?.(r.dataset.uid);
+    };
+    // Desktop: open by default. Phones: closed, opened as an overlay.
+    let saved = null; try { saved = localStorage.getItem('nx_members_open'); } catch {}
+    setMembers(saved === null ? window.innerWidth > 1000 : saved === '1');
+    window.Presence?.onChange(paintMembers);
+    loadMembers();
+  }
+
   async function fetchPage(cid, before) {
     let q = window.db.from('messages')
       .select('*, profiles!author_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
@@ -183,9 +226,11 @@
             </span>
           </div>`).join('')}</div>`;
       }
+      const liveN = !inHere && isVoice ? ((Voice.live?.() || new Map()).get(c.id) || 0) : 0;
+      const liveTag = liveN ? `<span class="vc-live" title="Call in progress: click to join">${liveN} in call</span>` : '';
       const cls = [c.id === active?.id ? 'on' : '', inHere ? 'connected' : ''].filter(Boolean).join(' ');
       return `<div class="chan ${cls}" data-id="${c.id}" data-voice="${isVoice}">
-          <i class="fa-solid ${chanIcon(c.type)}"></i><span>${MD.esc(c.name)}</span>${inHere ? '<span class="live-dot"></span>' : ''}
+          <i class="fa-solid ${chanIcon(c.type)}"></i><span>${MD.esc(c.name)}</span>${inHere ? '<span class="live-dot"></span>' : ''}${liveTag}
         </div>${occupants}`;
     };
 
@@ -209,11 +254,14 @@
     });
   }
 
+  let liveWiredSrv = false;
   async function loadChannels(selectId) {
     const { data, error } = await window.db.from('channels').select('*').eq('server_id', serverId).order('position');
     if (error) return UI.toast('Could not load channels.', true);
     channels = data;
+    window.Nav?.watchExtra?.(channels.filter((c) => c.type === 'voice' || c.type === 'stage').map((c) => c.id));
     renderChannels();
+    if (!liveWiredSrv && window.Voice?.onLive) { liveWiredSrv = true; Voice.onLive(() => renderChannels()); }
     const pick = (selectId && channels.find((c) => c.id === selectId))
       || channels.find((c) => c.type === 'text' || c.type === 'announcement');
     if (pick) open(pick); else { $('composer').classList.add('hidden'); $('msgs').innerHTML = ''; }
@@ -256,7 +304,7 @@
       ? `<div class="m-gutter"><span class="hovertime">${new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></div>`
       : `<div class="m-av" data-u="${m.author_id}" style="cursor:pointer">${UI.avatar(p, 38, { presence: true })}</div>`;
     const head = grouped ? '' :
-      `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+      `<div class="m-head"><span class="m-name" data-u="${m.author_id}" style="cursor:pointer;${UI.nxNameCss(p)}">${UI.nxNameText(p)}</span>
        ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
        <span class="m-time">${UI.timeLabel(m.created_at)}</span></div>`;
 
@@ -307,7 +355,7 @@
       first.outerHTML = `<div class="m-av" data-u="${uid}" style="cursor:pointer">${UI.avatar(p, 38)}</div>`;
       if (!el.querySelector('.m-head')) {
         el.querySelector('.m-main').insertAdjacentHTML('afterbegin',
-          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;color:${p.accent_color || 'var(--txt-1)'}">${MD.esc(name)}</span>
+          `<div class="m-head"><span class="m-name" data-u="${uid}" style="cursor:pointer;${UI.nxNameCss(p)}">${UI.nxNameText(p)}</span>
            ${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i></span>' : ''}
            <span class="m-time">${UI.timeLabel(ts)}</span></div>`);
       }
@@ -967,7 +1015,8 @@
     $('composer').classList.toggle('hidden', on || !active);
     $('stage').classList.add('hidden');
     if (on) paintRoom(Voice.state());
-    else if (!active) {
+    refreshAway();
+    if (!on && !active) {
       // Nothing was open behind the room — fall back to the first text channel.
       const first = channels.find((c) => c.type === 'text' || c.type === 'announcement');
       if (first) open(first);
@@ -975,8 +1024,16 @@
     renderChannels();
   }
 
+  // A call runs but its room is not on screen: floating mini call + call icon
+  // under Messages. Both bring the room back.
+  function refreshAway(st = Voice.state()) {
+    const away = !!st.active && !vrOpen;
+    CallUI.paintMini(st, away, { meId: me?.id, speakSet, onAvatar: (id) => UI.userCard(id, { serverId }) });
+    window.Nav?.setCallChip(away ? { onClick: () => showVoiceRoom(true) } : null);
+  }
+
   function paintRoom(st) {
-    if (!st.active) return;
+    if (!st.active) { refreshAway(st); return; }
     $('vrName').textContent = st.channel.name;
     $('vrSub').textContent = `${st.members.size} connected · ${srv.name}`;
 
@@ -992,6 +1049,7 @@
     set('vrShare', 'live', st.sharing);
     syncDock(st);
     CallUI.paintStage($('vrStage'), st, { meId: me.id, speakSet, onAvatar: (id) => UI.userCard(id, { serverId }) });
+    refreshAway(st);
   }
 
   function syncDock(st) {
@@ -1018,6 +1076,7 @@
 
   function paintVoice(st) {
     renderChannels();
+    refreshAway(st);
     const dock = $('vcDock');
     if (!st.active) {
       dock.classList.add('hidden');
@@ -1034,7 +1093,7 @@
 
   function onSpeaking(set) {
     speakSet = set;
-    if (vrOpen) CallUI.markSpeaking($('vrStage'), set);
+    CallUI.markAllSpeaking(set);
     document.querySelectorAll('.vc-user').forEach((u) => u.classList.toggle('speaking', set.has(u.dataset.u)));
   }
 
@@ -1098,6 +1157,19 @@
     $('vrShare').onclick = () => openSharePicker();
     $('vrLeave').onclick = async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); };
     $('vrChat').onclick = () => showVoiceRoom(false);
+    CallUI.mountMini({
+      onOpen: () => showVoiceRoom(true),
+      onLeave: async () => { await Voice.leave(); showVoiceRoom(false); UI.toast('Disconnected.'); },
+    });
+    const setFull = (on) => {
+      $('vroom').classList.toggle('vroom-full', on);
+      $('vrExpand').innerHTML = `<i class="fa-solid fa-${on ? 'down-left-and-up-right-to-center' : 'up-right-and-down-left-from-center'}"></i>`;
+      $('vrExpand').title = on ? 'Exit full window' : 'Fill the window';
+    };
+    $('vrExpand').onclick = () => setFull(!$('vroom').classList.contains('vroom-full'));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && $('vroom').classList.contains('vroom-full')) setFull(false);
+    });
     $('vrStats').onclick = () => { statsOpen = !statsOpen; paintStats(Voice.state().stats); };
     $('vcDock').addEventListener('click', (e) => {
       // Tapping the dock status area re-opens the full room view.
@@ -1229,6 +1301,7 @@
     $('srvName').textContent = srv.name;
     const n = srv.server_members?.[0]?.count ?? 0;
     $('srvMembers').textContent = `${n} member${n === 1 ? '' : 's'}`;
+    setupMembers();
     if (srv.theme?.accent) document.documentElement.style.setProperty('--accent', srv.theme.accent);
     UI.applyServerName(srv.theme);
     // Owners may edit appearance in another tab while members stay in chat.
@@ -1244,7 +1317,7 @@
     window.addEventListener('pagehide', () => window.db.removeChannel(appearanceSub), { once: true });
 
     $('meAv').innerHTML = UI.avatar(me, 28, { presence: true });
-    $('meName').textContent = me.display_name || me.username;
+    UI.nxNameInto($('meName'), me);
     $('meHandle').textContent = '@' + me.username;
 
     UI.applyBackground(me.theme);
@@ -1259,6 +1332,19 @@
     if (!canManage) {
       const { data: ok } = await window.db.rpc('has_permission', { p_server_id: serverId, p_user_id: me.id, p_bit: 8 });
       canManage = !!ok;
+    }
+
+    // Owner / sudo admins can open any server without joining it.
+    if (UI.rank(me) >= 2 && srv.owner_id !== me.id) {
+      const { data: mem } = await window.db.from('server_members').select('user_id')
+        .eq('server_id', serverId).eq('user_id', me.id).maybeSingle();
+      if (!mem) {
+        const bar = document.createElement('div');
+        bar.className = 'preview-bar';
+        bar.innerHTML = `<i class="fa-solid fa-eye"></i><span>Viewing as <b>${UI.esc(UI.roleName(me))}</b>. You haven't joined this server; anything you send is posted under your name.</span>`;
+        $('chatHead').insertAdjacentElement('afterend', bar);
+        $('miLeave')?.classList.add('hidden');
+      }
     }
 
     menus(); composer(); voiceButtons();

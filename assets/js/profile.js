@@ -35,12 +35,29 @@
 
   // ---- tabs ----
   document.querySelectorAll('.set-nav button[data-tab]').forEach((b) => {
-    b.onclick = () => {
+    b.onclick = async () => {
+      // Leaving an editable pane with unsaved changes: save, discard or stay.
+      const cur = document.querySelector('[data-pane]:not(.hidden)');
+      if (window.SettingsUI?.dirty && cur && cur.dataset.nosave === undefined && cur.dataset.pane !== b.dataset.tab) {
+        const choice = await window.SettingsUI.askLeave();
+        if (choice === 'stay') return;
+        if (choice === 'save') {
+          await $('btnSave').onclick();
+          if (window.SettingsUI.dirty) return;   // the save failed: stay so nothing is lost
+        } else {
+          hydrate();                              // discard: back to the saved values
+          window.SettingsUI.clean();
+        }
+      }
       document.querySelectorAll('.set-nav button[data-tab]').forEach((x) => x.classList.remove('on'));
       b.classList.add('on');
       document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.tab));
       // Only the editable panes need the save bar.
-      $('saveBar').classList.toggle('hidden', b.dataset.tab === 'account' || b.dataset.tab === 'dev');
+      $('saveBar').classList.toggle('hidden', ['account', 'dev', 'drive', 'shop'].includes(b.dataset.tab));
+      if (b.dataset.tab === 'shop') renderShop();
+      document.querySelector('.set-wrap')?.classList.toggle('drive-open', b.dataset.tab === 'drive');
+      if (b.dataset.tab === 'drive' && me) window.Drive?.mount(me, $('driveHost'));
+      try { history.replaceState(null, '', b.dataset.tab === 'profile' ? location.pathname + location.search : '#' + b.dataset.tab); } catch {}
       document.querySelector('.set-main')?.scrollTo({ top: 0 });
     };
   });
@@ -50,15 +67,35 @@
     const display = $('fDisplay').value.trim() || me.username;
     const accent = $('fAccent').value;
     const bio = $('fBio').value.trim();
+    const th = me.theme || {};
+    const bioDeco = UI.nxDecoPath({ is_nitro: me.is_nitro, theme: th }, 'bio');
+    const pfpDeco = UI.nxDecoPath({ is_nitro: me.is_nitro, theme: th }, 'pfp');
 
-    $('pvName').textContent = display;
+    // The name as it will appear (style, font, ASCII art), from the editor state.
+    const who = { ...me, display_name: display, accent_color: accent, is_nitro: me.is_nitro, theme: { ...th, name_style: nameDraft } };
+    $('pvName').innerHTML = UI.nxNameHtml(who);
     $('pvHandle').textContent = '@' + me.username;
-    $('pvBio').textContent = bio;
-    $('pvBio').classList.toggle('hidden', !bio);
+
+    // The profile deco covers the whole card, as it does on the popup.
+    const card = $('pcard');
+    card.querySelector(':scope > .card-deco')?.remove();
+    card.classList.toggle('card-deco-host', !!bioDeco);
+    card.classList.toggle('has-deco', !!bioDeco);
+    if (bioDeco) {
+      const layer = document.createElement('div');
+      layer.className = 'card-deco';
+      layer.setAttribute('aria-hidden', 'true');
+      layer.innerHTML = UI.cardDecoImgs(bioDeco);
+      card.prepend(layer);
+    }
+
+    const bioEl = $('pvBio');
+    bioEl.classList.toggle('hidden', !bio && !bioDeco);
+    bioEl.textContent = bio || (bioDeco ? 'Your bio sits here.' : '');
 
     let badges = '';
     if (me.is_nitro) badges += ' <span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i> Nitro</span>';
-    if (me.is_platform_admin) badges += ' <span class="badge badge-admin">Admin</span>';
+    if (UI.rank(me)) badges += ' ' + UI.roleBadge(me);
     $('pvBadges').innerHTML = badges;
 
     const avUrl = clearAvatar ? null : (avatarFile?._preview || me.avatar_url);
@@ -73,9 +110,12 @@
     wrap.removeAttribute('style');
     const haloStyleText = me.is_nitro ? UI.haloStyleText(haloPreview) : '';
     if (haloStyleText) wrap.setAttribute('style', haloStyleText);
-    $('pvAvWrap').innerHTML = avUrl
+    const avInner = avUrl
       ? `<div class="av"><img src="${avUrl}" alt=""></div>`
       : `<div class="av" style="background:${accent};">${UI.initial(display)}</div>`;
+    $('pvAvWrap').innerHTML = pfpDeco
+      ? `<span class="av-decoed">${avInner}<img class="av-deco" src="${UI.esc(pfpDeco)}" alt=""></span>`
+      : avInner;
 
     $('pvBanner').style.background = bnUrl
       ? `url('${bnUrl}') center/cover`
@@ -83,6 +123,7 @@
 
     // Sidebar identity card mirrors the preview.
     $('niName').textContent = display;
+    paintNsEditor();
     $('niHandle').textContent = '@' + me.username;
     $('niAv').innerHTML = avUrl ? `<div class="av" style="width:44px;height:44px"><img src="${avUrl}" alt=""></div>` : UI.avatar({ ...me, display_name: display, accent_color: accent, avatar_url: null }, 44, { halo: false });
     $('niBanner').style.background = $('pvBanner').style.background;
@@ -293,10 +334,16 @@
           catch { throw new Error('That TIFF could not be read. Try a PNG or JPEG.'); }
         }
         const key = `nexchat/users/${me.id}/wallpaper-${Date.now()}-${wpFile.name.replace(/[^\w.\-]/g, '_')}`;
-        await window.Store.put(key, wpFile);
+        const up = await window.Store.put(key, wpFile);
         wallpaperSelection++;
-        wallpaperKey = key;
-        bgVal = '';
+        if (window.CloudGate?.isOurs(up.url)) {
+          // A CloudGate URL never expires, so it is saved like a preset.
+          wallpaperKey = '';
+          bgVal = `url(${UI.cssString(up.url)})`;
+        } else {
+          wallpaperKey = key;
+          bgVal = '';
+        }
         wpFile = null;
         $('fWallpaper').value = '';
       }
@@ -311,6 +358,7 @@
       patch.theme.dev_mode = devMode;
       patch.theme.manual_stun = manualStun;
       if (me.is_nitro) {
+        patch.theme.name_style = { ...nameDraft };
         patch.banner_gif_url = $('fHalo').value.trim() || null;
         const hc = $('fHaloCss').value.trim();
         if (hc && !UI.haloCss({ theme: { dev_mode: true, halo_css: hc } })) {
@@ -381,6 +429,157 @@
   $('btnNitro').onclick = sendRequest;
   $('btnNitroAgain').onclick = () => { $('nitroDenied').style.display = 'none'; $('nitroRequest').style.display = ''; };
 
+  /* ---- nitro name style ----
+     The draft lives here until Save, so the preview and the saved row agree. */
+  const NS_FONTS = [['normal', 'Normal'], ['bold', 'Bold'], ['script', 'Script'], ['double', 'Double'], ['ascii', 'ASCII art']];
+  const NS_PRESETS = [
+    { n: 'Gold',     s: { font: 'bold',   color: '#F5B94A', color2: '#FF7A59', glow: '#F5B94A', bold: true } },
+    { n: 'Aurora',   s: { font: 'normal', color: '#3DDC97', color2: '#4F9DFF', glow: '#3DDC97', shimmer: true, bold: true } },
+    { n: 'Neon',     s: { font: 'script', color: '#E8659A', glow: '#E8659A' } },
+    { n: 'Ice',      s: { font: 'double', color: '#5AC8D8', color2: '#8B7CF6' } },
+    { n: 'Terminal', s: { font: 'ascii',  color: '#3DDC97', glow: '#3DDC97' } },
+    { n: 'Plain',    s: { font: 'normal' } },
+  ];
+  let nameDraft = { font: 'normal' };
+  const nsFromTheme = () => {
+    const n = (me?.theme || {}).name_style || {};
+    return { font: n.font || 'normal', color: n.color || null, color2: n.color2 || null, glow: n.glow || null,
+      bold: !!n.bold, italic: !!n.italic, shimmer: !!n.shimmer };
+  };
+
+  function paintNsEditor() {
+    const accent = $('fAccent').value || '#2FBF87';
+    $('nxFonts').innerHTML = NS_FONTS.map(([k, t]) => `<button type="button" data-f="${k}" class="${nameDraft.font === k ? 'on' : ''}">${t}</button>`).join('');
+    $('nxPresets').innerHTML = NS_PRESETS.map((p, i) => `<button type="button" data-p="${i}">${p.n}</button>`).join('');
+    $('nxUseAcc').checked = !nameDraft.color;
+    $('nxC1').value = nameDraft.color || accent;
+    $('nxC1Wrap').classList.toggle('hidden', !nameDraft.color);
+    $('nxGrad').checked = !!nameDraft.color2;
+    $('nxC2').value = nameDraft.color2 || accent;
+    $('nxC2Wrap').classList.toggle('hidden', !nameDraft.color2);
+    $('nxBold').checked = nameDraft.bold;
+    $('nxItalic').checked = nameDraft.italic;
+    $('nxShimmer').checked = nameDraft.shimmer;
+    $('nxShimmer').closest('label').classList.toggle('hidden', !nameDraft.color2);
+    $('nxGlowOn').checked = !!nameDraft.glow;
+    $('nxGlow').value = nameDraft.glow || '#F5B94A';
+    $('nxGlowWrap').classList.toggle('hidden', !nameDraft.glow);
+    $('nxPreview').innerHTML = UI.nxNameHtml({ ...me, display_name: $('fDisplay').value.trim() || me.username,
+      accent_color: accent, is_nitro: true, theme: { ...(me.theme || {}), name_style: nameDraft } });
+  }
+
+  // Reads every control back into the draft, then repaints.
+  function readNsEditor() {
+    nameDraft = {
+      font: nameDraft.font,
+      color: $('nxUseAcc').checked ? null : $('nxC1').value,
+      color2: $('nxGrad').checked ? $('nxC2').value : null,
+      glow: $('nxGlowOn').checked ? $('nxGlow').value : null,
+      bold: $('nxBold').checked, italic: $('nxItalic').checked, shimmer: $('nxShimmer').checked,
+    };
+    paintNsEditor(); paint();
+  }
+  ['nxUseAcc', 'nxC1', 'nxGrad', 'nxC2', 'nxGlowOn', 'nxGlow', 'nxBold', 'nxItalic', 'nxShimmer'].forEach((id) => {
+    $(id).addEventListener('input', readNsEditor);
+    $(id).addEventListener('change', readNsEditor);
+  });
+  $('nxFonts').onclick = (e) => {
+    const b = e.target.closest('[data-f]'); if (!b) return;
+    nameDraft.font = b.dataset.f; paintNsEditor(); paint();
+  };
+  $('nxPresets').onclick = (e) => {
+    const b = e.target.closest('[data-p]'); if (!b) return;
+    const pr = NS_PRESETS[+b.dataset.p].s;
+    nameDraft = { font: 'normal', color: null, color2: null, glow: null, bold: false, italic: false, shimmer: false, ...pr };
+    paintNsEditor(); paint();
+  };
+
+  /* ---- nitro shop ----
+     Decorations are plain files under assets/deco/, listed in manifest.json
+     (built by tools/build-deco-manifest.js). Equipping writes straight to the
+     profile, so the shop has no Save step. */
+  let decoManifest = null;
+  async function loadDecoManifest() {
+    if (decoManifest) return decoManifest;
+    try {
+      const r = await fetch('assets/deco/manifest.json', { cache: 'no-cache' });
+      decoManifest = r.ok ? await r.json() : {};
+    } catch { decoManifest = {}; }
+    return decoManifest;
+  }
+
+  const shopEmpty = (what) => `<div class="shop-empty" style="grid-column:1/-1"><i class="fa-solid fa-hourglass-half"></i>
+      <b>${what} are on the way</b><small>They show up here as soon as the decoration files are added to <code>assets/deco</code>.</small></div>`;
+
+  // The shop renders a page of decorations at a time. Every APNG in view
+  // decodes and animates, so rendering the whole catalogue at once makes the
+  // page crawl. The first page shows straight away; the next one loads when the
+  // "Loading more" marker scrolls near the viewport.
+  const SHOP_PAGE = 9;
+  let shopStops = [];
+  const shopNear = (el) => el.offsetParent !== null && el.getBoundingClientRect().top < window.innerHeight + 300;
+
+  function shopCard(it, kind, th) {
+    const on = (kind === 'pfp' ? th.pfp_deco : th.bio_deco) === it.file;
+    const prev = kind === 'pfp'
+      ? `<div class="si-prev">${UI.avatar({ ...me, is_nitro: true, theme: { ...th, pfp_deco: it.file } }, 64, { halo: false })}</div>`
+      : `<div class="si-bio"><div class="bio-deco-box">${UI.bioDecoImgs(it.file)}<span>Your bio</span></div></div>`;
+    return `<div class="shop-item ${on ? 'on' : ''}">${prev}
+      <b>${UI.esc(it.name || it.id)}</b><small>${on ? 'Equipped' : (kind === 'pfp' ? 'Avatar frame' : 'Bio banner')}</small>
+      <button class="btn ${on ? 'btn-ghost' : 'btn-primary'} btn-sm" data-kind="${kind}" data-file="${UI.esc(it.file)}">${on ? 'Remove' : 'Equip'}</button>
+    </div>`;
+  }
+
+  function shopSection(el, list, kind, th, countEl) {
+    const usable = list.filter((it) => UI.nxDecoPath({ is_nitro: true, theme: kind === 'pfp' ? { pfp_deco: it.file } : { bio_deco: it.file } }, kind));
+    if (countEl) countEl.textContent = usable.length ? `${usable.length}` : '';
+    if (!usable.length) { el.innerHTML = shopEmpty(kind === 'pfp' ? 'Avatar frames' : 'Bio banners'); return; }
+    el.innerHTML = '<div class="shop-cards"></div><div class="shop-more" hidden><i class="fa-solid fa-circle-notch fa-spin"></i> Loading more...</div>';
+    const cards = el.querySelector('.shop-cards');
+    const more = el.querySelector('.shop-more');
+    let shown = 0;
+    const showNext = () => {
+      const batch = usable.slice(shown, shown + SHOP_PAGE);
+      cards.insertAdjacentHTML('beforeend', batch.map((it) => shopCard(it, kind, th)).join(''));
+      shown += batch.length;
+      more.hidden = shown >= usable.length;
+      if (shown >= usable.length) stop();
+    };
+    // Only scrolling loads the next page: the first page is exactly SHOP_PAGE.
+    const onScroll = () => { if (shown < usable.length && shopNear(more)) showNext(); };
+    const stop = () => document.removeEventListener('scroll', onScroll, true);
+    document.addEventListener('scroll', onScroll, true);
+    shopStops.push(stop);
+    showNext();
+  }
+
+  async function renderShop() {
+    if (!me?.is_nitro) return;
+    shopStops.forEach((stop) => stop());
+    shopStops = [];
+    const m = await loadDecoManifest();
+    const th = me.theme || {};
+    shopSection($('shopPfp'), Array.isArray(m.pfp) ? m.pfp : [], 'pfp', th, $('shopPfpN'));
+    shopSection($('shopBio'), Array.isArray(m.profile) ? m.profile : [], 'bio', th, $('shopBioN'));
+  }
+
+  async function equipDeco(kind, file) {
+    const key = kind === 'pfp' ? 'pfp_deco' : 'bio_deco';
+    const next = (me.theme || {})[key] === file ? null : file;
+    const theme = { ...(me.theme || {}), [key]: next };
+    const { error } = await window.db.from('profiles').update({ theme }).eq('id', me.id);
+    if (error) return UI.toast(error.message, true);
+    me.theme = theme;
+    UI.toast(next ? 'Equipped.' : 'Removed.');
+    renderShop(); paint();
+  }
+  ['shopPfp', 'shopBio'].forEach((id) => {
+    $(id).onclick = (e) => {
+      const b = e.target.closest('[data-kind]'); if (!b) return;
+      equipDeco(b.dataset.kind, b.dataset.file);
+    };
+  });
+
   // ---- password ----
   $('btnPass').onclick = async () => {
     const a = $('fPass1').value, b = $('fPass2').value;
@@ -447,6 +646,9 @@
         const img = document.createElement('img'); img.src = url;
         $('wpPrev').replaceChildren(img);
       }).catch(() => { /* shared background renderer retries */ });
+    } else {
+      const u = (bgVal.match(/^url\(\s*'(.*)'\s*\)$/) || [])[1];
+      if (u && window.CloudGate?.isOurs(u)) { const img = document.createElement('img'); img.src = u; $('wpPrev').replaceChildren(img); }
     }
     bgDim = th.dash_dim ?? 0;
     bgBlur = th.dash_blur ?? 0;
@@ -469,6 +671,8 @@
     $('devPanel').classList.toggle('hidden', !devMode);
     $('fHaloCss').value = th.halo_css || '';
     syncHaloCssField();
+    nameDraft = nsFromTheme();
+    paintNsEditor();
     if (devMode) paintIce();
     paintBgUI();
     avatarFile = bannerFile = null; clearAvatar = clearBanner = false;
@@ -487,9 +691,13 @@
     if (!me) return UI.toast('Could not load your profile.', true);
     window.Notify?.start(me);
     window.Guard?.start(me);
+    document.querySelectorAll('.nitro-only').forEach((el) => el.classList.toggle('hidden', !me.is_nitro));
     $('acUser').textContent = '@' + me.username;
     $('acSince').textContent = new Date(me.created_at).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
     hydrate();
     loadNitro();
+    // Deep links: profile.html#drive, #appearance, ...
+    const tab = location.hash.slice(1);
+    if (tab) document.querySelector(`.set-nav button[data-tab="${CSS.escape(tab)}"]`)?.click();
   })();
 })();

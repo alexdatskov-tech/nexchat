@@ -25,7 +25,14 @@ window.SettingsUI = (function () {
     };
     main.addEventListener('input', mark);
     main.addEventListener('change', mark);
-    main.addEventListener('click', (e) => { if (e.target.closest('.swatch, .bg-preset, .style-opt, [data-dirty]')) setDirty(true); });
+    // Buttons and labels in editable panes change settings too (Nitro fonts,
+    // presets, toggles). Save and Reset themselves do not count.
+    main.addEventListener('click', (e) => {
+      if (e.target.closest('#btnSave, #btnReset')) return;
+      const pane = e.target.closest('[data-pane]');
+      if (pane && pane.dataset.nosave !== undefined) return;
+      if (e.target.closest('button, label, .swatch, .bg-preset, .style-opt, [data-dirty]')) setDirty(true);
+    });
     bar().insertAdjacentHTML('afterbegin', '<span class="sb-msg"><i class="fa-solid fa-circle-exclamation"></i> You have unsaved changes</span>');
     window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   }
@@ -69,5 +76,30 @@ window.SettingsUI = (function () {
   function init() { wireDirty(); wireUploads(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-  return { clean, setDirty, get dirty() { return dirty; } };
+  // Three-way prompt for leaving a pane with unsaved changes.
+  // Resolves 'save' | 'discard' | 'stay'.
+  function askLeave() {
+    return new Promise((resolve) => {
+      const ov = document.createElement('div');
+      ov.className = 'overlay';
+      ov.innerHTML = `
+        <div class="modal" style="max-width:400px;">
+          <div class="modal-head"><h3>Save your changes?</h3></div>
+          <div class="modal-body"><p style="font-size:13.5px;color:var(--txt-2);margin:0;">You have unsaved changes on this page. Save them before you switch?</p></div>
+          <div class="modal-foot">
+            <button class="btn btn-quiet" data-stay>Stay here</button>
+            <button class="btn btn-ghost" data-discard>Discard</button>
+            <button class="btn btn-primary" data-save>Save changes</button>
+          </div>
+        </div>`;
+      document.body.appendChild(ov);
+      const done = (v) => { ov.remove(); resolve(v); };
+      ov.querySelector('[data-stay]').onclick = () => done('stay');
+      ov.querySelector('[data-discard]').onclick = () => done('discard');
+      ov.querySelector('[data-save]').onclick = () => done('save');
+      ov.onclick = (e) => { if (e.target === ov) done('stay'); };
+    });
+  }
+
+  return { clean, setDirty, askLeave, get dirty() { return dirty; } };
 })();

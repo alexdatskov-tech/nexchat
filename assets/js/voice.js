@@ -531,7 +531,8 @@ window.Voice = (function () {
       }).then(() => {}, () => {});
     }
 
-    sig = window.db.channel('voice:' + channel.id, { config: { broadcast: { self: false, ack: false } } });
+    syncWatch();   // we are in this call now: stop watching it as an outsider
+    sig = window.db.channel('voice:' + channel.id, { config: { broadcast: { self: false, ack: false }, presence: { key: me.id, enabled: true } } });
 
     sig.on('broadcast', { event: 'sig' }, async ({ payload: m }) => {
       if (!m || !chan || m.from === me.id || (m.to && m.to !== me.id)) return;
@@ -611,6 +612,8 @@ window.Voice = (function () {
 
     await sig.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
+        // Presence is how people outside the call see that it is live.
+        try { sig.track({ name: me.display_name || me.username }); } catch {}
         send('hello', { profile: selfProfile() });
         setTimeout(() => send('ping', {}), 1500);
       }
@@ -638,8 +641,57 @@ window.Voice = (function () {
     if (camTrack) { camTrack.stop(); camTrack = null; camStream = null; }
     chan = null; cam = false; sharing = false;
     stats = { res: '', fps: 0, vkbps: 0, akbps: 0, rtt: 0, codec: '', peers: [] };
+    syncWatch();
     onChange(state());
   }
+
+  /* ---------- live call watch ----------
+     Each call is a realtime channel (voice:<id>) that tracks presence for the
+     people in it. Anyone who may open the call can watch its presence without
+     joining, so the sidebar can show "call in progress" and join it in one
+     click. The caller decides which ids to watch (conversations you are in,
+     the voice channels of the server you are viewing). */
+  const watching = new Map();          // id -> { ch, count }
+  let watchWanted = new Set();
+  let liveMap = new Map();             // id -> people in that call (only > 0)
+  const liveListeners = new Set();
+
+  function notifyLive() {
+    const next = new Map();
+    watching.forEach((w, id) => { if (w.count > 0) next.set(id, w.count); });
+    liveMap = next;
+    liveListeners.forEach((f) => { try { f(liveMap); } catch {} });
+  }
+
+  function syncWatch() {
+    const joined = chan ? chan.id : null;
+    for (const [id, w] of [...watching]) {
+      if (!watchWanted.has(id) || id === joined) {
+        try { window.db.removeChannel(w.ch); } catch {}
+        watching.delete(id);
+      }
+    }
+    for (const id of watchWanted) {
+      if (id === joined || watching.has(id)) continue;
+      const w = { ch: null, count: 0 };
+      // enabled: presence is only published/received when the channel says so.
+      w.ch = window.db.channel('voice:' + id, { config: { presence: { enabled: true } } });
+      w.ch.on('presence', { event: 'sync' }, () => {
+        w.count = Object.keys(w.ch.presenceState() || {}).length;
+        notifyLive();
+      });
+      w.ch.subscribe();
+      watching.set(id, w);
+    }
+    notifyLive();
+  }
+
+  function watch(ids) {
+    watchWanted = new Set((ids || []).filter(Boolean));
+    syncWatch();
+  }
+  function onLive(f) { liveListeners.add(f); try { f(liveMap); } catch {} }
+  const live = () => liveMap;
 
   function pushFlags() {
     members.set(me.id, selfProfile());
@@ -761,5 +813,6 @@ window.Voice = (function () {
     get targetFps() { return targetFps; },
     localCam, localScreen, peerCam, peerScreen, setManualStun,
     get iceServers() { return iceServers; },
+    watch, live, onLive,
   };
 })();
