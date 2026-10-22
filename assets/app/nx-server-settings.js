@@ -141,21 +141,14 @@
         if (!document.querySelector(`link[data-ssfont="${CSS.escape(href)}"]`)) {
           const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.dataset.ssfont = href; document.head.appendChild(l);
         }
-        const fam = (new URL(href).searchParams.get('family') || '').split(':')[0].replace(/\+/g, ' ').replace(/'/g, '');
+        const fam = (new URL(href).searchParams.get('family') || '').split(':')[0].replace(/[^A-Za-z0-9 _-]/g, ' ').trim().slice(0, 60);
         return `'${fam}', var(--f-display)`;
       }
     }
     if (d.name_font === 'upload') {
       const url = fontPreview || d.name_font_file;
-      if (url) {
-        const fam = famHash(url);
-        if (!document.querySelector(`style[data-ssfont="${fam}"]`)) {
-          const st = document.createElement('style'); st.dataset.ssfont = fam;
-          st.textContent = `@font-face{font-family:'${fam}';src:url("${url.replace(/"/g, '%22')}");font-display:swap;}`;
-          document.head.appendChild(st);
-        }
-        return `'${fam}', var(--f-display)`;
-      }
+      const fam = url ? NX.fontFace(url) : null;
+      if (fam) return `'${fam}', var(--f-display)`;
     }
     return (FONTS[d.name_font] || FONTS.display)[1];
   }
@@ -335,7 +328,7 @@
       if (a === 'edit') return editChannel(c, b);
       if (a === 'del') {
         if (!await NX.confirm({ title: `Delete ${c.type === 'category' ? 'category' : '#' + c.name}?`, body: c.type === 'category' ? 'Channels inside it stay, without a category.' : 'Every message in it goes too. This can’t be undone.', danger: true })) return;
-        const { error } = await window.db.from('channels').delete().eq('id', c.id);
+        const { error } = await NX.must(window.db.from('channels').delete().eq('id', c.id));
         if (error) return NX.fail(error);
         NX.Chat?.drop?.('channel:' + c.id);
         touched(); NX.toast('Channel deleted.'); return paintChannels(b);
@@ -375,7 +368,7 @@
           const patch = { name };
           if (!isCat) { patch.topic = body.querySelector('[data-topic]').value.trim() || null; patch.parent_id = body.querySelector('[data-p]').value || null; }
           if (c) {
-            const { error } = await window.db.from('channels').update(patch).eq('id', c.id);
+            const { error } = await NX.must(window.db.from('channels').update(patch).eq('id', c.id));
             if (error) throw error;
           } else {
             const type = body.querySelector('[data-t]').value;
@@ -503,7 +496,7 @@
       if (a === 'ricon') roleIconDialog(r, b);
       if (a === 'rdel') {
         if (!await NX.confirm({ title: `Delete ${r.name}?`, body: 'Members lose this role and its permissions.', danger: true })) return;
-        const { error } = await window.db.from('roles').delete().eq('id', r.id);
+        const { error } = await NX.must(window.db.from('roles').delete().eq('id', r.id));
         if (error) return NX.fail(error);
         pg.dirty(false); selRole = null; touched(); rolesTab(b);
       }
@@ -520,7 +513,7 @@
       }
       if (a === 'runassign') {
         const uid = e.target.closest('[data-u]').dataset.u;
-        const { error } = await window.db.from('member_roles').delete().eq('server_id', sid).eq('user_id', uid).eq('role_id', r.id);
+        const { error } = await NX.must(window.db.from('member_roles').delete().eq('server_id', sid).eq('user_id', uid).eq('role_id', r.id));
         if (error) return NX.fail(error);
         touched(); await loadRoles(); paintRoles(b);
       }
@@ -562,7 +555,7 @@
       body.querySelector('[data-emoji]').value = '';
     };
     const done = async (icon) => {
-      const { error } = await window.db.from('roles').update({ icon_url: icon }).eq('id', r.id);
+      const { error } = await NX.must(window.db.from('roles').update({ icon_url: icon }).eq('id', r.id));
       if (error) throw error;
       r.icon_url = icon; touched(); paintRoles(b);
     };
@@ -689,7 +682,7 @@
       if (!a || !tr) return;
       if (a === 'copy') return NX.copy(NX.pageUrl(`index.html?invite=${tr.dataset.code}`), 'Invite link copied');
       if (a === 'del') {
-        const { error } = await window.db.from('invites').delete().eq('id', tr.dataset.id);
+        const { error } = await NX.must(window.db.from('invites').delete().eq('id', tr.dataset.id));
         if (error) return NX.fail(error);
         NX.toast('Invite revoked.'); paint();
       }
@@ -722,7 +715,7 @@
       if (!e.target.closest('[data-a="unban"]')) return;
       const uid = e.target.closest('[data-u]').dataset.u;
       if (!await NX.confirm({ title: `Unban ${P().nameOf(P().get(uid))}?`, body: 'They’ll be able to rejoin with an invite.', ok: 'Unban' })) return;
-      const { error: err } = await window.db.from('server_bans').delete().eq('server_id', sid).eq('user_id', uid);
+      const { error: err } = await NX.must(window.db.from('server_bans').delete().eq('server_id', sid).eq('user_id', uid));
       if (err) return NX.fail(err);
       list = list.filter((x) => x.user_id !== uid); paint(); NX.toast('Ban lifted.');
     };

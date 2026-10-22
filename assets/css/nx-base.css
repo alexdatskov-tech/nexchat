@@ -271,3 +271,4 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 body.has-bg #wall { display: block; }
 #wall .wall-img { position: absolute; inset: -40px; background: var(--dash-bg) center / cover no-repeat; filter: brightness(var(--dash-bright, 1)) blur(var(--dash-blur, 0px)); }
 #wall .wall-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, var(--dash-dim, 0)); }
+.av-halo-custom { contain: paint; isolation: isolate; }

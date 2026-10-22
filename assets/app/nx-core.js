@@ -141,6 +141,27 @@ window.NX = (function () {
   NX.pageUrl = (path) => new URL(path, shell() ? shell().site : location.href.replace(/[#?].*$/, '')).href;
   NX.reload = () => { if (shell()) shell().go('index.html'); else location.reload(); };
 
+  /* Loads a font file under a generated family name through the FontFace API
+     (no CSS text is built from the URL, so it can't inject styles). Only
+     https and our own blob: previews are accepted. Returns the family or null. */
+  const fontFaces = new Map();
+  NX.fontFace = (raw) => {
+    let u;
+    try { u = new URL(String(raw || ''), location.href); } catch { return null; }
+    if (u.protocol !== 'https:' && u.protocol !== 'blob:') return null;
+    if (fontFaces.has(u.href)) return fontFaces.get(u.href);
+    let h = 0;
+    for (const ch of u.href) h = ((h << 5) - h + ch.charCodeAt(0)) | 0;
+    const fam = 'NxFont' + (h >>> 0).toString(36);
+    fontFaces.set(u.href, fam);
+    try {
+      const face = new FontFace(fam, `url(${JSON.stringify(u.href)})`, { display: 'swap' });
+      document.fonts.add(face);
+      face.load().catch(() => {});
+    } catch { return null; }
+    return fam;
+  };
+
   /* ---------- layer ---------- */
   function layer(cls) {
     let el = document.querySelector('.' + cls);
@@ -161,6 +182,14 @@ window.NX = (function () {
     if (opts.action) el.querySelector('button').onclick = () => { kill(); opts.action.fn(); };
     setTimeout(kill, opts.ms || (opts.err ? 5000 : 3200));
     return kill;
+  };
+  // RLS turns a refused update/delete into "0 rows, no error". Wrap such a
+  // query to get an error back when nothing was actually changed.
+  NX.must = async (q, msg) => {
+    const { data, error } = await q.select();
+    if (error) return { data: null, error };
+    if (!data || !data.length) return { data: null, error: { message: msg || 'You don\u2019t have permission to do that.' } };
+    return { data, error: null };
   };
   NX.fail = (err, prefix) => {
     const m = (err && (err.message || err.error_description || err.msg)) || String(err || 'Something went wrong.');
@@ -223,6 +252,7 @@ window.NX = (function () {
         if (b.left) { const s = NX.h(`<div class="left"></div>`); s.append(typeof b.left === 'string' ? NX.h(b.left) : b.left); foot.appendChild(s); return; }
         const btn = NX.h(`<button type="button" class="btn ${b.cls || 'btn-quiet'}">${b.icon ? `<i class="fa-solid ${b.icon}"></i>` : ''}${NX.esc(b.label)}</button>`);
         btn.onclick = async () => {
+          if (btn.classList.contains('busy')) return;   // Enter can't submit twice
           if (!b.onClick) return close(b.value);
           btn.classList.add('busy');
           try {
@@ -342,9 +372,9 @@ window.NX = (function () {
   window.addEventListener('resize', () => NX.closeMenu());
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (openMenu) { NX.closeMenu(); e.stopPropagation(); return; }
+    if (openMenu) { NX.closeMenu(); e.stopImmediatePropagation(); e.preventDefault(); return; }
     const m = NX.topModal();
-    if (m) { m.close(null); e.stopPropagation(); }
+    if (m) { m.close(null); e.stopImmediatePropagation(); e.preventDefault(); }
   });
 
   /* ---------- tooltips: any element with data-tip ---------- */

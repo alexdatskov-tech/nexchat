@@ -35,6 +35,7 @@
       this.note = this.el.querySelector('.c-note');
       this.wire();
       this.refreshPermission();
+      this._offBlocked = NX.on('blocked', () => this.refreshPermission());
       this.loadDraft();
     }
 
@@ -309,10 +310,15 @@
           results = settled.filter((s) => s.status === 'fulfilled').map((s) => s.value);
           if (!results.length && !m.content) { chat.remove(m.id); return; }
         }
-        const row = { [this.a.fk]: this.a.id, author_id: NX.me.id, content: m.content };
-        if (m.reply_to_id) row.reply_to_id = m.reply_to_id;
-        const { data: real, error } = await window.db.from(this.a.table).insert(row).select().single();
-        if (error) throw error;
+        // A retry after the files failed must not post the message twice.
+        let real = m._real || null;
+        if (!real) {
+          const row = { [this.a.fk]: this.a.id, author_id: NX.me.id, content: m.content };
+          if (m.reply_to_id) row.reply_to_id = m.reply_to_id;
+          const res = await window.db.from(this.a.table).insert(row).select().single();
+          if (res.error) throw res.error;
+          real = m._real = res.data;
+        }
         let atts = [];
         if (results.length) {
           const rows = results.map((r, i) => ({
@@ -417,6 +423,7 @@
       if (d) { this.ta.value = d; requestAnimationFrame(() => { this.fit(); this.sync(); }); }
     }
     destroy() {
+      this._offBlocked?.();
       this.jobs.forEach((j) => j.state !== 'done' && j.cancel());
     }
   }

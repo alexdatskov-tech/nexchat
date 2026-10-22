@@ -241,6 +241,7 @@ window.CloudGate = (function () {
     window.db.rpc('storage_forget', { p_key: key }).then(() => {}, () => {});
   }
   function recordUpload(key, g, ep, size) {
+    if (proxyUrl()) return;   // the proxy records uploads (and their owner) itself
     if (!window.db || !UUID.test(g.id || '') || !UUID.test(ep.id || '')) return;
     window.db.rpc('storage_record', { p_key: key, p_group: g.id, p_endpoint: ep.id, p_size: size })
       .then(({ error }) => { if (error) console.warn('Storage usage not recorded:', error.message); }, () => {});
@@ -435,7 +436,7 @@ window.CloudGate = (function () {
     const { out, owner, ep } = await onOwner(key, (e) => callAt(e, '/api/files/rename', { method: 'POST', body: { key, new_name: newName } }));
     // The file now has a new key. Move its usage record so the group totals stay right.
     const newKey = key.slice(0, key.lastIndexOf('/') + 1) + newName;
-    if (owner?.group_id && owner?.endpoint_id && newKey !== key && window.db) {
+    if (!proxyUrl() && owner?.group_id && owner?.endpoint_id && newKey !== key && window.db) {
       window.db.rpc('storage_record', { p_key: newKey, p_group: owner.group_id, p_endpoint: owner.endpoint_id, p_size: owner.size || 0 })
         .then(() => forget(key), () => {});
     }

@@ -395,6 +395,7 @@
     closePage(true);
     const view = NX.views[name];
     if (!view) return NX.go('home');
+    NX.viewing = null;   // messages arriving behind the page aren't being read
     const host = NX.h('<div class="page" role="dialog" aria-modal="true"></div>');
     document.body.appendChild(host);
     page = { name, view, host };
@@ -412,7 +413,9 @@
 
   function globalKeys(e) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); switcher(); return; }
-    if (e.key === 'Escape' && page && !NX.topModal() && !document.querySelector('.menu, .ucard, .emoji-pick, .lightbox')) { NX.closePage(); return; }
+    if (e.defaultPrevented) return;
+    // Escape on a page goes through its close button, which checks for unsaved changes.
+    if (e.key === 'Escape' && page && !NX.topModal() && !document.querySelector('.menu, .ucard, .emoji-pick, .lightbox')) { page.host.querySelector('.pg-close')?.click(); return; }
     if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { current?.view.step?.(e.key === 'ArrowUp' ? -1 : 1); e.preventDefault(); }
     // typing anywhere goes to the composer
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && !page && !NX.topModal()

@@ -206,11 +206,23 @@
     return put(path, p.file);
   }
 
-  /* ---------- attachment URLs ---------- */
+  /* ---------- attachment URLs ----------
+     A stored URL is whatever the sender wrote, so only http(s) (and our own
+     blob: previews) is ever rendered, fetched or opened. */
+  function safeUrl(u, { blob = false } = {}) {
+    try {
+      const x = new URL(String(u || ''), location.href);
+      if (x.protocol === 'https:' || x.protocol === 'http:') return x.href;
+      if (blob && x.protocol === 'blob:') return x.href;
+    } catch {}
+    return null;
+  }
   const managed = (url) => !!window.Store?.isManaged(url);
-  function resolved(url) {
-    if (!managed(url)) return Promise.resolve(url);
-    return window.Store.sign(url);
+  async function resolved(url) {
+    const u = managed(url) ? await window.Store.sign(url) : url;
+    const ok = safeUrl(u, { blob: true });
+    if (!ok) throw new Error('That link isn\u2019t allowed.');
+    return ok;
   }
   async function download(url, name) {
     try {
@@ -223,8 +235,9 @@
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 20000);
     } catch {
-      const u = await resolved(url).catch(() => url);
-      window.open(u, '_blank', 'noopener');
+      const u = await resolved(url).catch(() => null);
+      if (u) window.open(u, '_blank', 'noopener');
+      else NX.toast('That file can\u2019t be opened.', { err: true });
     }
   }
 
@@ -249,6 +262,7 @@
   function renderAll(host, atts, opts = {}) {
     host.innerHTML = '';
     if (!atts?.length) return;
+    atts = atts.map((a) => (a._local || safeUrl(a.url) ? a : { ...a, url: '', _bad: true }));
     const media = atts.filter((a) => kindOf(a.file_name, a.mime_type) === 'image' || (a._local && kindOf(a.file_name, a.mime_type) === 'video'));
     const rest = atts.filter((a) => !media.includes(a));
     if (media.length) {
@@ -318,12 +332,13 @@
 
   async function removeAtt(a, opts) {
     if (!await NX.confirm({ title: 'Delete file?', body: `"${a.file_name}" will be removed from the message for everyone.`, danger: true })) return;
-    const { error } = await window.db.from(opts.table || 'message_attachments').delete().eq('id', a.id);
-    if (error) return NX.fail(error);
-    window.Store?.del(a.url).catch(() => {});
+    const { data, error } = await window.db.from(opts.table || 'message_attachments').delete().eq('id', a.id).select('id');
+    if (error || !data?.length) return NX.fail(error || { message: 'You don\u2019t have permission to delete that file.' });
+    window.Store?.del(a.url).catch(() => {});   // only once the row is really gone
     opts.onRemove?.(a);
   }
 
+  const players = new Set();
   function audioPlayer(a) {
     const el = NX.h(`<div class="aplayer">
       <button class="ap-play" title="Play"><i class="fa-solid fa-play"></i></button>
@@ -340,10 +355,12 @@
     play.onclick = async () => {
       if (!src) { src = await resolved(a.url).catch(() => a.url); au.src = src; }
       document.querySelectorAll('audio, video').forEach((o) => { if (o !== au && !o.closest('.vtile')) o.pause(); });
-      NX.files._audio?.forEach((o) => { if (o !== au) o.pause(); });
+      players.forEach((p) => { if (p.au !== au) p.au.pause(); });
       au.paused ? au.play().catch(() => NX.toast('Couldn’t play that file.', { err: true })) : au.pause();
     };
-    (NX.files._audio = NX.files._audio || new Set()).add(au);
+    // Players that left the page are dropped (and stopped) on the next render.
+    for (const p of [...players]) if (!p.el.isConnected) { p.au.pause(); players.delete(p); }
+    players.add({ au, el });
     au.onplay = () => { play.innerHTML = '<i class="fa-solid fa-pause"></i>'; };
     au.onpause = au.onended = () => { play.innerHTML = '<i class="fa-solid fa-play"></i>'; };
     au.onloadedmetadata = () => { el.querySelector('.dur').textContent = fmtTime(au.duration); };
@@ -361,18 +378,16 @@
   }
 
   /* Inline preview for text files and PDFs, loaded only when asked for. */
+  // pdf.js 4.x (ESM). Older 3.x builds run attacker-controlled font code
+  // (CVE-2024-4367); eval is also switched off when a document is opened.
   let pdfReady = null;
   function loadPdf() {
     if (pdfReady) return pdfReady;
-    const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
-    pdfReady = new Promise((ok, no) => {
-      if (window.pdfjsLib) return ok();
-      const s = document.createElement('script');
-      s.src = CDN + '/pdf.min.js';
-      s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = CDN + '/pdf.worker.min.js'; ok(); };
-      s.onerror = () => { pdfReady = null; no(new Error('Could not load the PDF viewer.')); };
-      document.head.appendChild(s);
-    });
+    const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38';
+    pdfReady = import(CDN + '/pdf.min.mjs').then((lib) => {
+      lib.GlobalWorkerOptions.workerSrc = CDN + '/pdf.worker.min.mjs';
+      return lib;
+    }).catch(() => { pdfReady = null; throw new Error('Could not load the PDF viewer.'); });
     return pdfReady;
   }
   async function togglePreview(wrap, a, kind, btn) {
@@ -390,8 +405,8 @@
         const t = await r.text();
         body.innerHTML = `<pre>${esc(t.slice(0, 200000))}</pre>`;
       } else {
-        await loadPdf();
-        const doc = await window.pdfjsLib.getDocument({ url }).promise;
+        const pdfjs = await loadPdf();
+        const doc = await pdfjs.getDocument({ url, isEvalSupported: false, enableXfa: false }).promise;
         body.innerHTML = '';
         const width = Math.min(540, wrap.clientWidth - 4);
         for (let i = 1; i <= Math.min(doc.numPages, 30); i++) {
@@ -443,7 +458,7 @@
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'x') return close();
       if (a === 'dl') return download(list[i].url, list[i].file_name);
-      if (a === 'open') return resolved(list[i].url).then((u) => window.open(u, '_blank', 'noopener'));
+      if (a === 'open') return resolved(list[i].url).then((u) => window.open(u, '_blank', 'noopener'), () => NX.toast('That file can\u2019t be opened.', { err: true }));
       if (e.target.closest('.lb-prev')) return step(-1);
       if (e.target.closest('.lb-next')) return step(1);
       if (e.target.classList.contains('lb-stage')) close();
@@ -457,5 +472,5 @@
     show();
   }
 
-  NX.files = { MAX_MB, kindOf, extOf, prepare, put, startUpload, uploadImage, renderAll, lightbox, download, resolved, fitBox, browserImage };
+  NX.files = { safeUrl, MAX_MB, kindOf, extOf, prepare, put, startUpload, uploadImage, renderAll, lightbox, download, resolved, fitBox, browserImage };
 })();

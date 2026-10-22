@@ -23,6 +23,8 @@
 -- 8. Platform locks, 1:1 DMs and storage records can't be tampered with.
 -- 9. Private realtime channels for calls, typing and call rings.
 -- 10. Drops the unused bot tables and columns.
+-- 11. Role hierarchy: Manage roles only works below your own top role, and
+--     reactions must be short emoji.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -564,6 +566,88 @@ create policy nx_realtime_read on realtime.messages for select to authenticated
 drop policy if exists nx_realtime_write on realtime.messages;
 create policy nx_realtime_write on realtime.messages for insert to authenticated
   with check (realtime.messages.extension in ('broadcast', 'presence') and public.nx_topic_ok((select realtime.topic()), true));
+
+-- ---------------------------------------------------------------------------
+-- 11. Role hierarchy: people with Manage roles can only touch roles below
+-- their own highest role, and can't hand out permissions they don't have.
+-- The server owner and platform staff are not limited.
+-- ---------------------------------------------------------------------------
+create or replace function public.nx_role_ceiling(p_server uuid, p_user uuid)
+returns integer
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when exists (select 1 from public.servers s where s.id = p_server and s.owner_id = p_user) then 2147483647
+    when public.is_platform_admin(p_user) then 2147483647
+    else coalesce((select max(r.position) from public.member_roles mr join public.roles r on r.id = mr.role_id
+                   where mr.server_id = p_server and mr.user_id = p_user), 0)
+  end;
+$$;
+
+create or replace function public.nx_guard_roles()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_server uuid := coalesce(new.server_id, old.server_id);
+  v_top integer;
+  v_mine bigint;
+begin
+  if current_user not in ('authenticated', 'anon') then return coalesce(new, old); end if;
+  v_top := public.nx_role_ceiling(v_server, auth.uid());
+  if v_top = 2147483647 then return coalesce(new, old); end if;
+  v_mine := public.member_permissions(v_server, auth.uid());
+  if tg_op in ('UPDATE', 'DELETE') and not old.is_default and old.position >= v_top then
+    raise exception 'You can only change roles below your own highest role.';
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    if not new.is_default and new.position >= v_top then
+      raise exception 'New roles must sit below your own highest role.';
+    end if;
+    if (v_mine & 65536) = 0 and (new.permissions & ~v_mine) <> 0 then
+      raise exception 'You can''t grant permissions you don''t have yourself.';
+    end if;
+  end if;
+  if tg_op = 'DELETE' and old.is_default then raise exception 'The @everyone role can''t be deleted.'; end if;
+  return coalesce(new, old);
+end $$;
+drop trigger if exists trg_guard_roles on public.roles;
+create trigger trg_guard_roles before insert or update or delete on public.roles
+  for each row execute function public.nx_guard_roles();
+
+create or replace function public.nx_guard_member_roles()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_server uuid := coalesce(new.server_id, old.server_id);
+  v_role uuid := coalesce(new.role_id, old.role_id);
+  v_top integer;
+begin
+  if current_user not in ('authenticated', 'anon') then return coalesce(new, old); end if;
+  v_top := public.nx_role_ceiling(v_server, auth.uid());
+  if v_top = 2147483647 then return coalesce(new, old); end if;
+  if exists (select 1 from public.roles r where r.id = v_role and (r.position >= v_top or r.server_id <> v_server)) then
+    raise exception 'You can only give or take roles below your own highest role.';
+  end if;
+  return coalesce(new, old);
+end $$;
+drop trigger if exists trg_guard_member_roles on public.member_roles;
+create trigger trg_guard_member_roles before insert or update or delete on public.member_roles
+  for each row execute function public.nx_guard_member_roles();
+
+-- Reactions are short emoji, never markup (the app checks too).
+delete from public.message_reactions where char_length(emoji) > 32 or emoji ~ '[<>"''&]';
+delete from public.dm_message_reactions where char_length(emoji) > 32 or emoji ~ '[<>"''&]';
+alter table public.message_reactions drop constraint if exists message_reactions_emoji_check;
+alter table public.message_reactions add constraint message_reactions_emoji_check check (char_length(emoji) between 1 and 32 and emoji !~ '[<>"''&]');
+alter table public.dm_message_reactions drop constraint if exists dm_message_reactions_emoji_check;
+alter table public.dm_message_reactions add constraint dm_message_reactions_emoji_check check (char_length(emoji) between 1 and 32 and emoji !~ '[<>"''&]');
 
 -- ---------------------------------------------------------------------------
 -- 10. Remove leftovers nothing uses any more

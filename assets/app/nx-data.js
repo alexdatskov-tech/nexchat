@@ -39,6 +39,15 @@
     if (error) throw error;
     D.me = people().put(data);
     NX.me = D.me;
+    // Platform staff powers, as configured by the owner (nx_can). The database
+    // enforces them; the UI only uses this to hide what would be refused.
+    D.staff = {};
+    if (people().rank(D.me) >= 1) {
+      await Promise.all(['post_anywhere', 'delete_messages', 'view_all_servers'].map(async (k) => {
+        const { data: ok } = await db().rpc('nx_can', { p_perm: k });
+        D.staff[k] = !!ok;
+      })).catch(() => {});
+    }
     return D.me;
   }
 
@@ -219,7 +228,7 @@
       return;
     }
     if (!await NX.confirm({ title: `Leave ${dmTitle(c)}?`, body: 'You won’t get messages from this group unless someone adds you back.', ok: 'Leave group', danger: true })) return;
-    const { error } = await db().from('dm_participants').delete().eq('conversation_id', c.id).eq('user_id', D.me.id);
+    const { error } = await NX.must(db().from('dm_participants').delete().eq('conversation_id', c.id).eq('user_id', D.me.id));
     if (error) return NX.fail(error);
     D.dms = D.dms.filter((x) => x.id !== c.id);
     NX.emit('dms');
@@ -286,7 +295,7 @@
     if (iconFile) {
       try {
         const up = await NX.files.uploadImage(iconFile, `servers/${data.id}`, { max: 512 });
-        await db().from('servers').update({ icon_url: up.url }).eq('id', data.id);
+        await NX.must(db().from('servers').update({ icon_url: up.url }).eq('id', data.id));
       } catch (e) { NX.fail(e, 'Icon upload failed'); }
     }
     await reloadServers();
@@ -297,7 +306,7 @@
     if (s.owner_id === D.me.id) return NX.toast('Owners can’t leave their own server. Transfer or delete it in Server settings.', { err: true });
     if (!await NX.confirm({ title: `Leave ${s.name}?`, body: `You won’t be able to rejoin unless you get a new invite.`, ok: 'Leave server', danger: true })) return;
     if (window.Voice?.state().active && window.Voice.state().serverId === s.id) await window.Voice.leave();
-    const { error } = await db().from('server_members').delete().eq('server_id', s.id).eq('user_id', D.me.id);
+    const { error } = await NX.must(db().from('server_members').delete().eq('server_id', s.id).eq('user_id', D.me.id));
     if (error) return NX.fail(error);
     D.servers = D.servers.filter((x) => x.id !== s.id);
     NX.emit('servers');
@@ -356,13 +365,14 @@
 
   async function onDmMessage(m) {
     let c = dm(m.conversation_id);
-    if (!c) { await reloadDms(); c = dm(m.conversation_id); if (!c) return; }
+    let fresh = false;
+    if (!c) { await reloadDms(); c = dm(m.conversation_id); if (!c) return; fresh = true; }
     c.last = { id: m.id, author_id: m.author_id, content: m.content, created_at: m.created_at, files: 0 };
     D.dms.sort((a, b) => String(b.last?.created_at || b.created_at).localeCompare(String(a.last?.created_at || a.created_at)));
     const mine = m.author_id === D.me.id;
     const viewing = NX.viewing === 'dm:' + c.id && !document.hidden;
     if (!mine && !viewing) {
-      c.unread = (c.unread || 0) + 1;
+      if (!fresh || !D.v3) c.unread = (c.unread || 0) + 1;   // a fresh inbox already counted it
       if (!D.blocked.has(m.author_id)) notifyDm(c, m);
     }
     if (viewing) markDmRead(c.id);
@@ -424,14 +434,24 @@
   let callChan = null;
   function startCalls() {
     callChan = db().channel('nx-call:' + D.me.id, { config: { private: !!NX.privateRT } })
-      .on('broadcast', { event: 'ring' }, ({ payload }) => {
-        if (!payload || payload.to !== D.me.id || D.blocked.has(payload.from)) return;
+      .on('broadcast', { event: 'ring' }, async ({ payload }) => {
+        // Everything in a ring comes from the caller's browser: only ids are
+        // trusted, and the name and avatar are looked up here.
+        const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!payload || payload.to !== D.me.id || !UUID.test(payload.from || '') || !UUID.test(payload.conversation || '')) return;
+        if (D.blocked.has(payload.from)) return;
+        if (!dm(payload.conversation)) await reloadDms();
+        const conv = dm(payload.conversation);
+        if (!conv || !conv.people.some((p) => p.id === payload.from)) return;
         if (window.Voice?.state().active && window.Voice.state().channel?.id === 'dm-' + payload.conversation) return;
         if (P_dnd()) return;
+        await people().need([payload.from]);
+        const caller = people().get(payload.from);
+        const name = people().nameOf(caller);
         const go = (join) => NX.go(`dm/${payload.conversation}${join ? '?join=1' : ''}`);
-        if (document.hidden) desktopNotify(`${payload.name} is calling`, 'Click to answer', () => go(true));
+        if (document.hidden) desktopNotify(`${name} is calling`, 'Click to answer', () => go(true));
         NX.island({
-          ring: true, avatar: payload.avatarHtml || null, icon: 'fa-phone', title: `${payload.name} is calling`, body: payload.video ? 'Video call' : 'Voice call', ms: 30000,
+          ring: true, avatar: people().avatar(caller, 36, { halo: false, deco: false }), icon: 'fa-phone', title: `${name} is calling`, body: payload.video ? 'Video call' : 'Voice call', ms: 30000,
           onClick: () => go(false),
           actions: [{ icon: 'fa-phone', label: 'Join', cls: 'ok', fn: () => go(true) }, { icon: 'fa-phone-slash', label: 'Decline', cls: 'no', fn: () => {} }],
         });
@@ -439,13 +459,22 @@
       })
       .subscribe();
   }
+  // Rings go out over Realtime's REST endpoint: sending only needs the write
+  // permission, while joining someone else's private ring channel isn't allowed.
   function ring(uid, payload) {
+    const body = { conversation: payload.conversation, video: !!payload.video, to: uid, from: D.me.id };
     const ch = db().channel('nx-call:' + uid, { config: { private: !!NX.privateRT } });
-    ch.subscribe((s) => {
-      if (s !== 'SUBSCRIBED') return;
-      ch.send({ type: 'broadcast', event: 'ring', payload: { ...payload, to: uid, from: D.me.id } });
-      setTimeout(() => db().removeChannel(ch), 1500);
-    });
+    const done = () => db().removeChannel(ch);
+    if (typeof ch.httpSend === 'function') {
+      ch.httpSend('ring', body).then(done, () => { fallback(); });
+    } else fallback();
+    function fallback() {
+      const t = setTimeout(done, 6000);
+      ch.subscribe((s) => {
+        if (s === 'SUBSCRIBED') { ch.send({ type: 'broadcast', event: 'ring', payload: body }); clearTimeout(t); setTimeout(done, 1500); }
+        else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(s)) { clearTimeout(t); done(); }
+      });
+    }
   }
 
   /* ---------- sounds + desktop notifications ---------- */

@@ -290,7 +290,24 @@ window.Voice = (function () {
   }
 
   let session = '';
-  const selfProfile = () => ({ ...me, muted, deaf, cam, sharing, _sid: session });
+  // Only what peers need to draw a tile; never the whole profile row.
+  const selfProfile = () => ({ id: me.id, username: me.username, display_name: me.display_name, avatar_url: me.avatar_url, muted, deaf, cam, sharing, _sid: session });
+  // What a peer says about itself is display-only and checked: the id is the
+  // sender's, strings are capped, flags are booleans.
+  const peerProfile = (from, p) => {
+    const s = (v, n) => (typeof v === 'string' ? v.slice(0, n) : null);
+    p = p && typeof p === 'object' ? p : {};
+    return { id: from, username: s(p.username, 32), display_name: s(p.display_name, 60), avatar_url: s(p.avatar_url, 600),
+      muted: !!p.muted, deaf: !!p.deaf, cam: !!p.cam, sharing: !!p.sharing, _sid: s(p._sid, 40) };
+  };
+  // realtime-js hands back the existing channel for a topic that is still
+  // leaving, and subscribe() on it silently does nothing: wait for any old
+  // channel on the same topic to be fully removed first.
+  async function freshChannel(topic, opts) {
+    const old = (window.db.getChannels?.() || []).filter((c) => c.topic === 'realtime:' + topic);
+    for (const c of old) { try { await window.db.removeChannel(c); } catch {} }
+    return window.db.channel(topic, opts);
+  }
 
   /* ===================== SCREEN SHARE =====================
      Own RTCPeerConnection per viewer, so the share gets its own encoder and
@@ -531,8 +548,10 @@ window.Voice = (function () {
       }).then(() => {}, () => {});
     }
 
+    const w = watching.get(channel.id);
+    if (w) { watching.delete(channel.id); try { await window.db.removeChannel(w.ch); } catch {} }
     syncWatch();   // we are in this call now: stop watching it as an outsider
-    sig = window.db.channel('voice:' + channel.id, { config: { broadcast: { self: false, ack: false }, presence: { key: me.id, enabled: true }, private: !!window.NX?.privateRT } });
+    sig = await freshChannel('voice:' + channel.id, { config: { broadcast: { self: false, ack: false }, presence: { key: me.id, enabled: true }, private: !!window.NX?.privateRT } });
 
     sig.on('broadcast', { event: 'sig' }, async ({ payload: m }) => {
       if (!m || !chan || m.from === me.id || (m.to && m.to !== me.id)) return;
@@ -540,6 +559,7 @@ window.Voice = (function () {
       try {
         if (m.type === 'hello') {
           const knownSid = members.get(m.from)?._sid;
+          m.profile = peerProfile(m.from, m.profile);
           members.set(m.from, m.profile);
           // A rejoin after a reload: the old connection is dead, start fresh.
           // A socket reconnect re-announces with the same session id; that
@@ -554,12 +574,12 @@ window.Voice = (function () {
           if (sharing) { closeScreenTo(m.from); screenOfferTo(m.from); }
           onChange(state());
         } else if (m.type === 'hello-ack') {
-          members.set(m.from, m.profile);
+          members.set(m.from, peerProfile(m.from, m.profile));
           if (lowerIsMe && !peers.has(m.from)) await offerTo(m.from);
           if (sharing) screenOfferTo(m.from);
           onChange(state());
         } else if (m.type === 'offer') {
-          members.set(m.from, { ...(members.get(m.from) || {}), ...m.profile });
+          members.set(m.from, { ...(members.get(m.from) || {}), ...peerProfile(m.from, m.profile) });
           let rec = peers.get(m.from);
           if (rec && rec.pc.signalingState === 'have-local-offer') {
             // Glare: the lower id's offer wins.
@@ -600,7 +620,8 @@ window.Voice = (function () {
         } else if (m.type === 's-stop') closeScreenFrom(m.from);
         else if (m.type === 'bye') { drop(m.from); closeScreenFrom(m.from); closeScreenTo(m.from); }
         else if (m.type === 'state') {
-          members.set(m.from, { ...(members.get(m.from) || {}), ...m.flags });
+          const f = m.flags || {};
+          members.set(m.from, { ...(members.get(m.from) || {}), muted: !!f.muted, deaf: !!f.deaf, cam: !!f.cam, sharing: !!f.sharing });
           onChange(state());
         } else if (m.type === 'ping') {
           const rec = peers.get(m.from);

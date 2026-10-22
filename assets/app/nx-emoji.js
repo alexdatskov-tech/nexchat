@@ -18,8 +18,10 @@
     }
     return dataP;
   }
-  const recents = () => NX.ls.get(RECENT_KEY, ['👍', '❤️', '😂', '🔥', '😮', '😢', '🎉', '💀']);
-  function remember(e) { NX.ls.set(RECENT_KEY, [e, ...recents().filter((x) => x !== e)].slice(0, 32)); }
+  // A reaction is a short emoji, never markup.
+  const isEmoji = (e) => typeof e === 'string' && /^[^<>"'&\\\s]{1,16}$/u.test(e) && /\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u00a9\u00ae\u203c-\u3299]/u.test(e);
+  const recents = () => NX.ls.get(RECENT_KEY, ['👍', '❤️', '😂', '🔥', '😮', '😢', '🎉', '💀']).filter(isEmoji);
+  function remember(e) { if (!isEmoji(e)) return; NX.ls.set(RECENT_KEY, [e, ...recents().filter((x) => x !== e)].slice(0, 32)); }
 
   function build() {
     const E = window.EMOJI;
@@ -90,7 +92,7 @@
   }
 
   function paintRecents() {
-    panel.querySelector('.ep-recent').innerHTML = recents().map((e) => `<button class="ep-e" data-e="${e}" data-n="">${e}</button>`).join('');
+    panel.querySelector('.ep-recent').innerHTML = recents().map((e) => `<button class="ep-e" data-e="${esc(e)}" data-n="">${esc(e)}</button>`).join('');
   }
 
   function away(e) { if (panel && !panel.contains(e.target) && !e.target.closest('[data-emoji-anchor]')) close(); }
@@ -125,5 +127,5 @@
     setTimeout(() => document.addEventListener('pointerdown', away, true), 0);
   }
 
-  NX.emoji = { open, close, remember, recents, load };
+  NX.emoji = { open, close, remember, recents, load, isEmoji };
 })();

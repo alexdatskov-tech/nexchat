@@ -180,13 +180,24 @@
       return u.href;
     } catch { return null; }
   }
+  // Custom halo CSS (developer mode): declarations from a short allowlist of
+  // properties, no escapes, no external resources, nothing that can move the
+  // ring out of the avatar.
+  const HALO_PROPS = new Set(['background', 'background-color', 'background-image', 'background-size', 'background-position', 'background-repeat',
+    'animation', 'animation-name', 'animation-duration', 'animation-timing-function', 'animation-iteration-count', 'animation-direction', 'animation-delay',
+    'box-shadow', 'filter', 'opacity', 'transform', 'border-radius']);
   function haloCss(p) {
     if (!p?.theme?.dev_mode) return null;
-    const raw = (p.theme.halo_css || '').trim();
+    const raw = String(p.theme.halo_css || '').trim();
     if (!raw || raw.length > 400) return null;
-    if (/[{}<>]/.test(raw)) return null;
-    if (/url\s*\(|expression\s*\(|javascript:|behavior\s*:|@import/i.test(raw)) return null;
-    return raw;
+    if (/[{}<>\\@]|\/\*|url\s*\(|image-set|image\s*\(|element\s*\(|expression|javascript:|attr\s*\(|var\s*\(/i.test(raw)) return null;
+    const decls = raw.split(';').map((d) => d.trim()).filter(Boolean);
+    for (const d of decls) {
+      const i = d.indexOf(':');
+      if (i < 1) return null;
+      if (!HALO_PROPS.has(d.slice(0, i).trim().toLowerCase())) return null;
+    }
+    return decls.join(';');
   }
   const haloKeys = new Set();
   let haloSheet = null;

@@ -20,19 +20,18 @@
   /* ---------- loading ---------- */
   async function load(sid) {
     const c = cache.get(sid);
-    if (c && Date.now() - c.at < 5 * 60 * 1000) { apply(c); refreshQuietly(sid); return true; }
+    if (c && Date.now() - c.at < 5 * 60 * 1000) { refreshQuietly(sid); return c; }
     const [s, ch, pm, mem] = await Promise.all([
       window.db.from('servers').select('*').eq('id', sid).maybeSingle(),
       window.db.from('channels').select('*').eq('server_id', sid).order('position'),
       window.db.rpc('member_permissions', { p_server_id: sid, p_user_id: NX.me.id }),
       window.db.from('server_members').select('user_id').eq('server_id', sid).eq('user_id', NX.me.id).maybeSingle(),
     ]);
-    if (!s.data) return false;
+    if (!s.data) return null;
     const entry = { srv: s.data, channels: ch.data || [], perms: Number(pm.data) || 0, member: !!mem.data, roles: [], memberRoles: new Map(), members: null, at: Date.now() };
     cache.set(sid, entry);
-    apply(entry);
     loadRoles(sid);
-    return true;
+    return entry;
   }
   function apply(e) {
     srv = e.srv; channels = e.channels; perms = e.perms; member = e.member; roles = e.roles; memberRoles = e.memberRoles; members = e.members;
@@ -109,22 +108,15 @@
       try {
         const m = String(t.name_font_url).replace(/&amp;/g, '&').match(/https:\/\/fonts\.googleapis\.com\/css2?\?[^\s'"()<>]+/);
         const u = m && new URL(m[0]);
-        const fam = u && (u.searchParams.get('family') || '').split(':')[0].replace(/\+/g, ' ').replace(/'/g, '');
+        const fam = u && (u.searchParams.get('family') || '').split(':')[0].replace(/[^A-Za-z0-9 _-]/g, ' ').trim().slice(0, 60);
         if (fam) {
           if (!document.querySelector(`link[data-nxfont="${CSS.escape(u.href)}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = u.href; l.dataset.nxfont = u.href; document.head.appendChild(l); }
           stack = `'${fam}', var(--f-display)`;
         }
       } catch {}
     } else if (t.name_font === 'upload' && t.name_font_file) {
-      let h = 0;
-      for (const ch of t.name_font_file) h = ((h << 5) - h + ch.charCodeAt(0)) | 0;
-      const fam = 'NxSrvFont' + (h >>> 0).toString(36);
-      if (!document.querySelector(`style[data-nxfont="${fam}"]`)) {
-        const st = document.createElement('style'); st.dataset.nxfont = fam;
-        st.textContent = `@font-face{font-family:'${fam}';src:url("${String(t.name_font_file).replace(/"/g, '%22')}");font-display:swap;}`;
-        document.head.appendChild(st);
-      }
-      stack = `'${fam}', var(--f-display)`;
+      const fam = NX.fontFace(t.name_font_file);
+      if (fam) stack = `'${fam}', var(--f-display)`;
     }
     if (stack) css += `font-family:${stack};`;
     return css;
@@ -253,7 +245,7 @@
             const patch = { name, parent_id: sel.value || null };
             if (!editing || !isVoice(c)) patch.topic = body.querySelector('[data-t]').value.trim() || null;
             if (editing) {
-              const { error } = await window.db.from('channels').update(patch).eq('id', c.id);
+              const { error } = await NX.must(window.db.from('channels').update(patch).eq('id', c.id));
               if (error) throw error;
               Object.assign(c, patch);
             } else {
@@ -288,7 +280,7 @@
   }
   async function deleteChannel(c) {
     if (!await NX.confirm({ title: `Delete ${c.type === 'category' ? 'category' : '#' + c.name}?`, body: c.type === 'category' ? 'Channels inside it stay, without a category.' : 'Every message in it will be deleted. This can’t be undone.', ok: 'Delete', danger: true })) return;
-    const { error } = await window.db.from('channels').delete().eq('id', c.id);
+    const { error } = await NX.must(window.db.from('channels').delete().eq('id', c.id));
     if (error) return NX.fail(error);
     channels = channels.filter((x) => x.id !== c.id);
     if (cache.get(srv.id)) cache.get(srv.id).channels = channels;
@@ -365,8 +357,8 @@
     slot.innerHTML = !member ? `<div class="preview-bar"><i class="fa-solid fa-eye"></i><span>You’re viewing this server as <b>${esc(P().ROLE_NAMES[P().rank(NX.me)] || 'staff')}</b>. You haven’t joined it; anything you post appears under your name.</span></div>` : '';
   }
 
-  function openChannel(c, r) {
-    if (active?.id === c?.id && (chat || isVoice(c))) { paintHead(); if (r?.q.get('m')) chat?.jumpTo(r.q.get('m')); return; }
+  async function openChannel(c, r) {
+    if (c && active?.id === c.id && (chat || isVoice(c))) { paintHead(); if (r?.q.get('m')) chat?.jumpTo(r.q.get('m')); return; }
     if (chat) { chat.hide(); chat = null; }
     const host = main.querySelector('#chanMain');
     if (host.querySelector('.call')) NX.call.unmount(host);
@@ -384,9 +376,9 @@
       serverId: srv.id, route: `s/${srv.id}/${c.id}`, title: '#' + c.name, placeholder: `Message #${c.name}`,
       intro: () => `<div class="big-ico"><i class="fa-solid ${chanIcon(c)}"></i></div><h2>Welcome to #${esc(c.name)}!</h2><p>${c.topic ? esc(c.topic) : `This is the start of the #${esc(c.name)} channel.`}</p>
         ${can(BIT.MANAGE_CHANNELS) ? '<button class="btn btn-quiet btn-sm" style="margin-top:8px;padding-left:0" data-intro="edit"><i class="fa-solid fa-pen"></i>Edit channel</button>' : ''}`,
-      canSend: () => member ? can(BIT.SEND) : P().rank(NX.me) >= 2,
-      canManage: () => can(BIT.MANAGE_MESSAGES),
-      canPin: () => can(BIT.MANAGE_MESSAGES),
+      canSend: () => member ? can(BIT.SEND) : !!D().staff?.post_anywhere,
+      canManage: () => can(BIT.MANAGE_MESSAGES) || !!D().staff?.delete_messages,
+      canPin: () => can(BIT.MANAGE_MESSAGES) || !!D().staff?.delete_messages,
       roleColor,
       badges: (uid) => uid === srv.owner_id ? '<i class="fa-solid fa-crown" title="Server owner" style="color:var(--nitro);font-size:12px"></i>' : '',
       uploadPath: `${srv.id}/${c.id}`,
@@ -394,7 +386,9 @@
       markRead: () => D().markChannelRead(c.id, srv.id),
       members: () => (members || []).map((m) => P().get(m.user_id)).filter(Boolean),
     });
-    chat.show(host);
+    const cur = chat;
+    await chat.show(host);
+    if (chat !== cur) return;
     if (!members) loadMembers(srv.id).then(() => paintMembers());
     host.onclick = (e) => { if (e.target.closest('[data-intro="edit"]')) channelDialog(c); };
     if (r?.q.get('m')) chat.jumpTo(r.q.get('m'));
@@ -477,9 +471,11 @@
   }
 
   /* ---------- realtime for the open server ---------- */
-  function subscribeServer() {
-    if (srvChan) window.db.removeChannel(srvChan);
+  async function subscribeServer() {
+    if (srvChan) { const old = srvChan; srvChan = null; await window.db.removeChannel(old).catch(() => {}); }
     const sid = srv.id;
+    for (const c of (window.db.getChannels?.() || []).filter((x) => x.topic === 'realtime:srv:' + sid)) await window.db.removeChannel(c).catch(() => {});
+    if (srv?.id !== sid || !main) return;
     srvChan = window.db.channel('srv:' + sid, { config: { private: !!NX.privateRT } })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'channels', filter: `server_id=eq.${sid}` }, () => refreshQuietly(sid))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'voice_sessions', filter: `server_id=eq.${sid}` }, () => loadVoiceSessions())
@@ -490,16 +486,21 @@
   }
 
   /* ---------- view ---------- */
+  let showGen = 0;
   async function show(parts, r) {
     const [, sid, cid] = parts;
+    const gen = ++showGen;
     if (srv?.id !== sid) {
       if (chat) { chat.hide(); chat = null; }
       active = null;
       side.querySelector('#chanList').innerHTML = `<div style="padding:10px">${'<div class="skel" style="height:22px;margin:8px 4px"></div>'.repeat(6)}</div>`;
       side.querySelector('.srv-top').innerHTML = `<div class="side-head"><span class="t">${esc(D().server(sid)?.name || '')}</span></div>`;
       mainShell();
-      const ok = await load(sid);
-      if (!ok) {
+      const entry = await load(sid);
+      // Another server (or another view) was opened while this one loaded.
+      if (gen !== showGen || !main || !side) return;
+      if (entry) apply(entry);
+      if (!entry) {
         main.innerHTML = '<div class="gone-card"><div class="empty"><div class="ico"><i class="fa-solid fa-ghost"></i></div><h3>Server not found</h3><p>It may have been deleted, or you’re no longer a member.</p><button class="btn btn-primary" onclick="NX.go(\'home\')">Go home</button></div></div>';
         side.querySelector('#chanList').innerHTML = '';
         D().reloadServers();
@@ -540,7 +541,6 @@
         NX.on('presence', NX.debounce(paintMembers, 400)),
         NX.on('server:update', (s) => { if (srv?.id === s.id) { Object.assign(srv, s); paintTop(); applyAccent(); } }),
       ];
-      window.Voice?.onLive?.(() => NX.emit('live'));
       return show(parts, r);
     },
     update: (parts, r) => show(parts, r),

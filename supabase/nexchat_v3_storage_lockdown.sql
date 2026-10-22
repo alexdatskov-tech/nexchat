@@ -34,4 +34,7 @@ begin
   );
 end $$;
 
+-- The proxy records uploads (with their owner) itself; browsers no longer may.
+revoke execute on function public.storage_record(text, uuid, uuid, bigint) from authenticated, anon, public;
+
 select 'storage lockdown ok' as result;

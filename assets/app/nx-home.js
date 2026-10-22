@@ -68,7 +68,7 @@
   async function renameGroup(c) {
     const v = await NX.prompt({ title: 'Rename group', label: 'Group name', value: c.name || '', max: 60 });
     if (v == null) return;
-    const { error } = await window.db.from('dm_conversations').update({ name: v }).eq('id', c.id);
+    const { error } = await NX.must(window.db.from('dm_conversations').update({ name: v }).eq('id', c.id));
     if (error) return NX.fail(error);
     c.name = v; NX.emit('dms');
   }
@@ -314,7 +314,8 @@
     };
     chat?.hide();
     chat = NX.Chat.open(adapterFor(c));
-    chat.show(host.querySelector('.chat-slot'));
+    const cur = chat;
+    const shown = chat.show(host.querySelector('.chat-slot'));
     host.querySelector('.chat-slot').addEventListener('click', (e) => {
       const a = e.target.closest('[data-intro]')?.dataset.intro;
       if (!a || !other) return;
@@ -329,7 +330,7 @@
     if (q?.get('call') === '1') { NX.go('dm/' + c.id, { replace: true, silent: true }); startCall(false); }
     else if (q?.get('join') === '1') { NX.go('dm/' + c.id, { replace: true, silent: true }); NX.call.joinDm(c, { ring: false }).then(() => { roomOpen = true; paintRoom(); }); }
     else if (q?.get('room') === '1') { NX.go('dm/' + c.id, { replace: true, silent: true }); roomOpen = true; paintRoom(); }
-    if (q?.get('m')) chat.jumpTo(q.get('m'));
+    if (q?.get('m')) shown.then(() => { if (chat === cur) chat.jumpTo(q.get('m')); });
   }
   async function startCall(video) {
     const c = conv;

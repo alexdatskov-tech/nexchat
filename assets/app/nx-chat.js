@@ -65,6 +65,7 @@
         const row = e.target.closest('.m[data-id]');
         if (!row || e.target.closest('a, img, video, audio, input, textarea')) return;
         e.preventDefault();
+        if (Date.now() - (this._lpAt || 0) < 900) return;   // the long press already opened it
         this.menuFor(row.dataset.id, e);
       });
       // long press on touch = context menu
@@ -72,7 +73,7 @@
       this.list.addEventListener('touchstart', (e) => {
         const row = e.target.closest('.m[data-id]');
         if (!row) return;
-        lp = setTimeout(() => { lp = null; navigator.vibrate?.(15); this.menuFor(row.dataset.id, e.touches[0]); }, 480);
+        lp = setTimeout(() => { lp = null; this._lpAt = Date.now(); navigator.vibrate?.(15); this.menuFor(row.dataset.id, e.touches[0]); }, 480);
       }, { passive: true });
       ['touchend', 'touchmove', 'touchcancel'].forEach((t) => this.list.addEventListener(t, () => { clearTimeout(lp); lp = null; }, { passive: true }));
       this.composer = new NX.Composer(this);
@@ -159,7 +160,9 @@
     async loadLatest() {
       try {
         const page = await this.fetchPage();
-        this.msgs = page; this.byId = new Map(page.map((m) => [m.id, m]));
+        // Bubbles still sending (or failed) survive a reload of the history.
+        const pend = this.msgs.filter((m) => m._pending || m._failed);
+        this.msgs = [...page, ...pend]; this.byId = new Map(this.msgs.map((m) => [m.id, m]));
         this.haveOlder = page.more;
         this.loaded = true;
         this.paintAll();
@@ -236,17 +239,24 @@
     }
 
     /* ---------- realtime ---------- */
-    subscribe() {
-      if (this.sub) return;
+    async subscribe() {
+      if (this.sub || this._subbing) return;
+      this._subbing = true;
       const a = this.a;
       this.subOk = false;
-      // One shared topic per conversation, so typing indicators reach everyone in it.
+      // One shared topic per conversation, so typing indicators reach everyone
+      // in it. A previous channel on the same topic must be fully gone first,
+      // or realtime-js hands that one back and subscribe() silently does nothing.
+      const topic = `chat:${this.key}`;
+      for (const c of (window.db.getChannels?.() || []).filter((x) => x.topic === 'realtime:' + topic)) { try { await window.db.removeChannel(c); } catch {} }
+      this._subbing = false;
+      if (NX.viewing !== this.key || this.sub) return;   // hidden again meanwhile
       this.sub = window.db.channel(`chat:${this.key}`, { config: { broadcast: { self: false }, private: !!NX.privateRT } })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: a.table, filter: `${a.fk}=eq.${a.id}` }, async ({ new: m }) => {
           if (this.byId.has(m.id)) return;
           // Our own message echoing back while its send is still in flight:
           // the send will swap the pending bubble for it.
-          if (m.author_id === NX.me.id && this.msgs.some((x) => x._pending && (x.content || null) === (m.content || null))) return;
+          if (m.author_id === NX.me.id && m.content && this.msgs.some((x) => x._pending && x.content === m.content)) return;
           await P().need([m.author_id]);
           if (m.reply_to_id && !this.byId.has(m.reply_to_id) && !this.refs.has(m.reply_to_id)) {
             const { data } = await window.db.from(a.table).select('id,author_id,content,created_at').eq('id', m.reply_to_id).maybeSingle();
@@ -258,7 +268,9 @@
           setTimeout(() => this.refreshAtts(m.id), 1800);
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: a.table, filter: `${a.fk}=eq.${a.id}` }, ({ new: m }) => this.update(m))
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: a.table, filter: `${a.fk}=eq.${a.id}` }, ({ old }) => this.remove(old.id))
+        // DELETE events only carry the primary key, so they can't be filtered by
+        // conversation: listen to all of them and ignore ids we don't show.
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: a.table }, ({ old }) => { if (old?.id && this.byId.has(old.id)) this.remove(old.id); })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: a.attTable }, ({ new: x }) => {
           if (!this.byId.has(x.message_id)) return;
           const list = this.atts.get(x.message_id) || [];
@@ -466,9 +478,9 @@
       const atBottom = this.pinned;
       this.byId.set(m.id, m);
       let i = this.msgs.length;
-      while (i > 0 && this.msgs[i - 1].created_at > m.created_at && !this.msgs[i - 1]._pending) i--;
-      // pending bubbles always stay last
-      while (i > 0 && this.msgs[i - 1]._pending && !m._pending) i--;
+      // pending (and failed) bubbles always stay last; real rows go in time order before them
+      if (!m._pending && !m._failed) while (i > 0 && (this.msgs[i - 1]._pending || this.msgs[i - 1]._failed)) i--;
+      while (i > 0 && !this.msgs[i - 1]._pending && !this.msgs[i - 1]._failed && this.msgs[i - 1].created_at > m.created_at) i--;
       const prev = this.msgs[i - 1] || null;
       const next = this.msgs[i] || null;
       this.msgs.splice(i, 0, m);
@@ -596,6 +608,7 @@
       NX.emoji.open(anchor, (e) => this.toggleRx(id, e));
     }
     async toggleRx(mid, emoji) {
+      if (!NX.emoji.isEmoji(emoji)) return;
       const has = this.rx.get(mid)?.get(emoji)?.has(NX.me.id);
       if (has) this.dropRx(mid, emoji, NX.me.id); else this.addRx(mid, emoji, NX.me.id);
       this.paintRx(mid);
@@ -652,10 +665,14 @@
         body: `Are you sure you want to delete this message${n ? ` and its ${n === 1 ? 'file' : n + ' files'}` : ''}? This can’t be undone.`,
       })) return;
       const files = (this.atts.get(id) || []).slice();
+      const rx = this.rx.get(id);
       this.remove(id);
-      const { error } = await window.db.from(this.a.table).delete().eq('id', id);
-      if (error) {
-        NX.fail(/policy|permission|row-level/i.test(error.message) ? { message: 'You don’t have permission to delete that.' } : error);
+      // RLS turns a refused delete into "0 rows": check that one actually went.
+      const { data, error } = await window.db.from(this.a.table).delete().eq('id', id).select('id');
+      if (error || !data?.length) {
+        NX.fail(error && !/policy|permission|row-level/i.test(error.message) ? error : { message: 'You don’t have permission to delete that.' });
+        if (files.length) this.atts.set(id, files);
+        if (rx) this.rx.set(id, rx);
         this.insert(m, { quiet: true });
         return;
       }
@@ -682,8 +699,8 @@
         const prev = { content: m.content, edited_at: m.edited_at };
         m.content = v; m.edited_at = new Date().toISOString();
         done();
-        const { error } = await window.db.from(this.a.table).update({ content: v, edited_at: m.edited_at }).eq('id', id);
-        if (error) { Object.assign(m, prev); this.update(m); NX.fail(error); }
+        const { data, error } = await window.db.from(this.a.table).update({ content: v, edited_at: m.edited_at }).eq('id', id).select('id');
+        if (error || !data?.length) { Object.assign(m, prev); this.update(m); NX.fail(error || { message: 'That message couldn’t be edited.' }); }
       };
       ta.addEventListener('input', fit);
       ta.addEventListener('keydown', (e) => {
@@ -720,7 +737,7 @@
   function open(adapter) {
     const key = adapter.kind + ':' + adapter.id;
     let v = views.get(key);
-    if (v) { Object.assign(v.a, adapter); }
+    if (v) { Object.assign(v.a, adapter); v.composer.refreshPermission(); }
     else {
       v = new ChatView(adapter);
       views.set(key, v);

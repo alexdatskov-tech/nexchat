@@ -36,10 +36,7 @@
   async function joinDm(conv, { video = false, ring = true } = {}) {
     const ok = await join({ id: 'dm-' + conv.id, name: NX.data.dmTitle(conv), dm: conv.id }, null, { video });
     if (ok && ring) {
-      conv.people.forEach((p) => NX.data.ring(p.id, {
-        conversation: conv.id, name: P().nameOf(NX.me), video,
-        avatarHtml: P().avatar(NX.me, 36, { halo: false, deco: false }),
-      }));
+      conv.people.forEach((p) => NX.data.ring(p.id, { conversation: conv.id, video }));
     }
     return ok;
   }
@@ -135,7 +132,9 @@
       const av = t.querySelector('.vt-av');
       const size = focusSlot && f.key === focus ? 120 : (list.length > 4 ? 64 : 88);
       if (av.dataset.u !== f.p.id + size) { av.dataset.u = f.p.id + size; av.innerHTML = P().avatar(P().get(f.p.id) || f.p, size, { halo: false }); }
-      const name = `${f.p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}${f.p.deaf ? '<i class="fa-solid fa-headphones off"></i>' : ''}<span>${esc(P().nameOf(f.p))}${f.me ? ' (you)' : ''}${f.screen ? ' · screen' : ''}</span>`;
+      const known = P().get(f.p.id);
+      if (!known) P().need([f.p.id]);
+      const name = `${f.p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}${f.p.deaf ? '<i class="fa-solid fa-headphones off"></i>' : ''}<span>${esc(P().nameOf(known || f.p))}${f.me ? ' (you)' : ''}${f.screen ? ' · screen' : ''}</span>`;
       const nm = t.querySelector('.vt-name');
       if (nm.innerHTML !== name) nm.innerHTML = name;
       const pc = !f.me && st.peers?.get(f.p.id)?.pc;
