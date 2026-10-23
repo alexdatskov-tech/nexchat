@@ -26,7 +26,7 @@
     95: ['Thunderstorm', 'storm'], 96: ['Thunderstorm, hail', 'storm'], 99: ['Thunderstorm, hail', 'storm'],
   };
   const ICON = {
-    0: ['clear-day', 'clear-night'], 1: ['clear-day', 'clear-night'], 2: ['partly-cloudy-day', 'partly-cloudy-night'], 3: ['cloudy', 'cloudy'],
+    0: ['clear-day', 'starry-night'], 1: ['clear-day', 'starry-night'], 2: ['partly-cloudy-day', 'partly-cloudy-night'], 3: ['cloudy', 'cloudy'],
     45: ['fog-day', 'fog-night'], 48: ['fog-day', 'fog-night'],
     51: ['partly-cloudy-day-drizzle', 'partly-cloudy-night-drizzle'], 53: ['drizzle', 'drizzle'], 55: ['drizzle', 'drizzle'], 56: ['sleet', 'sleet'], 57: ['sleet', 'sleet'],
     61: ['rain', 'rain'], 63: ['rain', 'rain'], 65: ['extreme-rain', 'extreme-rain'], 66: ['sleet', 'sleet'], 67: ['sleet', 'sleet'],
@@ -36,7 +36,8 @@
   };
   const label = (code) => (WX[code] || ['—'])[0];
   const skyOf = (code) => (WX[code] || [, 'cloud'])[1];
-  const still = () => document.body.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // still icons only with NexChat's own Reduce motion setting
+  const still = () => document.body.classList.contains('reduce-motion');
   const iconSrc = (name) => `assets/wx/${still() ? 'still/' : ''}${name}.svg`;
   const img = (code, night, cls = '', title = '') => {
     const name = (ICON[code] || ['not-available', 'not-available'])[night ? 1 : 0];
@@ -133,19 +134,18 @@
     } catch { return null; }
   }
   const far = (a, b) => !a || !b || Math.hypot(a.lat - b.lat, a.lon - b.lon) > 0.02;   // ~2 km
-  // Checks in the background whether you've moved; reloads if you have.
+  // Never asks for location by itself: the exact location is only used once
+  // you've chosen it (then refreshed quietly); otherwise the approximate
+  // place comes from your IP address.
   async function refreshPlace() {
     const cur = saved();
-    if (cur?.src === 'city') return;
-    const asked = NX.ls.get('nx_wx_asked');
-    const gps = await gpsLocation(!asked);
-    if (!asked) NX.ls.set('nx_wx_asked', 1);
-    let next = gps;
-    if (!next && (!cur || cur.src === 'ip') && (!cur || Date.now() - (cur.at || 0) > 12 * 36e5)) next = await ipLocation();
-    if (next && (far(next, cur) || next.src !== cur?.src)) {
+    if (!cur || cur.src === 'city') return;
+    let next = null;
+    if (cur.src === 'gps') next = await gpsLocation(false);
+    else if (Date.now() - (cur.at || 0) > 12 * 36e5) next = await ipLocation();
+    if (next && (far(next, cur) || next.src !== cur.src)) {
       NX.ls.set('nx_wx_loc', next);
-      if (far(next, cur)) load(true);
-      else paint();
+      if (far(next, cur)) load(true); else paint();
     }
   }
 
@@ -332,108 +332,127 @@
 
   /* ---------- painting ---------- */
   const $r = (sel) => root?.querySelector(sel);
-  function paint() {
-    if (!root?.isConnected) return;
-    const card = $r('.dash-wx'), hours = $r('.dh-hours'), week = $r('.dc-week .dc-body'), det = $r('.dc-wxd .dc-body'), srcs = $r('.dc-wxs .dc-body'), hero = $r('.dash-hero');
-    if (!card) return;
-    const loc = saved();
-    const n = now();
-    if (!n) {
-      card.innerHTML = state.error
-        ? `<div class="wx-setup"><img class="wx-ic wx-big" src="${iconSrc('not-available')}" alt=""><b>${esc(state.error)}</b><button class="btn btn-ghost btn-sm" data-w="retry">Try again</button></div>`
-        : !loc && !state.loading
-          ? `<div class="wx-setup"><img class="wx-ic wx-big" src="${iconSrc('partly-cloudy-day')}" alt=""><b>See the weather here</b><p>Your location stays on this device.</p><div class="row" style="gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn btn-primary btn-sm" data-w="locate"><i class="fa-solid fa-location-crosshairs"></i>Use my location</button><button class="btn btn-ghost btn-sm" data-w="city"><i class="fa-solid fa-magnifying-glass"></i>Pick a city</button></div></div>`
-          : `<div class="wx-setup"><img class="wx-ic wx-big" src="${iconSrc('partly-cloudy-day')}" alt=""><p>Checking the sky…</p></div>`;
-      if (hours) hours.innerHTML = '';
-      [week, det, srcs].forEach((el) => { if (el) el.innerHTML = '<div class="wx-skel"></div><div class="wx-skel"></div><div class="wx-skel"></div>'; });
-      return;
-    }
-    const m = state.main, d = m.daily, u = F() ? '°F' : '°C';
-    hero.dataset.sky = skyOf(n.code) + (n.day ? '' : '-night');
-    const hi = Math.round(Math.max(d.temperature_2m_max[0], n.temp)), lo = Math.round(Math.min(d.temperature_2m_min[0], n.temp));
-    const rain = rainSoon();
-    const pin = loc?.src === 'gps' ? 'location-crosshairs' : loc?.src === 'city' ? 'location-dot' : 'wifi';
-    const how = loc?.src === 'gps' ? `Your exact location${loc.acc ? ` (±${loc.acc < 1000 ? loc.acc + ' m' : Math.round(loc.acc / 1000) + ' km'})` : ''}. Tap to change.`
-      : loc?.src === 'city' ? 'A city you picked. Tap to change.' : 'Approximate, from your internet connection. Tap to use your exact location.';
-    const src = n.obs ? `Measured at ${esc(n.obs.sub)} · ${ago(n.obs.at)}` : n.count ? `Middle of ${n.count} forecast sources · ${ago(state.at)}` : `Open-Meteo · ${ago(state.at)}`;
-    card.innerHTML = `<div class="wx-now">
-        ${img(n.code, !n.day, 'wx-big', n.text)}
-        <div class="wx-temp">${Math.round(n.temp)}<small>${u}</small></div>
-        <div class="wx-desc"><b>${esc(n.text)}</b><span>Feels like ${Math.round(n.feels)}° · H ${hi}° L ${lo}°</span>
-          <span class="wx-meta"><img class="wx-mini" src="${iconSrc('wind')}" alt="Wind">${Math.round(n.wind)} ${F() ? 'mph' : 'km/h'} ${compass(n.dir)}<img class="wx-mini" src="${iconSrc('humidity')}" alt="Humidity">${Math.round(n.humidity)}%</span></div>
-      </div>
-      ${rain ? `<div class="wx-rain${rain.now || rain.soon ? ' wet' : ''}"><img class="wx-mini" src="${iconSrc(rain.now || rain.soon ? 'raindrop' : 'clear-day')}" alt="">${esc(rain.txt)}</div>` : ''}
-      <div class="wx-src"><i class="fa-solid fa-${n.obs ? 'tower-broadcast' : 'layer-group'}"></i>${src}</div>
-      <div class="wx-place"><button class="wx-link" data-w="place" title="${esc(how)}"><i class="fa-solid fa-${pin}"></i>${esc(loc?.name || 'Your location')}${loc?.src === 'ip' ? '<small>approx.</small>' : ''}</button>
-        <button class="wx-link" data-w="units" title="Switch units">${F() ? '°C' : '°F'}</button>
-        <button class="wx-link" data-w="retry" title="Refresh"><i class="fa-solid fa-rotate${state.loading ? ' fa-spin' : ''}"></i></button></div>`;
-
-    // next 12 hours
-    const h = m.hourly, t0 = placeNow();
+  const deg = () => (F() ? '°F' : '°C');
+  function hourlyHtml(n) {
+    const h = state.main.hourly, t0 = placeNow();
     const i0 = Math.max(0, h.time.findIndex((t) => wall(t) > t0) - 1);
-    hours.innerHTML = h.time.slice(i0, i0 + 12).map((ts, i) => {
+    return h.time.slice(i0, i0 + 24).map((ts, i) => {
       const k = i0 + i, p = h.precipitation_probability?.[k];
       const night = i === 0 ? !n.day : h.is_day?.[k] === 0;
-      return `<div class="wx-h${i === 0 ? ' now' : ''}"><span>${i === 0 ? 'Now' : new Date(wall(ts)).toLocaleTimeString(undefined, { hour: 'numeric', timeZone: 'UTC' })}</span>${img(i === 0 ? n.code : h.weather_code[k], night)}<b>${Math.round(i === 0 ? n.temp : h.temperature_2m[k])}°</b>${p >= 20 ? `<small><i class="fa-solid fa-droplet"></i>${p}%</small>` : '<small></small>'}</div>`;
+      return `<div class="wf-h${i === 0 ? ' now' : ''}"><span>${i === 0 ? 'Now' : new Date(wall(ts)).toLocaleTimeString(undefined, { hour: 'numeric', timeZone: 'UTC' })}</span>${img(i === 0 ? n.code : h.weather_code[k], night)}<b>${Math.round(i === 0 ? n.temp : h.temperature_2m[k])}°</b><small>${p >= 20 ? p + '%' : ''}</small></div>`;
     }).join('');
-
-    // the week
-    if (week) {
-      const all = d.temperature_2m_max.concat(d.temperature_2m_min);
-      const mn = Math.min(...all), mx = Math.max(...all), span = Math.max(1, mx - mn);
-      week.innerHTML = d.time.map((t, i) => {
-        const a = d.temperature_2m_min[i], b = d.temperature_2m_max[i], p = d.precipitation_probability_max?.[i];
-        return `<div class="wx-d"><span class="wd-n">${i === 0 ? 'Today' : new Date(wall(t)).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}</span>${img(d.weather_code[i], false, '', label(d.weather_code[i]))}
-          <small class="wd-p">${p >= 20 ? p + '%' : ''}</small><span class="wd-lo">${Math.round(a)}°</span>
-          <span class="wd-bar"><i style="left:${((a - mn) / span) * 100}%;right:${100 - ((b - mn) / span) * 100}%"></i></span><span class="wd-hi">${Math.round(b)}°</span></div>`;
-      }).join('');
+  }
+  function weekHtml() {
+    const d = state.main.daily;
+    const all = d.temperature_2m_max.concat(d.temperature_2m_min);
+    const mn = Math.min(...all), mx = Math.max(...all), span = Math.max(1, mx - mn);
+    return d.time.map((t, i) => {
+      const a = d.temperature_2m_min[i], b = d.temperature_2m_max[i], p = d.precipitation_probability_max?.[i];
+      return `<div class="wf-d"><span class="wf-dn">${i === 0 ? 'Today' : new Date(wall(t)).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}</span>${img(d.weather_code[i], false, '', label(d.weather_code[i]))}
+        <small>${p >= 20 ? p + '%' : ''}</small><span class="wf-lo">${Math.round(a)}°</span>
+        <span class="wf-bar"><i style="left:${((a - mn) / span) * 100}%;right:${100 - ((b - mn) / span) * 100}%"></i></span><span class="wf-hi">${Math.round(b)}°</span></div>`;
+    }).join('');
+  }
+  function detailsHtml(n) {
+    const m = state.main, c = m.current, d = m.daily, t0 = placeNow();
+    const uv = c.uv_index, aqi = state.air?.us_aqi;
+    const uvTxt = uv == null ? '—' : uv < 3 ? 'Low' : uv < 6 ? 'Moderate' : uv < 8 ? 'High' : uv < 11 ? 'Very high' : 'Extreme';
+    const aqTxt = aqi == null ? '—' : aqi <= 50 ? 'Good' : aqi <= 100 ? 'Moderate' : aqi <= 150 ? 'Unhealthy for some' : aqi <= 200 ? 'Unhealthy' : 'Very unhealthy';
+    const vis = c.visibility, visTxt = vis == null ? '—' : F() ? Math.round(vis / 1609) + ' mi' : Math.round(vis / 1000) + ' km';
+    const pres = c.pressure_msl, presTxt = pres == null ? '—' : F() ? (pres * 0.02953).toFixed(2) + ' in' : Math.round(pres) + ' hPa';
+    const sunset = d.sunset?.[0], afterDark = sunset && wall(sunset) < t0;
+    const sunrise = afterDark ? d.sunrise?.[1] : d.sunrise?.[0];
+    const rain = d.precipitation_sum?.[0];
+    const tile = (k, v, sub = '') => `<div class="wf-t"><span>${k}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+    return [
+      tile('UV index', uv != null ? Math.round(uv) : '—', uvTxt),
+      tile('Air quality', aqi ?? '—', aqTxt),
+      tile('Wind', `${Math.round(n.wind)} <em>${F() ? 'mph' : 'km/h'}</em>`, [compass(n.dir) && 'From the ' + compass(n.dir), n.gust != null && 'gusts ' + Math.round(n.gust)].filter(Boolean).join(', ')),
+      tile('Humidity', Math.round(n.humidity) + '%', c.dew_point_2m != null ? `Dew point ${Math.round(c.dew_point_2m)}°` : ''),
+      tile(afterDark ? 'Sunrise' : 'Sunset', afterDark ? (sunrise ? clock(sunrise) : '—') : clock(sunset), afterDark ? 'Tomorrow' : sunrise ? 'Sunrise ' + clock(sunrise) : ''),
+      tile('Rain today', rain != null ? `${(+rain).toFixed(F() ? 2 : 1)} <em>${F() ? 'in' : 'mm'}</em>` : '—', d.precipitation_probability_max?.[0] != null ? d.precipitation_probability_max[0] + '% chance' : ''),
+      tile('Pressure', presTxt),
+      tile('Visibility', visTxt),
+    ].join('');
+  }
+  function sourcesHtml(n) {
+    const list = state.sources.slice().sort((a, b) => (b.observed ? 1 : 0) - (a.observed ? 1 : 0));
+    if (!list.length) return '';
+    return `<details class="wf-src"><summary>${n.obs ? `Measured at ${esc(n.obs.sub)}` : `Based on ${list.length} forecasts`}${n.spread != null ? ` · ${list.length} sources within ${Math.round(n.spread)}°` : ''}</summary>
+      <div class="wf-src-list">${list.map((s) => `<div><span>${esc(s.name)}${s.observed ? ' <em>measured</em>' : ''}</span><small>${esc(s.sub || '')}</small><b>${Math.round(cToU(s.tempC))}°</b></div>`).join('')}</div></details>`;
+  }
+  // The home card: just the basics.
+  function paint() {
+    if (sheet?.isConnected) paintSheet();
+    if (!root?.isConnected) return;
+    const card = $r('.dash-wx'), hero = $r('.dash-hero');
+    if (!card) return;
+    const loc = saved(), n = now();
+    if (!n) {
+      card.innerHTML = state.error
+        ? `<div class="wx-mini-card"><img class="wx-ic wx-big" src="${iconSrc('not-available')}" alt=""><div class="wx-m-txt"><b>No weather right now</b><button class="wx-link" data-w="retry">Try again</button></div></div>`
+        : `<div class="wx-mini-card"><img class="wx-ic wx-big" src="${iconSrc('partly-cloudy-day')}" alt=""><div class="wx-m-txt"><b>Checking the sky…</b></div></div>`;
+      return;
     }
+    const d = state.main.daily;
+    hero.dataset.sky = skyOf(n.code) + (n.day ? '' : '-night');
+    const hi = Math.round(Math.max(d.temperature_2m_max[0], n.temp)), lo = Math.round(Math.min(d.temperature_2m_min[0], n.temp));
+    card.innerHTML = `<button class="wx-mini-card" data-w="more" title="Full forecast">
+        ${img(n.code, !n.day, 'wx-big', n.text)}
+        <span class="wx-m-txt"><span class="wx-m-temp">${Math.round(n.temp)}°</span><b>${esc(n.text)}</b><small>H ${hi}° · L ${lo}° · ${esc(loc?.name || '')}</small></span>
+        <span class="wx-m-more">Full forecast <i class="fa-solid fa-chevron-right"></i></span>
+      </button>`;
+  }
 
-    // details
-    if (det) {
-      const c = m.current;
-      const uv = c.uv_index, uvMax = d.uv_index_max?.[0];
-      const uvLv = (x) => (x == null ? ['—', ''] : x < 3 ? ['Low', 'ok'] : x < 6 ? ['Moderate', 'warn'] : x < 8 ? ['High', 'hot'] : x < 11 ? ['Very high', 'bad'] : ['Extreme', 'bad']);
-      const aqi = state.air?.us_aqi;
-      const aqLv = aqi == null ? ['—', ''] : aqi <= 50 ? ['Good', 'ok'] : aqi <= 100 ? ['Moderate', 'warn'] : aqi <= 150 ? ['Unhealthy for some', 'hot'] : aqi <= 200 ? ['Unhealthy', 'bad'] : aqi <= 300 ? ['Very unhealthy', 'bad'] : ['Hazardous', 'bad'];
-      const vis = c.visibility, visTxt = vis == null ? '—' : F() ? (vis / 1609).toFixed(vis < 16090 ? 1 : 0) + ' mi' : (vis / 1000).toFixed(vis < 10000 ? 1 : 0) + ' km';
-      const pres = c.pressure_msl, presTxt = pres == null ? '—' : F() ? (pres * 0.02953).toFixed(2) + ' inHg' : Math.round(pres) + ' hPa';
-      // after dark, the next sunrise is tomorrow's
-      const sunset = d.sunset?.[0];
-      const afterDark = sunset && wall(sunset) < t0;
-      const sunrise = afterDark ? d.sunrise?.[1] : d.sunrise?.[0];
-      const dayLeft = sunset ? Math.round((wall(sunset) - t0) / 60e3) : null;
-      const tile = (icon, k, v, sub = '', cls = '') => `<div class="wxd ${cls}"><img class="wxd-ic" src="${iconSrc(icon)}" alt=""><span class="wxd-k">${k}</span><b class="wxd-v">${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
-      det.innerHTML = `<div class="wxd-grid">
-        ${tile('uv-index', 'UV index', uv != null ? Math.round(uv) + ' · ' + uvLv(uv)[0] : '—', uvMax != null ? 'Peak today ' + Math.round(uvMax) : '', uvLv(uv)[1])}
-        ${tile('dust', 'Air quality', aqi != null ? aqi + ' · ' + aqLv[0] : '—', state.air?.pm2_5 != null ? `PM2.5 ${Math.round(state.air.pm2_5)} µg/m³` : 'US AQI', aqLv[1])}
-        ${tile('wind', 'Wind', `${Math.round(n.wind)} ${F() ? 'mph' : 'km/h'} <span class="wxd-arrow" style="transform:rotate(${(n.dir || 0) + 180}deg)">↑</span>`, n.gust != null ? `Gusts ${Math.round(n.gust)} · from the ${compass(n.dir) || '—'}` : '')}
-        ${tile('humidity', 'Humidity', Math.round(n.humidity) + '%', c.dew_point_2m != null ? `Dew point ${Math.round(c.dew_point_2m)}°` : '')}
-        ${tile('barometer', 'Pressure', presTxt)}
-        ${tile('mist', 'Visibility', visTxt)}
-        ${tile('cloudy', 'Clouds', c.cloud_cover != null ? Math.round(c.cloud_cover) + '%' : '—')}
-        ${tile('raindrops', 'Rain today', d.precipitation_sum?.[0] != null ? `${(+d.precipitation_sum[0]).toFixed(F() ? 2 : 1)} ${F() ? 'in' : 'mm'}` : '—', d.precipitation_probability_max?.[0] != null ? `Chance ${d.precipitation_probability_max[0]}%` : '')}
-        ${tile('sunrise', afterDark ? 'Sunrise tomorrow' : 'Sunrise', sunrise ? clock(sunrise) : '—')}
-        ${tile('sunset', 'Sunset', sunset ? clock(sunset) : '—', dayLeft > 0 ? `${Math.floor(dayLeft / 60)}h ${dayLeft % 60}m of daylight left` : '')}
+  /* ---------- the full forecast ---------- */
+  let sheet = null;
+  function openSheet() {
+    sheet?.remove();
+    sheet = NX.h(`<div class="wf-overlay" role="dialog" aria-modal="true" aria-label="Weather"><div class="wf"></div></div>`);
+    sheet.addEventListener('click', (e) => {
+      if (e.target === sheet || e.target.closest('[data-w="close"]')) return closeSheet();
+      onClick(e);
+    });
+    document.body.appendChild(sheet);
+    document.addEventListener('keydown', escClose, true);
+    paintSheet();
+    requestAnimationFrame(() => sheet?.classList.add('open'));
+  }
+  function escClose(e) { if (e.key === 'Escape' && sheet) { e.stopImmediatePropagation(); e.preventDefault(); closeSheet(); } }
+  function closeSheet() {
+    document.removeEventListener('keydown', escClose, true);
+    const s = sheet; sheet = null;
+    if (!s) return;
+    s.classList.remove('open');
+    setTimeout(() => s.remove(), 220);
+  }
+  function paintSheet() {
+    const box = sheet?.querySelector('.wf');
+    if (!box) return;
+    const loc = saved(), n = now();
+    if (!n) { box.innerHTML = `<div class="wf-top"><span></span><button class="wf-x" data-w="close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div><div class="wf-empty">Checking the sky…</div>`; return; }
+    const d = state.main.daily, rain = rainSoon();
+    const hi = Math.round(Math.max(d.temperature_2m_max[0], n.temp)), lo = Math.round(Math.min(d.temperature_2m_min[0], n.temp));
+    const where = loc?.src === 'gps' ? 'Exact location' : loc?.src === 'city' ? 'Picked city' : 'Approximate location';
+    const scroll = box.querySelector('.wf-body')?.scrollTop || 0;
+    box.dataset.sky = skyOf(n.code) + (n.day ? '' : '-night');
+    box.innerHTML = `<div class="wf-top">
+        <button class="wf-place" data-w="place"><b>${esc(loc?.name || 'Your area')}</b><small>${where} <i class="fa-solid fa-chevron-down"></i></small></button>
+        <button class="wf-pill" data-w="units">${F() ? '°C' : '°F'}</button>
+        <button class="wf-x" data-w="close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="wf-body">
+        <div class="wf-now">${img(n.code, !n.day, 'wf-ic', n.text)}
+          <div class="wf-temp">${Math.round(n.temp)}°</div>
+          <div class="wf-cond">${esc(n.text)}</div>
+          <div class="wf-hl">H ${hi}° &nbsp; L ${lo}° &nbsp;·&nbsp; Feels like ${Math.round(n.feels)}°</div>
+          ${rain && (rain.now || rain.soon) ? `<div class="wf-rain">${esc(rain.txt)}</div>` : ''}</div>
+        <section class="wf-sec"><h3>Next 24 hours</h3><div class="wf-hours">${hourlyHtml(n)}</div></section>
+        <section class="wf-sec"><h3>7 days</h3><div class="wf-week">${weekHtml()}</div></section>
+        <section class="wf-sec"><h3>Right now</h3><div class="wf-grid">${detailsHtml(n)}</div></section>
+        ${sourcesHtml(n)}
+        <p class="wf-foot">Updated ${ago(state.at)} · Open-Meteo, MET Norway, wttr.in${state.sources.some((x) => x.id === 'nws') ? ', NWS' : ''}</p>
       </div>`;
-    }
-
-    // sources
-    if (srcs) {
-      const list = state.sources.slice().sort((a, b) => (b.observed ? 1 : 0) - (a.observed ? 1 : 0));
-      if (!list.length) { srcs.innerHTML = `<p class="muted" style="font-size:13px">${state.loading ? 'Asking every source…' : 'Only the main forecast answered this time.'}</p>`; }
-      else {
-        const temps = list.map((s) => cToU(s.tempC));
-        const lo2 = Math.min(...temps) - 1, hi2 = Math.max(...temps) + 1, span2 = Math.max(1, hi2 - lo2);
-        const head = n.spread != null ? `<p class="wxs-agree">${list.length} sources ${n.spread <= 3 ? 'agree' : 'roughly agree'}: <b>within ${Math.round(n.spread)}°</b>${n.obs ? ', and the station reading is a real measurement' : ''}.</p>` : '';
-        srcs.innerHTML = head + list.map((s) => {
-          const t = cToU(s.tempC);
-          return `<div class="wxs${s.observed ? ' obs' : ''}"><span class="wxs-n"><b>${esc(s.name)}</b><small>${esc(s.sub || '')}</small></span>
-            ${s.code != null ? img(s.code, !n.day, 'wxs-ic', label(s.code)) : '<span class="wxs-ic"></span>'}
-            <span class="wxs-bar"><i style="left:${((t - lo2) / span2) * 100}%"></i></span><b class="wxs-t">${Math.round(t)}°</b></div>`;
-        }).join('');
-      }
-    }
+    box.querySelector('.wf-body').scrollTop = scroll;
   }
 
   /* ---------- actions ---------- */
@@ -454,7 +473,7 @@
     if (!res.length) return NX.toast(`No place called “${q.trim()}”.`, { err: true });
     const set = (r) => { NX.ls.set('nx_wx_loc', { lat: r.latitude, lon: r.longitude, name: r.name, cc: r.country_code, src: 'city' }); load(true); };
     if (res.length === 1) return set(res[0]);
-    NX.menu($r('[data-w="place"]') || $r('.dash-wx'), res.map((r) => ({ label: [r.name, r.admin1, r.country].filter(Boolean).join(', '), icon: 'fa-location-dot', onClick: () => set(r) })));
+    NX.menu(sheet?.querySelector('[data-w="place"]') || $r('.dash-wx'), res.map((r) => ({ label: [r.name, r.admin1, r.country].filter(Boolean).join(', '), icon: 'fa-location-dot', onClick: () => set(r) })));
   }
   function onClick(e) {
     const b = e.target.closest('[data-w]');
@@ -463,12 +482,13 @@
     if (w === 'locate') return useMyLocation();
     if (w === 'city') return pickCity();
     if (w === 'retry') return load(true);
+    if (w === 'more') return openSheet();
     if (w === 'units') { NX.ls.set('nx_wx_units', F() ? 'c' : 'f'); return load(true); }
     if (w === 'place') {
       NX.menu(b, [
         { label: 'Use my exact location', icon: 'fa-location-crosshairs', onClick: useMyLocation },
         { label: 'Pick a city…', icon: 'fa-magnifying-glass', onClick: pickCity },
-        { label: 'Follow where I am', icon: 'fa-location-arrow', onClick: () => { NX.ls.del('nx_wx_loc'); NX.ls.del('nx_wx_cache2'); load(true); } },
+        { label: 'Approximate (no permission needed)', icon: 'fa-wifi', onClick: () => { NX.ls.del('nx_wx_loc'); NX.ls.del('nx_wx_cache2'); load(true); } },
       ]);
     }
   }
@@ -484,5 +504,5 @@
     timer = setInterval(() => { if (!root?.isConnected) { clearInterval(timer); timer = null; return; } if (!document.hidden) load(); }, 10 * 60e3);
   }
 
-  NX.weather = { mount, load, img };
+  NX.weather = { mount, load, img, open: openSheet };
 })();

@@ -20,9 +20,7 @@
         ['fa-expand', 'Full screen is now real full screen on phones and desktops.'],
         ['fa-house', 'This page: a clock, the weather where you are, announcements, what’s new, who’s around and big server cards.'],
         ['fa-cloud-sun-rain', 'Colourful animated weather icons (Meteocons by Bas Milius). They hold still if you turn on Reduce motion.'],
-        ['fa-layer-group', 'Weather from many sources at once, no keys needed: Open-Meteo with eight models (ECMWF, NOAA, DWD, Canada, UK Met Office, Météo-France, JMA), MET Norway (yr.no), wttr.in and, in the US, the real reading from the nearest weather station. “Now” is that reading, or the middle of every source.'],
-        ['fa-gauge-high', 'Weather details: UV, air quality, wind and gusts, humidity and dew point, pressure, visibility, clouds, rain today, sunrise and sunset, and whether rain is coming in the next 2 hours.'],
-        ['fa-bolt', 'Weather shows instantly from the last check and updates in the background.'],
+        ['fa-cloud-sun', 'Weather on the home page: tap it for the full forecast (24 hours, 7 days, UV, air quality, wind and more), checked against several weather services. It never asks for your location unless you choose to share it.'],
         ['fa-clock-rotate-left', 'Miss the old look? Settings → Appearance → Interface → Classic brings back the original NexChat style, rebuilt on the new app.'],
         ['fa-mobile-screen', 'The sidebar on phones is no longer greyed out behind its own shadow.'],
         ['fa-image', 'Very wide screenshots no longer leave an empty box under them.'],
@@ -95,16 +93,12 @@
           <div class="dh-chips"></div>
         </div>
         <div class="dash-wx"></div>
-        <div class="dh-hours"></div>
       </section>
       <section class="dash-servers"><div class="ds-head"><h2><i class="fa-solid fa-server"></i>Your servers<span class="ds-n"></span></h2><span class="grow"></span>
         <button class="btn btn-ghost btn-sm" data-f="join"><i class="fa-solid fa-right-to-bracket"></i>Join</button><button class="btn btn-primary btn-sm" data-f="create"><i class="fa-solid fa-plus"></i>Create</button></div>
         <div class="ds-row"></div></section>
       <div class="dash-grid">
         <section class="dash-card dc-active"><h2><i class="fa-solid fa-signal"></i>Active now</h2><div class="dc-body"></div></section>
-        <section class="dash-card dc-week"><h2><i class="fa-solid fa-calendar-week"></i>This week</h2><div class="dc-body"></div></section>
-        <section class="dash-card dc-wxd"><h2><i class="fa-solid fa-gauge-high"></i>Weather details</h2><div class="dc-body"></div></section>
-        <section class="dash-card dc-wxs"><h2><i class="fa-solid fa-layer-group"></i>Weather sources<span class="grow"></span><span class="ver">no keys needed</span></h2><div class="dc-body"></div></section>
         <section class="dash-card dc-news"><h2><i class="fa-solid fa-wand-magic-sparkles"></i>What’s new<span class="grow"></span><span class="ver">v${VERSION}</span></h2><div class="dc-body"></div></section>
       </div>
 
