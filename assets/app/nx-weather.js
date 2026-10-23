@@ -1,4 +1,6 @@
-/* Weather for the home page, from free public sources that need no key:
+/* Weather for the home page, fetched by the Supabase Edge Function
+   "weather" in one call (the browser asks the sources itself if the
+   function can't be reached). Free public sources, no keys:
      - Open-Meteo: the forecast, details, air quality, and eight separate
        weather models (ECMWF, NOAA GFS, NOAA NBM, DWD ICON, GEM, UK Met
        Office, Météo-France, JMA)
@@ -233,43 +235,55 @@
   let root = null, timer = null, loadSeq = 0;
   const cacheKey = (loc) => `${loc.lat.toFixed(2)},${loc.lon.toFixed(2)},${units()}`;
 
+  // The Supabase Edge Function "weather" (supabase/functions/weather) does the
+  // fetching server-side in one call; if it can't be reached, the browser
+  // asks the sources itself.
+  async function viaFunction(loc) {
+    if (!window.db?.functions) throw new Error('no functions client');
+    const body = { units: units() };
+    if (loc) Object.assign(body, { lat: +loc.lat.toFixed(4), lon: +loc.lon.toFixed(4), name: loc.name, cc: loc.cc });
+    const call = window.db.functions.invoke('weather', { body });
+    const r = await Promise.race([call, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]);
+    if (r.error || !r.data?.main) throw r.error || new Error(r.data?.error || 'no data');
+    return r.data;
+  }
+  async function viaBrowser(loc) {
+    const extras = Promise.allSettled([fetchNws(loc), fetchMet(loc), fetchWttr(loc), fetchModels(loc), fetchAir(loc)]);
+    const main = await getJson(mainUrl(loc));
+    const [nws, met, wttr, models, air] = await extras;
+    const val = (r) => (r.status === 'fulfilled' ? r.value : null);
+    return { main, sources: [val(nws), val(met), val(wttr), ...(val(models) || [])].filter(Boolean), air: val(air) };
+  }
+
   async function load(force = false) {
     const seq = ++loadSeq;
     let loc = saved();
-    if (!loc) {
-      // first visit: the IP answers in a moment; the exact location follows
-      state.loading = true; paint();
-      loc = await ipLocation();
-      if (loc) NX.ls.set('nx_wx_loc', loc);
-      refreshPlace();
-      if (!loc) { state.loading = false; paint(); return; }
-    } else if (!force) refreshPlace();
-    const key = cacheKey(loc);
+    if (loc && !force) refreshPlace();
+    const key = loc ? cacheKey(loc) : null;
     const cache = NX.ls.get('nx_wx_cache2');
-    if (cache?.key === key) {
+    if (key && cache?.key === key) {
       state = { ...state, ...cache.state };
       paint();
       if (!force && Date.now() - cache.at < 10 * 60e3) return;
     } else state = { main: null, sources: [], air: null, at: 0, loading: true, error: '' };
     state.loading = true; state.error = ''; paint();
-    const save = () => NX.ls.set('nx_wx_cache2', { key, at: Date.now(), state: { main: state.main, sources: state.sources, air: state.air, at: state.at } });
-    // the forecast first, so the card fills in as soon as possible
-    const extras = Promise.allSettled([fetchNws(loc), fetchMet(loc), fetchWttr(loc), fetchModels(loc), fetchAir(loc)]);
+    let got = null;
     try {
-      const main = await getJson(mainUrl(loc));
-      if (seq !== loadSeq) return;
-      state.main = main; state.at = Date.now(); paint();
+      got = await viaFunction(loc);
+      // first visit: the function worked out the place from the IP address
+      if (!loc && got.place) { loc = { ...got.place, src: 'ip', at: Date.now() }; NX.ls.set('nx_wx_loc', loc); refreshPlace(); }
     } catch {
-      if (seq !== loadSeq) return;
-      if (!state.main) state.error = 'Couldn’t reach the weather service.';
+      try {
+        if (!loc) { loc = await ipLocation(); if (loc) NX.ls.set('nx_wx_loc', loc); refreshPlace(); }
+        if (loc) got = await viaBrowser(loc);
+      } catch { /* both ways failed */ }
     }
-    const [nws, met, wttr, models, air] = await extras;
     if (seq !== loadSeq) return;
-    const val = (r) => (r.status === 'fulfilled' ? r.value : null);
-    state.sources = [val(nws), val(met), val(wttr), ...(val(models) || [])].filter(Boolean);
-    state.air = val(air) || state.air;
     state.loading = false;
-    if (state.main) save();
+    if (got?.main) {
+      state.main = got.main; state.sources = got.sources || []; state.air = got.air || null; state.at = Date.now();
+      NX.ls.set('nx_wx_cache2', { key: cacheKey(loc), at: Date.now(), state: { main: state.main, sources: state.sources, air: state.air, at: state.at } });
+    } else if (!state.main) state.error = loc ? 'Couldn’t reach the weather service.' : '';
     paint();
   }
 
