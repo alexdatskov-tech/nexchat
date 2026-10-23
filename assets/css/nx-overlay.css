@@ -137,6 +137,19 @@
   background: radial-gradient(120% 90% at 50% 0%, #161a26 0%, #07080c 70%);
 }
 .call.embedded { flex: 0 0 auto; height: min(56vh, 560px); border-bottom: 1px solid var(--line); }
+/* a voice channel you're not in: who's there, and Join */
+.vc-lobby {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px;
+  background: radial-gradient(120% 90% at 50% 0%, #161a26 0%, #07080c 70%);
+}
+.vc-lobby h2 { font-family: var(--f-display); font-size: 28px; margin: 4px 0 0; }
+.vc-lobby p { margin: 0; color: var(--txt-2); max-width: 420px; }
+.vc-lobby .hint { color: var(--txt-3); }
+.vc-lobby .btn-lg { margin-top: 6px; min-width: 168px; }
+.vc-lobby .vl-ico { width: 84px; height: 84px; border-radius: 50%; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08); display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--txt-2); }
+.vc-lobby .vl-ppl { display: flex; align-items: center; padding: 0 10px; }
+.vc-lobby .vl-ppl > span { margin: 0 -8px; border-radius: 50%; box-shadow: 0 0 0 4px #10131c; }
+.vc-lobby .vl-more { width: 64px; height: 64px; border-radius: 50%; background: var(--bg-4); color: var(--txt-1); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .call .call-top { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; z-index: 5; min-width: 0; }
 .call .call-top .pill {
   background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .08); border-radius: 999px; padding: 5px 12px; font-size: 13px;

@@ -467,20 +467,33 @@
     if (!host || !active || !isVoice(active)) return;
     const st = NX.call.state();
     const here = st.active && st.channel?.id === active.id;
+    // In this channel's call: the call room fills the channel (the mini call
+    // goes away). The lobby has its own class: it used to be a ".call" too,
+    // which made a finished join think the room was already up, so all you
+    // got was the floating mini call.
+    const room = () => host.querySelector('.call .call-bar');
     if (here) {
-      if (!host.querySelector('.call')) { host.innerHTML = ''; NX.call.mount(host, { title: active.name }); }
+      if (!room()) { host.innerHTML = ''; NX.call.mount(host, { title: active.name }); }
       return;
     }
-    if (host.querySelector('.call')) NX.call.unmount(host);
+    if (room()) NX.call.unmount(host);
     const live = (window.Voice?.live?.() || new Map()).get(active.id) || 0;
     const ppl = live ? voiceSessions.filter((v) => v.channel_id === active.id).map((v) => P().get(v.user_id)).filter(Boolean) : [];
-    host.innerHTML = `<div class="call" style="align-items:center;justify-content:center;gap:16px;text-align:center;padding:20px">
-      <div style="display:flex;gap:-8px">${ppl.slice(0, 6).map((p) => `<span style="margin:0 -6px">${P().avatar(p, 56, { halo: false })}</span>`).join('') || '<div class="ico" style="width:72px;height:72px;border-radius:50%;background:var(--bg-3);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--txt-2)"><i class="fa-solid fa-volume-high"></i></div>'}</div>
-      <h2 style="font-family:var(--f-display);font-size:26px">${esc(active.name)}</h2>
-      <p class="muted">${live ? `${NX.fmt.plural(live, 'person is', 'people are')} in this channel.` : 'No one is here yet. Start the conversation.'}</p>
-      <button class="btn btn-ok btn-lg" data-a="join"><i class="fa-solid fa-phone"></i>Join voice</button>
+    const joining = host.querySelector('.vc-lobby [data-a="join"].busy');
+    host.innerHTML = `<div class="vc-lobby">
+      ${ppl.length ? `<div class="vl-ppl">${ppl.slice(0, 6).map((p) => `<span>${P().avatar(p, 64, { halo: false })}</span>`).join('')}${ppl.length > 6 ? `<span class="vl-more">+${ppl.length - 6}</span>` : ''}</div>`
+        : '<div class="vl-ico"><i class="fa-solid fa-volume-high"></i></div>'}
+      <h2>${esc(active.name)}</h2>
+      <p>${ppl.length ? esc(ppl.slice(0, 3).map((p) => P().nameOf(p)).join(', ')) + (ppl.length > 3 ? ` and ${ppl.length - 3} more` : '') + (ppl.length === 1 ? ' is' : ' are') + ' in voice.' : live ? `${NX.fmt.plural(live, 'person is', 'people are')} in voice.` : 'No one is here yet. Jump in and others will see you.'}</p>
+      <button class="btn btn-ok btn-lg${joining ? ' busy' : ''}" data-a="join"><i class="fa-solid fa-phone"></i>${joining ? 'Joining…' : 'Join voice'}</button>
       ${st.active ? `<p class="hint">You’ll leave ${esc(st.channel?.name || 'your current call')}.</p>` : ''}</div>`;
-    host.querySelector('[data-a="join"]').onclick = () => joinVoice(active);
+    const btn = host.querySelector('[data-a="join"]');
+    btn.onclick = async () => {
+      if (btn.classList.contains('busy')) return;
+      btn.classList.add('busy'); btn.innerHTML = '<i class="fa-solid fa-phone"></i>Joining…';
+      await joinVoice(active);
+      if (btn.isConnected) { btn.classList.remove('busy'); btn.innerHTML = '<i class="fa-solid fa-phone"></i>Join voice'; }
+    };
   }
   async function loadVoiceSessions() {
     if (!srv) return;
