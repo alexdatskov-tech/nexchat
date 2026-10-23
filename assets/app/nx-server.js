@@ -12,7 +12,9 @@
   const collapsed = new Set(NX.ls.get('nx_collapsed', []));
   const allChannels = new Map();   // for the quick switcher
 
-  const can = (bit) => !!srv && (srv.owner_id === NX.me.id || (perms & BIT.ADMIN) !== 0 || (perms & bit) !== 0 || P().rank(NX.me) >= 1 && bit !== BIT.SEND);
+  // canIn(entry, bit): the same test for any cached server, not just the one on screen
+  const canIn = (e, bit) => !!e?.srv && (e.srv.owner_id === NX.me.id || (e.perms & BIT.ADMIN) !== 0 || (e.perms & bit) !== 0 || P().rank(NX.me) >= 1 && bit !== BIT.SEND);
+  const can = (bit) => canIn({ srv, perms }, bit);
   const canManageAny = () => !!srv && (srv.owner_id === NX.me.id || P().rank(NX.me) >= 1 || (perms & (BIT.ADMIN | BIT.MANAGE_SERVER | BIT.MANAGE_ROLES | BIT.MANAGE_CHANNELS | BIT.KICK | BIT.BAN)) !== 0);
   const isVoice = (c) => c.type === 'voice' || c.type === 'stage';
   const chanIcon = (c) => (isVoice(c) ? 'fa-volume-high' : c.type === 'announcement' ? 'fa-bullhorn' : 'fa-hashtag');
@@ -68,11 +70,12 @@
     const ids = memberRoles.get(uid) || [];
     return roles.find((r) => ids.includes(r.id) && !r.is_default) || null;
   }
-  function roleColor(uid) {
-    const ids = memberRoles.get(uid) || [];
-    const r = roles.find((x) => ids.includes(x.id) && !x.is_default && x.color && x.color.toUpperCase() !== '#99AAB5');
+  function roleColorIn(e, uid) {
+    const ids = e?.memberRoles?.get(uid) || [];
+    const r = (e?.roles || []).find((x) => ids.includes(x.id) && !x.is_default && x.color && x.color.toUpperCase() !== '#99AAB5');
     return r?.color || null;
   }
+  const roleColor = (uid) => roleColorIn({ roles, memberRoles }, uid);
 
   /* ---------- sidebar ---------- */
   function mountSide(host) {
@@ -415,20 +418,26 @@
       return;
     }
     if (isVoice(c)) return paintVoice();
+    // A channel's chat outlives the visit: it keeps getting live messages for
+    // a moment after you leave and is shown again when you come back. So
+    // everything it asks is answered from its own server's cache entry, never
+    // from whichever server is on screen (or none: a throw there used to drop
+    // the row and group the next message under the wrong name).
+    const sid = srv.id, owner = srv.owner_id, E = () => cache.get(sid);
     chat = NX.Chat.open({
       kind: 'channel', id: c.id, table: 'messages', attTable: 'message_attachments', rxTable: 'message_reactions', fk: 'channel_id',
       serverId: srv.id, route: `s/${srv.id}/${c.id}`, title: '#' + c.name, placeholder: `Message #${c.name}`,
       intro: () => `<div class="big-ico"><i class="fa-solid ${chanIcon(c)}"></i></div><h2>Welcome to #${esc(c.name)}!</h2><p>${c.topic ? esc(c.topic) : `This is the start of the #${esc(c.name)} channel.`}</p>
         ${can(BIT.MANAGE_CHANNELS) ? '<button class="btn btn-quiet btn-sm" style="margin-top:8px;padding-left:0" data-intro="edit"><i class="fa-solid fa-pen"></i>Edit channel</button>' : ''}`,
-      canSend: () => member ? can(BIT.SEND) : !!D().staff?.post_anywhere,
-      canManage: () => can(BIT.MANAGE_MESSAGES) || !!D().staff?.delete_messages,
-      canPin: () => can(BIT.MANAGE_MESSAGES) || !!D().staff?.delete_messages,
-      roleColor,
-      badges: (uid) => uid === srv.owner_id ? '<i class="fa-solid fa-crown" title="Server owner" style="color:var(--nitro);font-size:12px"></i>' : '',
-      uploadPath: `${srv.id}/${c.id}`,
+      canSend: () => (E()?.member ?? true) ? canIn(E(), BIT.SEND) : !!D().staff?.post_anywhere,
+      canManage: () => canIn(E(), BIT.MANAGE_MESSAGES) || !!D().staff?.delete_messages,
+      canPin: () => canIn(E(), BIT.MANAGE_MESSAGES) || !!D().staff?.delete_messages,
+      roleColor: (uid) => roleColorIn(E(), uid),
+      badges: (uid) => uid === owner ? '<i class="fa-solid fa-crown" title="Server owner" style="color:var(--nitro);font-size:12px"></i>' : '',
+      uploadPath: `${sid}/${c.id}`,
       lastReadAt: () => null,
-      markRead: () => D().markChannelRead(c.id, srv.id),
-      members: () => (members || []).map((m) => P().get(m.user_id)).filter(Boolean),
+      markRead: () => D().markChannelRead(c.id, sid),
+      members: () => (E()?.members || []).map((m) => P().get(m.user_id)).filter(Boolean),
     });
     const cur = chat;
     await chat.show(host);

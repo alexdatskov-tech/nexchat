@@ -357,14 +357,14 @@
         if (!real) {
           // The id is made here, so a retry can never post the message twice:
           // a second insert of the same id is refused and the saved row is used.
-          m._rid = m._rid || crypto.randomUUID();
+          m._rid = m._rid || NX.uuid();
           const row = { id: m._rid, [this.a.fk]: this.a.id, author_id: NX.me.id, content: m.content };
           if (m.reply_to_id) row.reply_to_id = m.reply_to_id;
           real = m._real = await sendRow(this.a.table, row);
         }
         let atts = [];
         if (results.length) {
-          m._attIds = m._attIds || results.map(() => crypto.randomUUID());
+          m._attIds = m._attIds || results.map(() => NX.uuid());
           const rows = results.map((r, i) => ({
             id: m._attIds[i], message_id: real.id, url: r.url, file_name: r.name, file_size: r.size, mime_type: r.mime || null,
             width: r.width || null, height: r.height || null, position: i,

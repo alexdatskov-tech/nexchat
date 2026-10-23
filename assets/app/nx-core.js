@@ -21,6 +21,15 @@ window.NX = (function () {
     return t.content;
   };
   NX.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // crypto.randomUUID exists only on HTTPS pages (and newer browsers);
+  // getRandomValues works everywhere, so a v4 UUID is built from it otherwise.
+  NX.uuid = () => {
+    if (window.crypto?.randomUUID) { try { return crypto.randomUUID(); } catch {} }
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    const x = [...b].map((v) => v.toString(16).padStart(2, '0')).join('');
+    return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+  };
 
   /* Updates a list in place instead of re-rendering it: items are
      [{ key, html }]. An item whose html didn't change keeps its node; one

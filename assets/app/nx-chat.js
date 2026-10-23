@@ -510,8 +510,12 @@
       while (i > 0 && !this.msgs[i - 1]._pending && !this.msgs[i - 1]._failed && this.msgs[i - 1].created_at > m.created_at) i--;
       const prev = this.msgs[i - 1] || null;
       const next = this.msgs[i] || null;
+      // Drawn before it joins the list: a message in the list without a row
+      // makes the next one from that person group under the wrong name.
+      let nodes;
+      try { nodes = this.rowsFor(m, prev); }
+      catch (e) { this.byId.delete(m.id); console.error('message row failed', e); return; }
       this.msgs.splice(i, 0, m);
-      const nodes = this.rowsFor(m, prev);
       const nextEl = next ? this.rowEl(next.id) : null;
       // A day divider directly above the next row: m either joins that day
       // (goes after the divider) or belongs to an earlier day (goes before it).
