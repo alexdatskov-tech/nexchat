@@ -7,7 +7,10 @@
      brand: '<html>',            // top of the sidebar (user card, server card, console logo)
      kind: 'settings' | 'admin' | 'server',
      wide: false,                // wider content column (tables)
+     back: false,                // a "Back to NexChat" pill above the brand
+     strip: false,               // phones: a swipeable strip of tabs instead of the slide-over list
    });
+   Items can carry sub: 'one line under the label'.
    pg.body      -> the content element to render the active tab into
    pg.setActive(id)
    pg.dirty(bool, { onSave, onReset })  -> shows / hides the "unsaved changes" bar
@@ -24,12 +27,13 @@
     host.innerHTML = `
       <aside class="pg-side">
         <div class="pg-side-in">
+          ${o.back ? '<button class="pg-home" type="button"><i class="fa-solid fa-arrow-left"></i><span>Back to NexChat</span></button>' : ''}
           ${o.brand ? `<div class="pg-brand">${o.brand}</div>` : ''}
           <label class="pg-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" placeholder="Search" aria-label="Search settings"></label>
           <nav class="pg-nav">${o.sections.map((s) => `<div class="pg-group">
             ${s.title ? `<h6>${esc(s.title)}</h6>` : '<div class="pg-sep"></div>'}
             ${s.items.filter((i) => !i.hidden).map((i) => { items.push(i); const t = i.tint || (i.danger ? '#f2555a' : TINTS[n++ % TINTS.length]); return `<button type="button" data-id="${esc(i.id)}" data-label="${esc(i.label.toLowerCase())}" class="${i.danger ? 'danger' : ''}" style="--t:${t}">
-              <span class="pg-ico"><i class="fa-solid ${i.icon || 'fa-circle'}"></i></span><span class="grow">${esc(i.label)}</span>${i.count ? `<span class="count">${i.count}</span>` : ''}${i.badge ? `<span class="pg-badge">${esc(i.badge)}</span>` : ''}<i class="fa-solid fa-chevron-right pg-chev"></i></button>`; }).join('')}</div>`).join('')}
+              <span class="pg-ico"><i class="fa-solid ${i.icon || 'fa-circle'}"></i></span>${i.sub ? `<span class="grow pg-lbl"><b>${esc(i.label)}</b><small>${esc(i.sub)}</small></span>` : `<span class="grow">${esc(i.label)}</span>`}${i.count ? `<span class="count">${i.count}</span>` : ''}${i.badge ? `<span class="pg-badge">${esc(i.badge)}</span>` : ''}<i class="fa-solid fa-chevron-right pg-chev"></i></button>`; }).join('')}</div>`).join('')}
           </nav>
           <div class="pg-foot">NexChat v3 · <span class="kbd">Esc</span> to close</div>
         </div>
@@ -40,15 +44,22 @@
           <div class="pg-crumb"><span class="pg-crumb-sec"></span><i class="fa-solid fa-chevron-right"></i><b></b></div>
           <button class="pg-close" type="button" aria-label="Close" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>
         </header>
+        ${o.strip ? `<nav class="pg-strip" aria-label="Sections">${items.map((i) => `<button type="button" data-id="${esc(i.id)}"><span class="pg-ico"><i class="fa-solid ${i.icon || 'fa-circle'}"></i></span><span>${esc(i.label)}</span></button>`).join('')}</nav>` : ''}
         <div class="pg-scroll"><div class="pg-content${o.wide ? ' wide' : ''}"></div></div>
       </main>`;
+    if (o.strip) {
+      host.classList.add('pg-has-strip');
+      // the strip uses the same colours as the side list
+      host.querySelectorAll('.pg-strip [data-id]').forEach((b) => { b.style.setProperty('--t', host.querySelector(`.pg-nav [data-id="${CSS.escape(b.dataset.id)}"]`)?.style.getPropertyValue('--t') || 'var(--accent)'); });
+    }
     const body = host.querySelector('.pg-content');
     let dirty = null;
     const secOf = (id) => o.sections.find((s) => s.items.some((i) => i.id === id));
     const api = {
       body,
       setActive(id) {
-        host.querySelectorAll('.pg-nav [data-id]').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+        host.querySelectorAll('.pg-nav [data-id], .pg-strip [data-id]').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+        host.querySelector(`.pg-strip [data-id="${CSS.escape(id || '')}"]`)?.scrollIntoView({ inline: 'center', block: 'nearest' });
         const it = items.find((i) => i.id === id);
         host.querySelector('.pg-crumb b').textContent = it?.label || '';
         host.querySelector('.pg-crumb-sec').textContent = secOf(id)?.title || '';
@@ -98,6 +109,11 @@
     new MutationObserver(heroify).observe(body, { childList: true });
     const setActive0 = api.setActive;
     api.setActive = (id) => { activeId = id; setActive0(id); };
+    host.querySelector('.pg-home')?.addEventListener('click', () => { if (api.guard()) NX.closePage(); });
+    host.querySelector('.pg-strip')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-id]');
+      if (b && api.guard()) o.onSelect?.(b.dataset.id);
+    });
     host.querySelector('.pg-nav').addEventListener('click', (e) => {
       const b = e.target.closest('[data-id]');
       if (!b) return;
@@ -113,7 +129,7 @@
     host.querySelector('.pg-close').onclick = () => { if (api.guard()) NX.closePage(); };
     host.querySelector('.pg-back').onclick = () => { if (api.guard()) api.showNav(); };
     api.setActive(o.active);
-    if (NX.isNarrow() && o.startOnNav) host.classList.remove('pg-open');
+    if (NX.isNarrow() && o.startOnNav && !o.strip) host.classList.remove('pg-open');
     return api;
   };
 
