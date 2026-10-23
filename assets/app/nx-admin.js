@@ -346,6 +346,9 @@
         <div class="wide"><span>User ID</span><b class="mono adm-sel">${esc(u.id)}</b></div>
         ${u.is_banned && u.ban_reason ? `<div class="wide"><span>Ban reason</span><b>${esc(u.ban_reason)}</b></div>` : ''}
       </div>
+      ${myRank() >= 1 ? `<h2 class="sec-title">Nitro</h2><div class="card">${act(u.is_nitro ? '<i class="fa-solid fa-bolt" style="color:var(--nitro)"></i> Has Nitro' : 'No Nitro',
+        u.is_nitro ? `Since ${u.nitro_since ? new Date(u.nitro_since).toLocaleDateString([], { dateStyle: 'medium' }) : 'a while'}. Removing it hides their halo, profile effect and name style.` : 'Give it straight away. They don’t have to ask first.',
+        u.is_nitro ? '<button class="btn btn-ghost btn-sm" data-nitro>Remove Nitro</button>' : '<button class="btn btn-nitro btn-sm" data-nitro><i class="fa-solid fa-bolt"></i>Give Nitro</button>')}</div>` : ''}
       ${can('view_all_servers') ? `<h2 class="sec-title">Servers <span data-srvn></span></h2><div data-srv>${skel(1, 52)}</div>` : ''}
       ${u.id === NX.me.id ? (rrLive && nextRole() ? `<h2 class="sec-title">Your rank</h2><div class="card">${act(esc(P().ROLE_NAMES[myRank()] || 'User'), `You can’t raise your own rank, but you can ask for ${ROLE_LABEL[nextRole()]}.`, rankUpButton())}</div>` : '')
         : `<h2 class="sec-title">Manage</h2><div class="card">${!canAct(u)
@@ -392,6 +395,10 @@
       if (!ok) e.target.value = ROLE_KEYS[R(u)]; else { m.close(); openUser(u); }
     });
     bodyEl.querySelector('[data-uban]')?.addEventListener('click', () => toggleBan(u, () => { m.close(); openUser(u); }));
+    bodyEl.querySelector('[data-nitro]')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      if (await setNitro(u, !u.is_nitro, btn)) { m.close(); openUser(u); }
+    });
     bodyEl.querySelector('[data-gbsave]')?.addEventListener('click', async (e) => {
       const gb = Math.floor(Number(bodyEl.querySelector('[data-gb]').value));
       if (!(gb >= 1 && gb <= 2048)) return NX.toast('Storage must be between 1 and 2048 GB.', { err: true });
@@ -813,9 +820,11 @@
     appeal_decline: () => 'declined the ban appeal of {t}',
     rankup_approve: (d) => `approved {t} for <b>${esc(ROLE_LABEL[d?.role] || d?.role)}</b>`,
     rankup_decline: (d) => `declined the ${esc(ROLE_LABEL[d?.role] || d?.role)} request from {t}`,
-    storage_quota: (d) => `set the drive storage of {t} to <b>${esc(d?.gb ?? d?.quota_gb ?? '?')} GB</b>`,
+    storage_quota: (d) => `set the drive storage of {t} to <b>${esc(d?.to_gb ?? d?.gb ?? d?.quota_gb ?? '?')} GB</b>`,
+    nitro_given: () => 'gave <b>Nitro</b> to {t}',
+    nitro_removed: () => 'removed <b>Nitro</b> from {t}',
   };
-  const AU_ICON = { role: 'fa-user-shield', ban: 'fa-ban', unban: 'fa-unlock', reset_password: 'fa-key', delete_user: 'fa-user-xmark', permission: 'fa-sliders', appeal_accept: 'fa-gavel', appeal_decline: 'fa-gavel', rankup_approve: 'fa-arrow-up', rankup_decline: 'fa-arrow-up', storage_quota: 'fa-hard-drive' };
+  const AU_ICON = { role: 'fa-user-shield', ban: 'fa-ban', unban: 'fa-unlock', reset_password: 'fa-key', delete_user: 'fa-user-xmark', permission: 'fa-sliders', appeal_accept: 'fa-gavel', appeal_decline: 'fa-gavel', rankup_approve: 'fa-arrow-up', rankup_decline: 'fa-arrow-up', storage_quota: 'fa-hard-drive', nitro_given: 'fa-bolt', nitro_removed: 'fa-bolt' };
   let auditFilter = 'all';
   async function auditTab() {
     body.innerHTML = head('Audit log', 'Bans, role changes, password resets, deletions and permission changes.') + `
@@ -855,14 +864,61 @@
         ${o.msg ? `<div class="adm-quote">${esc(o.msg)}</div>` : ''}${o.note ? `<small class="muted" style="display:block;margin-top:6px">Note: ${esc(o.note)}</small>` : ''}</div>
       ${o.pending ? `<div class="row"><button class="btn btn-quiet btn-sm" data-q-no>Decline</button><button class="btn btn-primary btn-sm" data-q-yes>${o.yes || 'Approve'}</button></div>` : ''}</div>`;
   }
+  // Staff give or take Nitro directly (supabase/nexchat_v3_staff_nitro.sql).
+  async function setNitro(u, on, btn) {
+    const name = P().nameOf(u);
+    if (!on && !await NX.confirm({ title: `Remove Nitro from ${name}?`, body: 'Their halo, profile effect and name style stop showing. You can give it back any time.', ok: 'Remove Nitro', danger: true })) return false;
+    btn?.classList.add('busy');
+    const { error } = await db().rpc('admin_set_nitro', { p_user_id: u.id, p_on: on });
+    btn?.classList.remove('busy');
+    if (error) {
+      if (/PGRST202|could not find the function/i.test(`${error.code} ${error.message}`)) NX.toast('Giving Nitro needs the database update: run supabase/nexchat_v3_staff_nitro.sql.', { err: true });
+      else NX.toast(adminErr(error), { err: true });
+      return false;
+    }
+    u.is_nitro = on; u.nitro_since = on ? (u.nitro_since || new Date().toISOString()) : null;
+    P().put({ id: u.id, is_nitro: on });
+    NX.toast(on ? `${name} has Nitro now.` : `Nitro removed from ${name}.`, { icon: 'fa-bolt' });
+    if (tab === 'users') paintUsers();
+    if (tab === 'nitro') nitroTab();
+    return true;
+  }
+  function giveNitroDialog() {
+    const b = NX.h(`<div class="stack"><div class="field"><label>Username</label><input class="input" data-who placeholder="their username" autocomplete="off" spellcheck="false" autocapitalize="none"></div>
+      <div class="adm-gn-hit" data-hit></div></div>`);
+    let hit = null, seq = 0;
+    const show = () => {
+      const el = b.querySelector('[data-hit]');
+      el.innerHTML = !hit ? '' : `<div class="who">${P().avatar(hit, 32, { presence: true })}<div><b>${P().nameText(hit)}</b><small class="muted">@${esc(hit.username)}${hit.is_nitro ? ' · already has Nitro' : ''}</small></div></div>`;
+    };
+    const look = NX.debounce(async () => {
+      const v = b.querySelector('[data-who]').value.trim().replace(/^@/, '').replace(/[%_\\]/g, '\\$&'), n = ++seq;
+      if (!v) { hit = null; return show(); }
+      const { data } = await db().from('profiles').select('id,username,display_name,avatar_url,accent_color,is_nitro,nitro_since,theme').ilike('username', v).limit(1);
+      if (n !== seq) return;
+      hit = data?.[0] || null; show();
+      if (!hit) b.querySelector('[data-hit]').innerHTML = '<small class="muted">No one with that username.</small>';
+    }, 250);
+    b.querySelector('[data-who]').addEventListener('input', look);
+    const m = NX.modal({ title: 'Give Nitro', sub: 'Straight away, without a request.', body: b,
+      foot: [{ label: 'Cancel' }, { label: 'Give Nitro', cls: 'btn-nitro', icon: 'fa-bolt', primary: true, onClick: async () => {
+        if (!hit) { NX.toast('Type the username of someone on NexChat.', { err: true }); return false; }
+        if (hit.is_nitro) { NX.toast(`${P().nameOf(hit)} already has Nitro.`); return false; }
+        return (await setNitro(hit, true)) || false;
+      } }] });
+    b.querySelector('[data-who]').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); m.primary.click(); } });
+    setTimeout(() => b.querySelector('[data-who]').focus(), 50);
+  }
   async function nitroTab() {
-    body.innerHTML = head('Nitro requests', 'Approving grants the animated halo and profile extras.') + skel(3);
+    const giveBtn = myRank() >= 1 ? '<button class="btn btn-nitro btn-sm" data-give><i class="fa-solid fa-bolt"></i>Give Nitro</button>' : '';
+    body.innerHTML = head('Nitro requests', 'Approving grants the animated halo and profile extras.', giveBtn) + skel(3);
     const { data, error } = await db().from('nitro_requests')
       .select('*, profiles!user_id(id,username,display_name,avatar_url,accent_color,is_nitro,banner_gif_url,theme)')
       .order('created_at', { ascending: false }).limit(300);
     if (!still('nitro')) return;
     const box = NX.h('<div class="card" style="padding:6px 16px"></div>');
-    body.innerHTML = head('Nitro requests', 'Approving grants the animated halo and profile extras.');
+    body.innerHTML = head('Nitro requests', 'Approving grants the animated halo and profile extras.', giveBtn);
+    body.querySelector('[data-give]')?.addEventListener('click', giveNitroDialog);
     body.appendChild(box);
     if (error) { box.innerHTML = emptyBox('fa-triangle-exclamation', 'Couldn’t load requests', esc(error.message)); return; }
     setCount('nitro', (data || []).filter((r) => r.status === 'pending').length);

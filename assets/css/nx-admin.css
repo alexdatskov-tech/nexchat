@@ -332,3 +332,11 @@ body.glass.has-bg .adm-page .card, body.glass.has-bg .kpi, body.glass.has-bg .ad
   .adm-page .tbl tr.adm-urow td:last-child { gap: 8px; }
   .adm-manage { padding: 0 10px 0 12px; }
 }
+
+/* Give Nitro: the person the username matches */
+.adm-gn-hit { min-height: 58px; }
+.adm-gn-hit .who { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line-2); }
+.adm-gn-hit .who > div { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.adm-gn-hit .who b { font-weight: 700; }
+.adm-gn-hit .who small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-gn-hit > small { display: block; padding: 10px 2px; }
