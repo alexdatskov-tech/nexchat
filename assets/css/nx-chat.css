@@ -188,9 +188,12 @@
 .composer .c-row { display: flex; align-items: flex-end; gap: 2px; padding: 4px 6px 4px 4px; }
 .composer textarea {
   flex: 1; min-width: 0; background: none; border: 0; outline: none; resize: none; color: var(--txt-1);
-  font-size: 15px; line-height: 1.42; padding: 9px 6px; max-height: 40vh; min-height: 40px; height: 40px; overflow-y: auto;
+  font-size: 15px; line-height: 1.42; padding: 10px 6px; max-height: 40vh; min-height: 42px; height: 42px; overflow-y: hidden;
 }
 .composer textarea::placeholder { color: var(--txt-4); }
+/* no scrollbar line beside the emoji button; the box still grows and scrolls */
+.composer textarea { scrollbar-width: none; box-sizing: border-box; }
+.composer textarea::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .composer .c-row .icon-btn { width: 36px; height: 36px; margin-bottom: 2px; }
 .composer .c-row .icon-btn i { font-size: 18px; }
 .composer .send { color: var(--accent-hi); }

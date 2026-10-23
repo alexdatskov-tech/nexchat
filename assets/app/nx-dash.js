@@ -20,7 +20,9 @@
         ['fa-expand', 'Full screen is now real full screen on phones and desktops.'],
         ['fa-house', 'This page: a clock, the weather where you are, announcements, what’s new, who’s around and big server cards.'],
         ['fa-cloud-sun-rain', 'Colourful animated weather icons (Meteocons by Bas Milius). They hold still if you turn on Reduce motion.'],
-        ['fa-tower-broadcast', 'Weather uses your exact location (or a city you pick), and in the US “now” is the real reading from the nearest weather station, refreshed every 10 minutes.'],
+        ['fa-layer-group', 'Weather from many sources at once, no keys needed: Open-Meteo with eight models (ECMWF, NOAA, DWD, Canada, UK Met Office, Météo-France, JMA), MET Norway (yr.no), wttr.in and, in the US, the real reading from the nearest weather station. “Now” is that reading, or the middle of every source.'],
+        ['fa-gauge-high', 'Weather details: UV, air quality, wind and gusts, humidity and dew point, pressure, visibility, clouds, rain today, sunrise and sunset, and whether rain is coming in the next 2 hours.'],
+        ['fa-bolt', 'Weather shows instantly from the last check and updates in the background.'],
         ['fa-clock-rotate-left', 'Miss the old look? Settings → Appearance → Interface → Classic brings back the original NexChat style, rebuilt on the new app.'],
         ['fa-mobile-screen', 'The sidebar on phones is no longer greyed out behind its own shadow.'],
         ['fa-image', 'Very wide screenshots no longer leave an empty box under them.'],
@@ -40,194 +42,6 @@
       ],
     },
   ];
-
-  /* ---------- weather ---------- */
-  const WX = {
-    0: ['Clear', 'fa-sun', 'fa-moon', 'clear'], 1: ['Mostly clear', 'fa-sun', 'fa-moon', 'clear'],
-    2: ['Partly cloudy', 'fa-cloud-sun', 'fa-cloud-moon', 'cloud'], 3: ['Overcast', 'fa-cloud', 'fa-cloud', 'cloud'],
-    45: ['Fog', 'fa-smog', 'fa-smog', 'fog'], 48: ['Freezing fog', 'fa-smog', 'fa-smog', 'fog'],
-    51: ['Light drizzle', 'fa-cloud-rain', 'fa-cloud-rain', 'rain'], 53: ['Drizzle', 'fa-cloud-rain', 'fa-cloud-rain', 'rain'], 55: ['Heavy drizzle', 'fa-cloud-rain', 'fa-cloud-rain', 'rain'],
-    56: ['Freezing drizzle', 'fa-cloud-rain', 'fa-cloud-rain', 'rain'], 57: ['Freezing drizzle', 'fa-cloud-rain', 'fa-cloud-rain', 'rain'],
-    61: ['Light rain', 'fa-cloud-rain', 'fa-cloud-rain', 'rain'], 63: ['Rain', 'fa-cloud-showers-heavy', 'fa-cloud-showers-heavy', 'rain'], 65: ['Heavy rain', 'fa-cloud-showers-heavy', 'fa-cloud-showers-heavy', 'rain'],
-    66: ['Freezing rain', 'fa-cloud-showers-heavy', 'fa-cloud-showers-heavy', 'rain'], 67: ['Freezing rain', 'fa-cloud-showers-heavy', 'fa-cloud-showers-heavy', 'rain'],
-    71: ['Light snow', 'fa-snowflake', 'fa-snowflake', 'snow'], 73: ['Snow', 'fa-snowflake', 'fa-snowflake', 'snow'], 75: ['Heavy snow', 'fa-snowflake', 'fa-snowflake', 'snow'], 77: ['Snow grains', 'fa-snowflake', 'fa-snowflake', 'snow'],
-    80: ['Showers', 'fa-cloud-sun-rain', 'fa-cloud-moon-rain', 'rain'], 81: ['Showers', 'fa-cloud-showers-heavy', 'fa-cloud-showers-heavy', 'rain'], 82: ['Violent showers', 'fa-cloud-showers-heavy', 'fa-cloud-showers-heavy', 'rain'],
-    85: ['Snow showers', 'fa-snowflake', 'fa-snowflake', 'snow'], 86: ['Snow showers', 'fa-snowflake', 'fa-snowflake', 'snow'],
-    95: ['Thunderstorm', 'fa-cloud-bolt', 'fa-cloud-bolt', 'storm'], 96: ['Thunderstorm, hail', 'fa-cloud-bolt', 'fa-cloud-bolt', 'storm'], 99: ['Thunderstorm, hail', 'fa-cloud-bolt', 'fa-cloud-bolt', 'storm'],
-  };
-  const wx = (code) => WX[code] || ['—', 'fa-cloud', 'fa-cloud', 'cloud'];
-  // Animated, colourful icons: Meteocons by Bas Milius (MIT), kept in
-  // assets/wx; the still versions are used when Reduce motion is on.
-  const ICON = {
-    0: ['clear-day', 'clear-night'], 1: ['clear-day', 'clear-night'], 2: ['partly-cloudy-day', 'partly-cloudy-night'], 3: ['cloudy', 'cloudy'],
-    45: ['fog-day', 'fog-night'], 48: ['fog-day', 'fog-night'],
-    51: ['partly-cloudy-day-drizzle', 'partly-cloudy-night-drizzle'], 53: ['drizzle', 'drizzle'], 55: ['drizzle', 'drizzle'], 56: ['sleet', 'sleet'], 57: ['sleet', 'sleet'],
-    61: ['rain', 'rain'], 63: ['rain', 'rain'], 65: ['extreme-rain', 'extreme-rain'], 66: ['sleet', 'sleet'], 67: ['sleet', 'sleet'],
-    71: ['partly-cloudy-day-snow', 'partly-cloudy-night-snow'], 73: ['snow', 'snow'], 75: ['extreme-snow', 'extreme-snow'], 77: ['snow', 'snow'],
-    80: ['partly-cloudy-day-rain', 'partly-cloudy-night-rain'], 81: ['rain', 'rain'], 82: ['extreme-rain', 'extreme-rain'], 85: ['partly-cloudy-day-snow', 'partly-cloudy-night-snow'], 86: ['extreme-snow', 'extreme-snow'],
-    95: ['thunderstorms-day-rain', 'thunderstorms-night-rain'], 96: ['hail', 'hail'], 99: ['hail', 'hail'],
-  };
-  const still = () => document.body.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const iconSrc = (name) => `assets/wx/${still() ? 'still/' : ''}${name}.svg`;
-  const wxImg = (code, night, cls = '', title = '') => {
-    const name = (ICON[code] || ['not-available', 'not-available'])[night ? 1 : 0];
-    return `<img class="wx-ic ${cls}" src="${iconSrc(name)}" alt="${esc(title || wx(code)[0])}" draggable="false">`;
-  };
-  const units = () => NX.ls.get('nx_wx_units') || (/^en-(US|LR|MM)\b/.test(navigator.language || '') || /^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Indiana)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || '') ? 'f' : 'c');
-  let wxState = { loading: false, data: null, error: '' };
-
-  async function getJson(url, ms = 9000) {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), ms);
-    try {
-      const r = await fetch(url, { signal: ctl.signal });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return await r.json();
-    } finally { clearTimeout(t); }
-  }
-  /* Where: a city you picked wins; otherwise your device's exact location
-     (asked once, then used silently); your IP address is only the fallback
-     while that isn't available. */
-  async function ipLocation() {
-    const tries = [
-      ['https://get.geojs.io/v1/ip/geo.json', (r) => ({ lat: +r.latitude, lon: +r.longitude, name: r.city || r.region || r.country, cc: r.country_code })],
-      ['https://ipwho.is/', (r) => (r.success === false ? null : { lat: +r.latitude, lon: +r.longitude, name: r.city || r.region || r.country, cc: r.country_code })],
-    ];
-    for (const [url, pick] of tries) {
-      try {
-        const loc = pick(await getJson(url, 6000));
-        if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) return { ...loc, name: loc.name || 'Your area', src: 'ip', at: Date.now() };
-      } catch {}
-    }
-    return null;
-  }
-  const gpsState = async () => { try { return (await navigator.permissions.query({ name: 'geolocation' })).state; } catch { return 'prompt'; } };
-  function gpsFix(timeout = 12000) {
-    return new Promise((ok, no) => {
-      if (!navigator.geolocation) return no(new Error('no geolocation'));
-      navigator.geolocation.getCurrentPosition((p) => ok(p.coords), no, { enableHighAccuracy: true, timeout, maximumAge: 10 * 60e3 });
-    });
-  }
-  async function placeName(lat, lon) {
-    try {
-      const r = await getJson(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`, 6000);
-      return { name: r.city || r.locality || r.principalSubdivision || 'Your location', cc: r.countryCode };
-    } catch { return { name: 'Your location' }; }
-  }
-  async function gpsLocation(ask) {
-    const st = await gpsState();
-    if (st === 'denied' || (st !== 'granted' && !ask)) return null;
-    try {
-      const c = await gpsFix();
-      const old = NX.ls.get('nx_wx_loc');
-      const moved = !old || old.src !== 'gps' || Math.hypot(old.lat - c.latitude, old.lon - c.longitude) > 0.01;
-      const where = moved ? await placeName(c.latitude, c.longitude) : { name: old.name, cc: old.cc };
-      return { lat: c.latitude, lon: c.longitude, ...where, src: 'gps', acc: Math.round(c.accuracy || 0), at: Date.now() };
-    } catch { return null; }
-  }
-  async function resolvePlace() {
-    let loc = NX.ls.get('nx_wx_loc');
-    if (loc?.src === 'city') return loc;
-    const asked = NX.ls.get('nx_wx_asked');
-    const gps = await gpsLocation(!asked);
-    if (!asked) NX.ls.set('nx_wx_asked', 1);
-    if (gps) { NX.ls.set('nx_wx_loc', gps); return gps; }
-    if (!loc || loc.src === 'gps' || Date.now() - (loc.at || 0) > 12 * 36e5) {
-      const ip = await ipLocation();
-      if (ip) { NX.ls.set('nx_wx_loc', ip); loc = ip; }
-    }
-    return loc || null;
-  }
-
-  /* In the US, "now" is the latest real reading from the nearest National
-     Weather Service station (within the last 90 minutes); elsewhere, and if
-     no station has reported, it's Open-Meteo's current conditions. */
-  const textCode = (t) => {
-    t = String(t || '').toLowerCase();
-    if (/thunder|t-storm/.test(t)) return 95;
-    if (/snow|sleet|flurr|ice pellets/.test(t)) return 73;
-    if (/freezing rain|freezing drizzle/.test(t)) return 66;
-    if (/heavy rain|showers/.test(t)) return 63;
-    if (/rain|drizzle/.test(t)) return 61;
-    if (/fog|mist|haze|smoke/.test(t)) return 45;
-    if (/overcast/.test(t)) return 3;
-    if (/mostly cloudy|cloudy/.test(t)) return 3;
-    if (/mostly sunny|mostly clear/.test(t)) return 1;
-    if (/partly/.test(t)) return 2;
-    if (/clear|sunny|fair/.test(t)) return 0;
-    return null;
-  };
-  async function nwsNow(loc) {
-    if (!(loc.lat > 18 && loc.lat < 72 && loc.lon > -180 && loc.lon < -64) || (loc.cc && !/^(US|PR|GU|VI)$/i.test(loc.cc))) return null;
-    const key = 'nx_wx_st:' + loc.lat.toFixed(2) + ',' + loc.lon.toFixed(2);
-    let stations = NX.ls.get(key);
-    try {
-      if (!stations) {
-        const pt = await getJson(`https://api.weather.gov/points/${loc.lat.toFixed(4)},${loc.lon.toFixed(4)}`, 8000);
-        const list = await getJson(pt.properties.observationStations, 8000);
-        stations = (list.features || []).slice(0, 4).map((f) => ({ id: f.properties.stationIdentifier, name: f.properties.name }));
-        NX.ls.set(key, stations);
-      }
-      for (const st of stations) {
-        try {
-          const o = (await getJson(`https://api.weather.gov/stations/${st.id}/observations/latest`, 8000)).properties;
-          const age = Date.now() - Date.parse(o.timestamp);
-          if (o.temperature?.value == null || !(age < 90 * 60e3)) continue;
-          const feels = o.windChill?.value ?? o.heatIndex?.value ?? o.temperature.value;
-          return { tempC: o.temperature.value, feelsC: feels, humidity: o.relativeHumidity?.value, windKmh: o.windSpeed?.value, text: o.textDescription, code: textCode(o.textDescription), station: st, at: Date.parse(o.timestamp) };
-        } catch {}
-      }
-    } catch {}
-    return null;
-  }
-
-  let wxTimer = null;
-  async function loadWeather(force = false) {
-    if (!NX.ls.get('nx_wx_loc')) { wxState = { loading: true, data: null, error: '' }; paintWeather(); }
-    const loc = await resolvePlace();
-    if (!loc) { wxState = { loading: false, data: null, error: '' }; paintWeather(); return; }
-    const u = units();
-    const key = `${loc.lat.toFixed(2)},${loc.lon.toFixed(2)},${u}`;
-    const cache = NX.ls.get('nx_wx_cache');
-    if (!force && cache && cache.key === key && Date.now() - cache.at < 10 * 60e3) { wxState = { loading: false, data: cache.data, obs: cache.obs, error: '' }; paintWeather(); return; }
-    if (cache && cache.key === key) { wxState.data = cache.data; wxState.obs = cache.obs; }
-    wxState.loading = true; wxState.error = ''; paintWeather();
-    try {
-      const q = new URLSearchParams({
-        latitude: loc.lat.toFixed(4), longitude: loc.lon.toFixed(4), timezone: 'auto', forecast_days: '7',
-        current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day,precipitation',
-        hourly: 'temperature_2m,weather_code,precipitation_probability,is_day',
-        daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset',
-        temperature_unit: u === 'f' ? 'fahrenheit' : 'celsius', wind_speed_unit: u === 'f' ? 'mph' : 'kmh',
-      });
-      const [data, obs] = await Promise.all([getJson('https://api.open-meteo.com/v1/forecast?' + q), nwsNow(loc)]);
-      NX.ls.set('nx_wx_cache', { key, at: Date.now(), data, obs });
-      wxState = { loading: false, data, obs, error: '' };
-    } catch (e) {
-      wxState.loading = false; wxState.error = 'Couldn’t reach the weather service.';
-    }
-    paintWeather();
-  }
-  async function useMyLocation() {
-    if (!navigator.geolocation) return NX.toast('This browser can’t share its location. Pick a city instead.', { err: true });
-    NX.toast('Finding you…', { icon: 'fa-location-crosshairs' });
-    const gps = await gpsLocation(true);
-    if (!gps) { NX.toast('Location is blocked here. Pick a city instead.', { err: true }); return pickCity(); }
-    NX.ls.set('nx_wx_loc', gps);
-    loadWeather(true);
-  }
-  async function pickCity() {
-    const q = await NX.prompt({ title: 'Weather for…', label: 'City', placeholder: 'e.g. Raleigh', ok: 'Search' });
-    if (!q || !q.trim()) return;
-    let res;
-    try { res = (await getJson('https://geocoding-api.open-meteo.com/v1/search?count=6&language=en&name=' + encodeURIComponent(q.trim()))).results || []; }
-    catch { return NX.toast('Couldn’t search for places right now.', { err: true }); }
-    if (!res.length) return NX.toast(`No place called “${q.trim()}”.`, { err: true });
-    const set = (r) => { NX.ls.set('nx_wx_loc', { lat: r.latitude, lon: r.longitude, name: r.name, cc: r.country_code, src: 'city' }); loadWeather(true); };
-    if (res.length === 1) return set(res[0]);
-    const anchor = document.querySelector('.dash-wx [data-w="city"]') || document.querySelector('.dash-hero');
-    NX.menu(anchor, res.map((r) => ({ label: [r.name, r.admin1, r.country].filter(Boolean).join(', '), icon: 'fa-location-dot', onClick: () => set(r) })));
-  }
 
   /* ---------- announcements ---------- */
   let anns = null;
@@ -289,6 +103,8 @@
       <div class="dash-grid">
         <section class="dash-card dc-active"><h2><i class="fa-solid fa-signal"></i>Active now</h2><div class="dc-body"></div></section>
         <section class="dash-card dc-week"><h2><i class="fa-solid fa-calendar-week"></i>This week</h2><div class="dc-body"></div></section>
+        <section class="dash-card dc-wxd"><h2><i class="fa-solid fa-gauge-high"></i>Weather details</h2><div class="dc-body"></div></section>
+        <section class="dash-card dc-wxs"><h2><i class="fa-solid fa-layer-group"></i>Weather sources<span class="grow"></span><span class="ver">no keys needed</span></h2><div class="dc-body"></div></section>
         <section class="dash-card dc-news"><h2><i class="fa-solid fa-wand-magic-sparkles"></i>What’s new<span class="grow"></span><span class="ver">v${VERSION}</span></h2><div class="dc-body"></div></section>
       </div>
 
@@ -296,10 +112,8 @@
     el.querySelector('.dash').addEventListener('click', onClick);
     clearInterval(tick);
     tick = setInterval(() => { if (!host?.isConnected) { clearInterval(tick); tick = null; return; } paintClock(); }, 1000);
-    paintClock(); paintChips(); paintActive(); paintNews(); paintServers(); paintWeather();
-    loadWeather();
-    clearInterval(wxTimer);
-    wxTimer = setInterval(() => { if (!host?.isConnected) { clearInterval(wxTimer); wxTimer = null; return; } if (!document.hidden) loadWeather(); }, 10 * 60e3);
+    paintClock(); paintChips(); paintActive(); paintNews(); paintServers();
+    NX.weather.mount(el.querySelector('.dash'));
     (anns ? Promise.resolve(anns) : loadAnns()).then(paintAnns);
     NX.ls.set('nx_seen_ver', VERSION);
   }
@@ -342,78 +156,6 @@
       calls ? `<span class="dh-chip live"><i class="fa-solid fa-phone-volume"></i><b>${calls}</b> ${calls === 1 ? 'call' : 'calls'} going on</span>` : '',
       D().incoming().length ? `<button class="dh-chip hot" data-go="home/pending"><i class="fa-solid fa-user-plus"></i><b>${D().incoming().length}</b> friend ${D().incoming().length === 1 ? 'request' : 'requests'}</button>` : '',
     ].join('');
-  }
-  function paintWeather() {
-    const el = $d('.dash-wx'), hours = $d('.dh-hours'), week = $d('.dc-week .dc-body'), hero = $d('.dash-hero');
-    if (!el) return;
-    const loc = NX.ls.get('nx_wx_loc');
-    const u = units() === 'f' ? '°F' : '°C';
-    if (!loc && wxState.loading) { el.innerHTML = '<div class="wx-setup"><span class="spinner"></span><p>Finding your weather…</p></div>'; return; }
-    if (!loc) {
-      el.innerHTML = `<div class="wx-setup"><img class="wx-ic wx-big" src="${iconSrc('partly-cloudy-day')}" alt=""><b>See the weather here</b><p>Your location stays on this device.</p>
-        <div class="row" style="gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn btn-primary btn-sm" data-w="locate"><i class="fa-solid fa-location-crosshairs"></i>Use my location</button><button class="btn btn-ghost btn-sm" data-w="city"><i class="fa-solid fa-magnifying-glass"></i>Pick a city</button></div></div>`;
-      hours.innerHTML = '';
-      if (week) week.innerHTML = '<p class="muted" style="font-size:13px">Set a place in the weather card to see the week ahead.</p>';
-      return;
-    }
-    const d = wxState.data;
-    if (!d) {
-      el.innerHTML = `<div class="wx-setup">${wxState.error ? `<i class="fa-solid fa-triangle-exclamation wx-big"></i><b>${esc(wxState.error)}</b><button class="btn btn-ghost btn-sm" data-w="retry">Try again</button>` : '<span class="spinner"></span><p>Checking the sky…</p>'}</div>`;
-      return;
-    }
-    const c = d.current;
-    const day = c.is_day !== 0;
-    const F = units() === 'f';
-    const t = (cel) => (F ? cel * 9 / 5 + 32 : cel);
-    // a real station reading if there is one, otherwise the model's
-    const o = wxState.obs && Date.now() - wxState.obs.at < 90 * 60e3 ? wxState.obs : null;
-    const temp = o ? t(o.tempC) : c.temperature_2m;
-    const feels = o ? t(o.feelsC) : c.apparent_temperature;
-    const wind = o && o.windKmh != null ? (F ? o.windKmh / 1.609 : o.windKmh) : c.wind_speed_10m;
-    const hum = o && o.humidity != null ? o.humidity : c.relative_humidity_2m;
-    const code = o && o.code != null ? o.code : c.weather_code;
-    const [label, , , sky] = wx(code);
-    hero.dataset.sky = sky + (day ? '' : '-night');
-    const hi = Math.round(Math.max(d.daily.temperature_2m_max[0], temp)), lo = Math.round(Math.min(d.daily.temperature_2m_min[0], temp));
-    const ago = (ms) => { const m = Math.max(0, Math.round((Date.now() - ms) / 60e3)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
-    const src = o ? `Measured at ${esc(String(o.station.name || '').split(',').pop().trim() || o.station.id)} (${esc(o.station.id)}) · ${ago(o.at)}` : `Forecast model · updated ${ago(NX.ls.get('nx_wx_cache')?.at || Date.now())}`;
-    const pin = loc.src === 'gps' ? 'location-crosshairs' : loc.src === 'city' ? 'location-dot' : 'wifi';
-    const how = loc.src === 'gps' ? `Your exact location${loc.acc ? ` (±${loc.acc < 1000 ? loc.acc + ' m' : Math.round(loc.acc / 1000) + ' km'})` : ''}. Tap to change.`
-      : loc.src === 'city' ? 'A city you picked. Tap to change.' : 'Approximate, from your internet connection. Tap to use your exact location.';
-    el.innerHTML = `<div class="wx-now">
-        ${wxImg(code, !day, 'wx-big', label)}
-        <div class="wx-temp">${Math.round(temp)}<small>${u}</small></div>
-        <div class="wx-desc"><b>${esc(o?.text || label)}</b><span>Feels like ${Math.round(feels)}° · H ${hi}° L ${lo}°</span>
-          <span class="wx-meta"><img class="wx-mini" src="${iconSrc('wind')}" alt="Wind">${Math.round(wind)} ${F ? 'mph' : 'km/h'}<img class="wx-mini" src="${iconSrc('humidity')}" alt="Humidity">${Math.round(hum)}%</span></div>
-      </div>
-      <div class="wx-src"><i class="fa-solid fa-${o ? 'tower-broadcast' : 'satellite'}"></i>${src}</div>
-      <div class="wx-place"><button class="wx-link" data-w="place" title="${esc(how)}"><i class="fa-solid fa-${pin}"></i>${esc(loc.name || 'Your location')}${loc.src === 'ip' ? '<small>approx.</small>' : ''}</button>
-        <button class="wx-link" data-w="units" title="Switch units">${u === '°F' ? '°C' : '°F'}</button>
-        <button class="wx-link" data-w="retry" title="Refresh"><i class="fa-solid fa-rotate${wxState.loading ? ' fa-spin' : ''}"></i></button></div>`;
-    // The next 12 hours. Open-Meteo gives times on the place's own clock, so
-    // "now" is worked out on that clock too (your device may be elsewhere).
-    const placeNow = Date.now() + (d.utc_offset_seconds || 0) * 1000;
-    const wall = (s) => Date.parse(s + 'Z');
-    const nowIdx = Math.max(0, d.hourly.time.findIndex((s) => wall(s) > placeNow) - 1);
-    const hourLabel = (s) => new Date(wall(s)).toLocaleTimeString(undefined, { hour: 'numeric', timeZone: 'UTC' });
-    hours.innerHTML = d.hourly.time.slice(nowIdx, nowIdx + 12).map((ts, i) => {
-      const k = nowIdx + i;
-      const p = d.hourly.precipitation_probability?.[k];
-      const night = i === 0 ? !day : d.hourly.is_day?.[k] === 0;
-      return `<div class="wx-h${i === 0 ? ' now' : ''}"><span>${i === 0 ? 'Now' : hourLabel(ts)}</span>${wxImg(i === 0 ? code : d.hourly.weather_code[k], night)}<b>${Math.round(i === 0 ? temp : d.hourly.temperature_2m[k])}°</b>${p >= 20 ? `<small><i class="fa-solid fa-droplet"></i>${p}%</small>` : '<small></small>'}</div>`;
-    }).join('');
-    if (week) {
-      const all = d.daily.temperature_2m_max.concat(d.daily.temperature_2m_min);
-      const mn = Math.min(...all), mx = Math.max(...all), span = Math.max(1, mx - mn);
-      week.innerHTML = d.daily.time.map((t, i) => {
-        const [lab] = wx(d.daily.weather_code[i]);
-        const a = d.daily.temperature_2m_min[i], b = d.daily.temperature_2m_max[i];
-        const p = d.daily.precipitation_probability_max?.[i];
-        return `<div class="wx-d"><span class="wd-n">${i === 0 ? 'Today' : new Date(Date.parse(t + 'T12:00Z')).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}</span>${wxImg(d.daily.weather_code[i], false, '', lab)}
-          <small class="wd-p">${p >= 20 ? p + '%' : ''}</small><span class="wd-lo">${Math.round(a)}°</span>
-          <span class="wd-bar"><i style="left:${((a - mn) / span) * 100}%;right:${100 - ((b - mn) / span) * 100}%"></i></span><span class="wd-hi">${Math.round(b)}°</span></div>`;
-      }).join('');
-    }
   }
   function paintAnns() {
     const el = $d('.dash-anns');
@@ -489,18 +231,7 @@
   }
 
   function onClick(e) {
-    const w = e.target.closest('[data-w]')?.dataset.w;
-    if (w === 'locate') return useMyLocation();
-    if (w === 'city') return pickCity();
-    if (w === 'place') {
-      return NX.menu(e.target.closest('[data-w]'), [
-        { label: 'Use my exact location', icon: 'fa-location-crosshairs', onClick: useMyLocation },
-        { label: 'Pick a city…', icon: 'fa-magnifying-glass', onClick: pickCity },
-        { label: 'Follow where I am', icon: 'fa-location-arrow', onClick: async () => { NX.ls.del('nx_wx_loc'); NX.ls.del('nx_wx_cache'); loadWeather(true); } },
-      ]);
-    }
-    if (w === 'retry') return loadWeather(true);
-    if (w === 'units') { NX.ls.set('nx_wx_units', units() === 'f' ? 'c' : 'f'); return loadWeather(true); }
+    if (e.target.closest('[data-w]')) return;   // weather buttons: nx-weather.js
     const f = e.target.closest('[data-f]')?.dataset.f;
     if (f === 'create' || f === 'add-srv') return NX.addServerDialog();
     if (f === 'join') return NX.joinServerDialog();
@@ -508,7 +239,6 @@
     const d = e.target.closest('[data-dm]'); if (d) return D().openDm(d.dataset.dm);
   }
 
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && host?.isConnected) loadWeather(); });
   const repaint = NX.debounce(() => { if (!host?.isConnected) return; paintChips(); paintActive(); paintServers(); }, 60);
   ['presence', 'friends', 'dms', 'servers', 'unread', 'live', 'call'].forEach((ev) => NX.on(ev, repaint));
   NX.on('announcements', () => loadAnns().then(() => { if (host?.isConnected) paintAnns(); else announceNew(); }));

@@ -86,8 +86,11 @@
     /* ---------- text ---------- */
     fit() {
       const ta = this.ta;
+      const max = Math.round(innerHeight * 0.4);
       ta.style.height = 'auto';
-      ta.style.height = Math.min(ta.scrollHeight, Math.round(innerHeight * 0.4)) + 'px';
+      ta.style.height = Math.min(ta.scrollHeight, max) + 'px';
+      // scroll only once the text is taller than the box can grow
+      ta.style.overflowY = ta.scrollHeight > max ? 'auto' : 'hidden';
     }
     sync() {
       const has = this.ta.value.trim().length > 0 || this.jobs.length > 0;
