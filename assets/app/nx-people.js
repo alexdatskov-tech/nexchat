@@ -242,7 +242,7 @@
     p = p || {};
     const fs = Math.round(size * 0.4);
     const inner = p.avatar_url
-      ? `<span class="av" style="width:${size}px;height:${size}px"><img ${imgAttr(p.avatar_url)} alt="" loading="lazy" decoding="async"></span>`
+      ? `<span class="av" style="width:${size}px;height:${size}px"><img ${imgAttr(p.avatar_url)} alt=""${o.eager ? ' fetchpriority="high"' : ' loading="lazy"'} decoding="async"></span>`
       : `<span class="av" style="width:${size}px;height:${size}px;font-size:${fs}px;background:${tint(p)}">${esc(initial(nameOf(p)))}</span>`;
     const deco = o.deco !== false && size >= 24 ? decoPath(p, 'pfp') : null;
     let out = deco ? `<span class="av-decoed">${inner}${decoImg(deco, 'av-deco', o.still)}</span>` : inner;
@@ -361,11 +361,73 @@
   }
   const myStatus = () => chosen === 'offline' ? 'invisible' : chosen;
 
-  /* ---------- user card ---------- */
+  /* ---------- user card ----------
+     Drawn at once from the profile cache; the full row and the roles load
+     alongside and the card is redrawn only if they change something. The
+     profile effect (an APNG of up to 6 MB) shows its still frame first and
+     starts playing once the whole file is in, so it never holds up the
+     picture or the banner. Hovering a name or picture warms all of it. */
+  const fullAt = new Map();      // uid -> when its full row was last fetched
+  const fullNow = new Map();     // uid -> in-flight fetch
+  function fresh(uid, maxAge = 60e3) {
+    if (Date.now() - (fullAt.get(uid) || 0) < maxAge) return Promise.resolve(get(uid));
+    if (!fullNow.has(uid)) {
+      fullNow.set(uid, fetchFull(uid).then((r) => { fullAt.set(uid, Date.now()); return r; }).finally(() => fullNow.delete(uid)));
+    }
+    return fullNow.get(uid);
+  }
+  async function cardRoles(sid, uid) {
+    const known = NX.views.server?.rolesOf?.(sid, uid);
+    if (known) return known;
+    const { data } = await window.db.from('member_roles').select('roles(name,color,icon_url,position)').eq('server_id', sid).eq('user_id', uid);
+    return (data || []).map((r) => r.roles).filter(Boolean).sort((a, b) => (b.position || 0) - (a.position || 0));
+  }
+  const effects = new Map();     // full effect path -> Promise (resolves once decoded)
+  function loadEffect(path) {
+    if (!effects.has(path)) {
+      effects.set(path, new Promise((ok, no) => {
+        const im = new Image();
+        im.fetchPriority = 'low';
+        im.decoding = 'async';
+        im.onload = () => im.decode().catch(() => {}).then(() => { im.dataset.ready = '1'; ok(path); });
+        im.onerror = () => { effects.delete(path); no(); };
+        im.src = path;
+        effects.set('img:' + path, im);   // keep a reference: the decoded frames stay in memory
+      }));
+    }
+    return effects.get(path);
+  }
+  const effectReady = (path) => effects.get('img:' + path)?.dataset.ready === '1';
+  function preloadImg(url, priority = 'low') {
+    if (!url) return;
+    const go = (u) => { const im = new Image(); im.fetchPriority = priority; im.src = u; };
+    if (window.Store?.isManaged(url)) window.Store.sign(url).then(go).catch(() => {}); else go(url);
+  }
+  // Everything a card needs, fetched ahead (hover, or a press before the click).
+  const warmed = new Map();
+  function warm(uid) {
+    if (!uid || Date.now() - (warmed.get(uid) || 0) < 60e3) return;
+    warmed.set(uid, Date.now());
+    fresh(uid).then((p) => {
+      if (!p) return;
+      preloadImg(p.banner_url);
+      const deco = decoPath(p, 'bio');
+      if (deco) { preloadImg(decoSrc(deco, true)); loadEffect(deco).catch(() => {}); }
+    }).catch(() => {});
+  }
+  let hoverT = null;
+  document.addEventListener('pointerover', (e) => {
+    const u = e.target.closest?.('[data-uid]');
+    clearTimeout(hoverT);
+    if (u) hoverT = setTimeout(() => warm(u.dataset.uid), 120);
+  }, { passive: true });
+  document.addEventListener('pointerdown', (e) => { const u = e.target.closest?.('[data-uid]'); if (u) warm(u.dataset.uid); }, { passive: true, capture: true });
+
+  const cardSig = (p, roles) => JSON.stringify([CARD.split(',').map((k) => p[k]), (roles || []).map((r) => [r.name, r.color, r.icon_url])]);
+
   async function card(uid, at, opts = {}) {
     NX.closeMenu();
     document.querySelector('.ucard')?.remove();
-    let p = get(uid);
     const el = document.createElement('div');
     el.className = 'ucard';
     el.innerHTML = '<div style="padding:40px;display:flex;justify-content:center"><span class="spinner"></span></div>';
@@ -389,26 +451,28 @@
     const away = (e) => { if (!el.contains(e.target) && !e.target.closest('.menu, .overlay, .emoji-pick')) close(); };
     setTimeout(() => document.addEventListener('pointerdown', away, true), 0);
 
-    const full = await fetchFull(uid).catch(() => null);
-    if (!el.isConnected) return;
-    p = full || p;
-    if (!p) { el.innerHTML = '<div class="empty"><p>Could not load that profile.</p></div>'; return; }
     const isMe = uid === NX.me?.id;
-    let roles = [];
-    if (opts.serverId) {
-      const { data } = await window.db.from('member_roles').select('roles(name,color,icon_url,position)').eq('server_id', opts.serverId).eq('user_id', uid);
-      roles = (data || []).map((r) => r.roles).filter(Boolean).sort((a, b) => (b.position || 0) - (a.position || 0));
-    }
-    const rel = NX.data?.relation?.(uid) || null;
-    const accent = HEX.test(p.accent_color || '') ? p.accent_color : '#5865F2';
-    const bannerCss = p.banner_url ? '' : `background:linear-gradient(135deg, ${accent}, color-mix(in srgb, ${accent} 30%, #0e0f13))`;
-    const deco = decoPath(p, 'bio');
-    if (deco) el.classList.add('has-deco', 'card-deco-host');
-    const st = presenceOf(uid);
-    el.innerHTML = `
-      ${deco ? `<div class="card-deco" aria-hidden="true">${decoImg(deco, '')}</div>` : ''}
+    let p = get(uid), roles = opts.serverId ? NX.views.server?.rolesOf?.(opts.serverId, uid) || null : [], rel = null, sig = '';
+    const usable = (x) => x && !x._gone && x.username && x.created_at;
+
+    const paint = () => {
+      rel = NX.data?.relation?.(uid) || null;
+      sig = cardSig(p, roles);
+      const accent = HEX.test(p.accent_color || '') ? p.accent_color : '#5865F2';
+      const bannerCss = p.banner_url ? '' : `background:linear-gradient(135deg, ${accent}, color-mix(in srgb, ${accent} 30%, #0e0f13))`;
+      const deco = decoPath(p, 'bio');
+      el.classList.toggle('has-deco', !!deco);
+      el.classList.toggle('card-deco-host', !!deco);
+      // the still frame is the same size as the effect, so the swap doesn't move anything
+      const fx = deco && (effectReady(deco)
+        ? `<img src="${esc(deco)}" alt="" decoding="async">`
+        : `<img src="${esc(decoSrc(deco, true))}" data-full="${esc(deco)}" onerror="this.onerror=null;this.src=this.dataset.full" alt="" decoding="async">`);
+      const st = presenceOf(uid);
+      const rs = roles || [];
+      el.innerHTML = `
+      ${deco ? `<div class="card-deco" aria-hidden="true">${fx}</div>` : ''}
       <div class="uc-banner" style="${bannerCss}"${p.banner_url ? ` data-bg="${esc(p.banner_url)}"` : ''}></div>
-      <div class="uc-av">${avatar(p, 84, { presence: true })}</div>
+      <div class="uc-av">${avatar(p, 84, { presence: true, eager: true })}</div>
       <div class="uc-body">
         <div>
           <div class="uc-name">${bigName(p)}</div>
@@ -417,7 +481,7 @@
         ${p.is_nitro || rank(p) || p.is_banned ? `<div class="uc-badges">${p.is_nitro ? '<span class="badge badge-nitro"><i class="fa-solid fa-bolt"></i>Nitro</span>' : ''}${roleBadge(p)}${p.is_banned ? '<span class="badge badge-banned">Banned</span>' : ''}</div>` : ''}
         ${p.custom_status ? `<div class="uc-status">${esc(p.custom_status)}</div>` : ''}
         ${p.bio ? `<div class="uc-sect"><h5>About me</h5><p>${esc(p.bio)}</p></div>` : ''}
-        ${roles.length ? `<div class="uc-sect"><h5>Roles</h5><div class="uc-roles">${roles.map((r) => `<span class="uc-role"><span class="d" style="background:${esc(HEX.test(r.color || '') ? r.color : '#99AAB5')}"></span>${roleIcon(r)}${esc(r.name)}</span>`).join('')}</div></div>` : ''}
+        ${rs.length ? `<div class="uc-sect"><h5>Roles</h5><div class="uc-roles">${rs.map((r) => `<span class="uc-role"><span class="d" style="background:${esc(HEX.test(r.color || '') ? r.color : '#99AAB5')}"></span>${roleIcon(r)}${esc(r.name)}</span>`).join('')}</div></div>` : ''}
         <div class="uc-sect"><h5>Member since</h5><p>${new Date(p.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</p></div>
         <div class="uc-acts">${isMe
           ? '<button class="btn btn-ghost btn-sm" data-a="edit"><i class="fa-solid fa-pen"></i>Edit profile</button>'
@@ -427,13 +491,24 @@
             <button class="icon-btn" data-a="more" title="More"><i class="fa-solid fa-ellipsis"></i></button>`}</div>
         ${isMe ? '' : `<form class="uc-msg"><input placeholder="Message @${esc(p.username)}" maxlength="4000"><button class="icon-btn" title="Send"><i class="fa-solid fa-paper-plane"></i></button></form>`}
       </div>`;
-    const bn = el.querySelector('[data-bg]');
-    if (bn) {
-      const url = bn.dataset.bg;
-      const set = (u) => { bn.style.backgroundImage = `url("${u.replace(/"/g, '%22')}")`; };
-      if (window.Store?.isManaged(url)) window.Store.sign(url).then(set).catch(() => {}); else set(url);
-    }
-    place();
+      const bn = el.querySelector('[data-bg]');
+      if (bn) {
+        const url = bn.dataset.bg;
+        const set = (u) => { bn.style.backgroundImage = `url("${u.replace(/"/g, '%22')}")`; };
+        if (window.Store?.isManaged(url)) window.Store.sign(url).then(set).catch(() => {}); else set(url);
+      }
+      if (deco && !effectReady(deco)) {
+        // the picture and the banner go first; then the effect, at low priority
+        const av = el.querySelector('.uc-av .av img');
+        const after = av && !av.complete ? new Promise((r) => { av.addEventListener('load', r, { once: true }); av.addEventListener('error', r, { once: true }); setTimeout(r, 1500); }) : Promise.resolve();
+        after.then(() => loadEffect(deco)).then(() => {
+          const im = el.querySelector('.card-deco img[data-full]');
+          if (im && im.dataset.full === deco) { im.removeAttribute('data-full'); im.src = deco; }
+        }).catch(() => {});
+      }
+      place();
+    };
+
     el.addEventListener('click', async (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (!a) return;
@@ -452,19 +527,30 @@
         ], { anchor: true });
       }
     });
-    el.querySelector('.uc-msg')?.addEventListener('submit', async (e) => {
+    el.addEventListener('submit', (e) => {
+      if (!e.target.closest('.uc-msg')) return;
       e.preventDefault();
       const v = e.target.querySelector('input').value.trim();
       if (!v) return;
       close();
       NX.data.openDm(uid, { send: v });
     });
+    const freshP = fresh(uid).catch(() => null);
+    const rolesP = roles ? Promise.resolve(roles) : cardRoles(opts.serverId, uid).catch(() => []);
+    if (usable(p)) paint();
+    const [full, rs] = await Promise.all([freshP, rolesP]);
+    if (!el.isConnected) return;
+    p = full || p;
+    roles = rs;
+    if (!usable(p)) { el.innerHTML = '<div class="empty"><p>Could not load that profile.</p></div>'; return; }
+    if (cardSig(p, roles) !== sig) paint();
+
   }
 
   NX.people = {
     CARD, put, get, need, fetchFull, nameOf, name, nameText, nameCss, bigName, nameStyle, fancy, asciiArt, NX_FONTS,
     avatar, decoPath, decoSrc, decoImg, haloClass, haloStyle, haloCss, haloImage, rank, roleBadge, roleIcon, ROLE_NAMES, imgAttr, tint,
     startPresence, setStatus, myStatus, presenceOf, isOnline, presenceDot, refreshDots, STATUS_LABEL, STATUS_COLOR,
-    card, all: () => [...cache.values()],
+    card, warm, all: () => [...cache.values()],
   };
 })();

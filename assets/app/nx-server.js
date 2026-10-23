@@ -29,7 +29,7 @@
     ]);
     if (!s.data) return null;
     // a refresh keeps what we already had (members, roles) so nothing blinks
-    const entry = { srv: s.data, channels: ch.data || [], perms: Number(pm.data) || 0, member: !!mem.data, roles: c?.roles || [], memberRoles: c?.memberRoles || new Map(), members: c?.members || null, at: Date.now() };
+    const entry = { srv: s.data, channels: ch.data || [], perms: Number(pm.data) || 0, member: !!mem.data, roles: c?.roles || [], memberRoles: c?.memberRoles || new Map(), rolesAt: c?.rolesAt || 0, members: c?.members || null, at: Date.now() };
     cache.set(sid, entry);
     loadRoles(sid);
     return entry;
@@ -50,6 +50,7 @@
     const e = cache.get(sid);
     if (!e) return;
     e.roles = (r.data || []).sort((a, b) => (b.position || 0) - (a.position || 0));
+    e.rolesAt = Date.now();
     e.memberRoles = new Map();
     (mr.data || []).forEach((x) => { if (!e.memberRoles.has(x.user_id)) e.memberRoles.set(x.user_id, []); e.memberRoles.get(x.user_id).push(x.role_id); });
     if (srv?.id === sid) { roles = e.roles; memberRoles = e.memberRoles; paintMembers(); }
@@ -596,6 +597,13 @@
 
   NX.views.server = {
     prefetch(sid) { return load(sid).catch(() => {}); },   // channels + permissions, cached
+    // A member's roles from the loaded role list (the user card), or null when it isn't loaded.
+    rolesOf(sid, uid) {
+      const e = cache.get(sid);
+      if (!e?.rolesAt) return null;
+      const ids = e.memberRoles.get(uid) || [];
+      return e.roles.filter((r) => ids.includes(r.id) && !r.is_default);
+    },
     enter(sideHost, mainHost, parts, r) {
       mountSide(sideHost); main = mainHost;
       offs = [
