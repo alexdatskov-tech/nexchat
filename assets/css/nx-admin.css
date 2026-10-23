@@ -103,6 +103,20 @@
 .adm-matrix td, .adm-matrix th { text-align: center; }
 .adm-matrix td:first-child, .adm-matrix th:first-child { text-align: left; }
 .adm-matrix .who small { white-space: normal; }
+/* which column is which: Owner (always on), Sudo Admins, Admins */
+.adm-matrix th { position: sticky; top: 0; z-index: 2; background: #0e0e12; padding: 12px 10px; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--txt-3); white-space: nowrap; }
+.adm-matrix th:not(:first-child) { width: 92px; }
+.adm-matrix th .mx-h { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }
+.adm-matrix th .mx-h i { font-size: 14px; }
+.adm-matrix th.mx-owner i { color: var(--nitro); }
+.adm-matrix th.mx-sudo i { color: #a78bfa; }
+.adm-matrix th.mx-admin i { color: #60a5fa; }
+.adm-matrix th small { display: block; font-size: 10px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--txt-4); }
+@media (max-width: 560px) {
+  .adm-matrix th:not(:first-child) { width: 58px; padding: 10px 4px; }
+  .adm-matrix th .mx-full { display: none; }
+}
+@media (min-width: 561px) { .adm-matrix th .mx-short { display: none; } }
 .adm-yes { color: var(--ok); }
 .adm-no { color: var(--txt-4); }
 
@@ -280,9 +294,10 @@ button.kpi:hover { border-color: color-mix(in srgb, var(--t) 55%, transparent); 
 .adm-powers-list p { width: 100%; font-size: 12.5px; margin-top: 4px; }
 
 /* users: one card per person */
-.adm-page .tbl-wrap { border: 0; background: none; overflow: visible; }
-.adm-page .tbl thead { display: none; }
-.adm-page .tbl, .adm-page .tbl tbody { display: block; width: 100%; min-width: 0; }
+/* (not the permission matrix: it is a real table, and its header names the columns) */
+.adm-page .tbl-wrap:not(:has(.adm-matrix)) { border: 0; background: none; overflow: visible; }
+.adm-page .tbl:not(.adm-matrix) thead { display: none; }
+.adm-page .tbl:not(.adm-matrix), .adm-page .tbl:not(.adm-matrix) tbody { display: block; width: 100%; min-width: 0; }
 .adm-page .tbl tr.adm-urow { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 8px; border-radius: 16px; background: #0e0e12; border: 1.5px solid var(--line-2); transition: border-color .12s, background .12s; }
 .adm-page .tbl tr.adm-urow:hover { border-color: var(--line-3); background: #121217; }
 .adm-page .tbl tr.adm-urow td { display: block; padding: 0; border: 0; background: none !important; }

@@ -766,7 +766,10 @@
     paint();
   }
   function paintMatrix(el, editable) {
-    el.innerHTML = `<div class="tbl-wrap"><table class="tbl adm-matrix"><thead><tr><th>Permission</th><th><i class="fa-solid fa-crown"></i> Owner</th><th><i class="fa-solid fa-user-shield"></i> Sudo</th><th><i class="fa-solid fa-shield-halved"></i> Admin</th></tr></thead><tbody>
+    el.innerHTML = `<div class="tbl-wrap"><table class="tbl adm-matrix"><thead><tr><th>Permission</th>
+      <th class="mx-owner" title="You: always every permission"><span class="mx-h"><i class="fa-solid fa-crown"></i><span>Owner</span></span><small>always on</small></th>
+      <th class="mx-sudo" title="Sudo Admins"><span class="mx-h"><i class="fa-solid fa-user-shield"></i><span class="mx-full">Sudo Admins</span><span class="mx-short">Sudo</span></span></th>
+      <th class="mx-admin" title="Admins"><span class="mx-h"><i class="fa-solid fa-shield-halved"></i><span class="mx-full">Admins</span><span class="mx-short">Admin</span></span></th></tr></thead><tbody>
       ${PERMS.map((p) => `<tr data-k="${p.k}"><td><div class="who"><i class="fa-solid ${p.ic} muted" style="width:18px;text-align:center"></i><div><b>${esc(p.t)}</b><small>${esc(p.d)}</small></div></div></td>
         <td><i class="fa-solid fa-circle-check adm-yes"></i></td>
         ${['sudo', 'admin'].map((role) => `<td>${editable ? `<input type="checkbox" class="switch" data-role="${role}" ${perms[role][p.k] ? 'checked' : ''} aria-label="${esc(p.t)} for ${role}">`
