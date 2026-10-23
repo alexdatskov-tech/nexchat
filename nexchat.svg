@@ -192,6 +192,8 @@
       var cfg = {
         page: u.pathname.replace(/^\//, ''), search: u.search, hash: u.hash,
         site: siteUrl, base: base,
+        // where this launcher itself is open: shared links point back here
+        self: /^https?:$/.test(location.protocol) ? location.href.replace(/#.*$/, '') : '',
       };
       // Runs first inside the app frame: exposes the virtual URL to UI.params()
       // / UI.go(), and routes in-app links back through the launcher.

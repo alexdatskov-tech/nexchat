@@ -680,7 +680,7 @@
     b.querySelector('tbody').onclick = async (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a; const tr = e.target.closest('[data-id]');
       if (!a || !tr) return;
-      if (a === 'copy') return NX.copy(NX.pageUrl(`index.html?invite=${tr.dataset.code}`), 'Invite link copied');
+      if (a === 'copy') return NX.copy(NX.linkTo(`invite/${tr.dataset.code}`), 'Invite link copied');
       if (a === 'del') {
         const { error } = await NX.must(window.db.from('invites').delete().eq('id', tr.dataset.id));
         if (error) return NX.fail(error);

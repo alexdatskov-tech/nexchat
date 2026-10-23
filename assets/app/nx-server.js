@@ -205,7 +205,7 @@
     if (!c) return;
     NX.menu(at, [
       { label: 'Mark as read', icon: 'fa-check', hidden: isVoice(c), onClick: () => { D().markChannelRead(c.id, srv.id); paintChannels(); } },
-      { label: 'Copy link', icon: 'fa-link', onClick: () => NX.copy(NX.pageUrl(`index.html#/s/${srv.id}/${c.id}`), 'Link copied') },
+      { label: 'Copy link', icon: 'fa-link', onClick: () => NX.copy(NX.linkTo(`s/${srv.id}/${c.id}`), 'Link copied') },
       { label: 'Edit channel', icon: 'fa-pen', hidden: !can(BIT.MANAGE_CHANNELS), onClick: () => channelDialog(c) },
       { label: 'Delete channel', icon: 'fa-trash-can', danger: true, hidden: !can(BIT.MANAGE_CHANNELS), onClick: () => deleteChannel(c) },
     ]);
@@ -317,7 +317,7 @@
         }
         return NX.fail(error);
       }
-      const link = NX.pageUrl(`index.html?invite=${data.code}`);
+      const link = NX.linkTo(`invite/${data.code}`);
       body.querySelector('[data-link]').value = link;
       body.querySelector('[data-code]').textContent = data.code;
       body.querySelector('[data-copy]').disabled = false;

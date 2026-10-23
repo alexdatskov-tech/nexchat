@@ -663,7 +663,7 @@
         { label: m.is_pinned ? 'Unpin message' : 'Pin message', icon: 'fa-thumbtack', hidden: !this.a.canPin?.(), onClick: () => this.setPinned(m, !m.is_pinned) },
         { label: 'Copy text', icon: 'fa-copy', hidden: !m.content, onClick: () => NX.copy(m.content, 'Text copied') },
         { label: 'Mention', icon: 'fa-at', hidden: mine || !this.a.canSend(), onClick: () => this.composer.insert(`@${P().get(m.author_id)?.username} `) },
-        { label: 'Copy message link', icon: 'fa-link', onClick: () => NX.copy(NX.pageUrl(`index.html#/${this.a.route}?m=${m.id}`), 'Link copied') },
+        { label: 'Copy message link', icon: 'fa-link', onClick: () => NX.copy(NX.linkTo(`${this.a.route}?m=${m.id}`), 'Link copied') },
         { sep: true, hidden: !(mine || this.a.canManage()) },
         { label: 'Delete message', icon: 'fa-trash-can', danger: true, hidden: !(mine || this.a.canManage()), onClick: () => this.del(id) },
       ], {

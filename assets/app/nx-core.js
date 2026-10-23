@@ -178,6 +178,17 @@ window.NX = (function () {
   NX.pageParams = () => new URLSearchParams(shell() ? shell().search : location.search);
   // Absolute link to a page of the app (invite links etc.).
   NX.pageUrl = (path) => new URL(path, shell() ? shell().site : location.href.replace(/[#?].*$/, '')).href;
+  /* A shareable link to an in-app route ('dm/<id>?m=<msg>', 'invite/<code>'),
+     on whatever address NexChat is running from right now: this page (any
+     host, mirror or tunnel), or the nexchat.svg launcher's own address. Only
+     a launcher opened from a file falls back to the published site. */
+  NX.linkTo = (route) => {
+    const r = String(route || '').replace(/^[#/]+/, '');
+    const sh = shell();
+    if (sh) return (sh.self || new URL('index.html', sh.site).href) + '#/' + r;
+    const here = location.href.replace(/#.*$/, '');
+    return (/^https?:/.test(here) ? here.replace(/\?.*$/, '') : NX.pageUrl('index.html')) + '#/' + r;
+  };
   NX.reload = () => { if (shell()) shell().go('index.html'); else location.reload(); };
 
   /* Loads a font file under a generated family name through the FontFace API
