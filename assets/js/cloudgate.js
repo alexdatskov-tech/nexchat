@@ -192,7 +192,9 @@ window.CloudGate = (function () {
     const r = await retry(async () => {
       let res;
       try {
-        res = proxyUrl() ? await viaProxy(ep, path, { method, body, query, test }) : await fetch(url, {
+        // url.href, not the URL object: page proxies (Noxia's browser mode) re-route
+        // string and Request fetches, and a URL object slipped past them unrouted.
+        res = proxyUrl() ? await viaProxy(ep, path, { method, body, query, test }) : await fetch(url.href, {
           method,
           headers: { authorization: auth(ep), ...(body ? { 'content-type': 'application/json' } : {}) },
           body: body ? JSON.stringify(body) : undefined,
