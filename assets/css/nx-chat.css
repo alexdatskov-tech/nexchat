@@ -274,3 +274,4 @@ body.compact .m.grp { margin-top: 0; }
 body.compact .m-text { line-height: 1.32; }
 body.compact .day { margin: 10px 16px 4px; }
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
+.aplayer .ap-play.busy { opacity: .7; pointer-events: none; }

@@ -381,7 +381,7 @@
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 48000 } : undefined);
       const chunks = [];
       let keep = false, raf = 0, actx = null;
-      const t0 = Date.now();
+      const t0 = Date.now(), p0 = performance.now();
       const timer = setInterval(() => {
         const s = Math.floor((Date.now() - t0) / 1000);
         bar.querySelector('.rec-t').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -399,7 +399,11 @@
         if (!keep || !chunks.length) return;
         const type = (rec.mimeType || chunks[0].type || 'audio/webm').split(';')[0];
         const ext = /mp4/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : 'weba';
-        this.addFiles([new File(chunks, `voice-message.${ext}`, { type })]);
+        const file = new File(chunks, `voice-message.${ext}`, { type });
+        // Recorded WebM has no length in its header, so the length travels with
+        // the upload (stored as the attachment's width; audio has no width).
+        file.nxDurationMs = Math.max(1, Math.round(performance.now() - p0));
+        this.addFiles([file]);
       };
       bar.querySelector('[data-a="x"]').onclick = () => { keep = false; stop(); };
       bar.querySelector('[data-a="ok"]').onclick = () => { keep = true; stop(); };

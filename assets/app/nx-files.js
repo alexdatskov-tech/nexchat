@@ -150,10 +150,11 @@
     on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
     emit() { this.listeners.forEach((f) => f(this)); }
     async start() {
+      this.width = this.original.nxDurationMs || null;   // voice messages: their length
       try {
         const p = await prepare(this.original, { original: !!this.opts.original });
         if (this.state === 'cancelled') return;
-        this.file = p.file; this.width = p.width; this.height = p.height; this.compressed = !!p.compressed;
+        this.file = p.file; this.width = p.width || this.width; this.height = p.height; this.compressed = !!p.compressed;
       } catch { /* upload as-is */ }
       this.state = 'queued'; this.emit();
       queue.push(this); pump();
@@ -244,6 +245,7 @@
   /* ---------- rendering ---------- */
   const ICONS = { pdf: 'fa-file-pdf', zip: 'fa-file-zipper', text: 'fa-file-code', audio: 'fa-file-audio', video: 'fa-file-video', image: 'fa-file-image', file: 'fa-file' };
   const fmtTime = (s) => (isFinite(s) ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '0:00');
+  const fmtLen = (s) => fmtTime(Math.ceil(s));   // a length never reads 0:00
 
   // A sized box for a single image so the list never jumps when it loads.
   function fitBox(w, h, maxW = 520, maxH = 360) {
@@ -340,20 +342,55 @@
 
   const players = new Set();
   function audioPlayer(a) {
+    // Length known up front for voice messages (stored as the width, see Job)
+    const saved = /^audio\//.test(a.mime_type || '') && a.width > 0 && !a.height ? a.width / 1000 : null;
     const el = NX.h(`<div class="aplayer">
       <button class="ap-play" title="Play"><i class="fa-solid fa-play"></i></button>
       <div class="ap-mid"><div class="ap-name">${esc(a.file_name)}</div>
         <div class="ap-seek"><div class="trk"><div class="fill"></div></div><input type="range" min="0" max="1000" value="0" aria-label="Seek"></div>
-        <div class="ap-times"><span class="cur">0:00</span><span class="dur">${a.file_size ? fmt.bytes(a.file_size) : ''}</span></div></div>
+        <div class="ap-times"><span class="cur">0:00</span><span class="dur">${saved ? fmtLen(saved) : a.file_size ? fmt.bytes(a.file_size) : ''}</span></div></div>
       <button class="rate" title="Speed">1×</button>
       <button class="icon-btn" data-a="dl" title="Download"><i class="fa-solid fa-download"></i></button>
     </div>`);
     const au = new Audio();
     au.preload = 'none';
     const play = el.querySelector('.ap-play'), seek = el.querySelector('input'), fill = el.querySelector('.fill');
-    let src = null;
+    const durEl = el.querySelector('.dur'), curEl = el.querySelector('.cur');
+    let src = null, measuring = false;
+    const dur = () => (Number.isFinite(au.duration) && au.duration > 0 ? au.duration : saved);
+    const paint = () => {
+      const d = dur();
+      if (d) durEl.textContent = fmtLen(d);
+      if (measuring) return;
+      const p = d ? Math.min(1, au.currentTime / d) : 0;
+      seek.value = Math.round(p * 1000); fill.style.width = (p * 100) + '%';
+      curEl.textContent = fmtTime(au.currentTime);
+    };
+    // Recorded WebM files carry no length, so the browser reports Infinity
+    // until it has seen the end: jump far past the end once, then come back.
+    async function measure() {
+      await new Promise((ok) => { if (au.readyState >= 1) ok(); else au.addEventListener('loadedmetadata', ok, { once: true }); });
+      if (Number.isFinite(au.duration) && au.duration > 0) return;
+      measuring = true;
+      await new Promise((ok) => {
+        const done = () => { au.removeEventListener('durationchange', check); clearTimeout(t); ok(); };
+        const check = () => { if (Number.isFinite(au.duration) && au.duration > 0) done(); };
+        const t = setTimeout(done, 4000);
+        au.addEventListener('durationchange', check);
+        au.currentTime = 1e101;
+      });
+      au.currentTime = 0;
+      measuring = false;
+    }
     play.onclick = async () => {
-      if (!src) { src = await resolved(a.url).catch(() => a.url); au.src = src; }
+      if (!src) {
+        play.classList.add('busy');
+        src = await resolved(a.url).catch(() => a.url);
+        au.preload = 'auto'; au.src = src;
+        await measure().catch(() => {});
+        play.classList.remove('busy');
+        paint();
+      }
       document.querySelectorAll('audio, video').forEach((o) => { if (o !== au && !o.closest('.vtile')) o.pause(); });
       players.forEach((p) => { if (p.au !== au) p.au.pause(); });
       au.paused ? au.play().catch(() => NX.toast('Couldn’t play that file.', { err: true })) : au.pause();
@@ -362,15 +399,10 @@
     for (const p of [...players]) if (!p.el.isConnected) { p.au.pause(); players.delete(p); }
     players.add({ au, el });
     au.onplay = () => { play.innerHTML = '<i class="fa-solid fa-pause"></i>'; };
-    au.onpause = au.onended = () => { play.innerHTML = '<i class="fa-solid fa-play"></i>'; };
-    au.onloadedmetadata = () => { el.querySelector('.dur').textContent = fmtTime(au.duration); };
-    au.ontimeupdate = () => {
-      if (!au.duration) return;
-      const p = au.currentTime / au.duration;
-      seek.value = Math.round(p * 1000); fill.style.width = (p * 100) + '%';
-      el.querySelector('.cur').textContent = fmtTime(au.currentTime);
-    };
-    seek.oninput = () => { if (au.duration) au.currentTime = (seek.value / 1000) * au.duration; };
+    au.onpause = () => { play.innerHTML = '<i class="fa-solid fa-play"></i>'; };
+    au.onended = () => { play.innerHTML = '<i class="fa-solid fa-play"></i>'; au.currentTime = 0; paint(); };
+    au.onloadedmetadata = au.ondurationchange = au.ontimeupdate = paint;
+    seek.oninput = () => { const d = dur(); if (d && src) au.currentTime = (seek.value / 1000) * d; };
     const rates = [1, 1.25, 1.5, 2, 0.75]; let ri = 0;
     el.querySelector('.rate').onclick = (e) => { ri = (ri + 1) % rates.length; au.playbackRate = rates[ri]; e.currentTarget.textContent = rates[ri] + '×'; };
     el.querySelector('[data-a="dl"]').onclick = () => download(a.url, a.file_name);
