@@ -304,7 +304,12 @@
     const urlVal = (cur().match(/^url\(\s*["']?(.*?)["']?\s*\)$/) || [])[1] || '';
     b.innerHTML = `<h1 class="page-title">Appearance</h1><p class="lead">Make NexChat yours. Changes preview live behind this page and sync to every device.</p>
       <div class="two-col"><div class="stack">
-      <div class="card"><h3>Theme</h3><p>How panels are drawn.</p>
+      <div class="card"><h3>Interface</h3><p>How NexChat looks and feels overall. Switch back any time.</p>
+        <div class="opt-grid" data-layout>
+          <button class="opt-card" data-v="modern"><span class="oc-prev ui-prev-modern"><i></i><i></i><i></i></span><b>NexChat 3</b><small>The new look, with the Home dashboard and softer panels.</small></button>
+          <button class="opt-card" data-v="classic"><span class="oc-prev ui-prev-classic"><i></i><i></i><i></i></span><b>Classic</b><small>The original NexChat look, rebuilt: black chat, violet highlights, pill composer.</small></button>
+        </div></div>
+      <div class="card"><h3>Theme</h3><p>How panels are drawn. <span class="muted" data-classic-note hidden>Classic always uses its own flat panels; this applies to NexChat 3.</span></p>
         <div class="opt-grid" data-style>
           <button class="opt-card" data-v="solid"><span class="oc-prev theme-solid"><i></i><i></i><i></i></span><b>Midnight</b><small>Solid, crisp, easy on battery.</small></button>
           <button class="opt-card" data-v="glass"><span class="oc-prev theme-glass"><i></i><i></i><i></i></span><b>Liquid glass</b><small>Frosted panels that float over your wallpaper.</small></button>
@@ -324,6 +329,8 @@
       <div class="sticky"><h2 class="sec-title" style="margin-top:0">Preview</h2><div class="look-prev" data-look></div></div></div>`;
     const paintSel = () => {
       b.querySelectorAll('[data-style] .opt-card').forEach((c) => c.classList.toggle('on', c.dataset.v === (draft.theme.ui_style === 'glass' ? 'glass' : 'solid')));
+      b.querySelectorAll('[data-layout] .opt-card').forEach((c) => c.classList.toggle('on', c.dataset.v === (draft.theme.ui_layout === 'classic' ? 'classic' : 'modern')));
+      b.querySelector('[data-classic-note]').hidden = draft.theme.ui_layout !== 'classic';
       const c = cur();
       b.querySelectorAll('[data-bgp] .opt-card[data-v]').forEach((x) => x.classList.toggle('on', x.dataset.v === c));
       const isImg = /^url\(/.test(c) || c === '__key';
@@ -339,6 +346,7 @@
       paintLook(b.querySelector('[data-look]'));
     };
     b.querySelector('[data-style]').onclick = (e) => { const c = e.target.closest('[data-v]'); if (!c) return; setTheme('ui_style', c.dataset.v); paintSel(); };
+    b.querySelector('[data-layout]').onclick = (e) => { const c = e.target.closest('[data-v]'); if (!c) return; setTheme('ui_layout', c.dataset.v === 'classic' ? 'classic' : null); paintSel(); };
     b.querySelector('[data-acc]').addEventListener('click', (e) => { const s = e.target.closest('.swatch[data-c]'); if (!s) return; setTheme('ui_accent', s.dataset.c || null); paintSel(); });
     b.querySelector('[data-acc-custom]').addEventListener('input', (e) => { setTheme('ui_accent', e.target.value); paintSel(); });
     b.querySelector('[data-density]').onclick = (e) => { const x = e.target.closest('[data-v]'); if (!x) return; setTheme('density', x.dataset.v); paintSel(); };

@@ -1,0 +1,160 @@
+/* ============================================================================
+   Classic: the original NexChat look on top of the 3.x app (Settings →
+   Appearance → Interface). Pure black chat, deep grey sidebars split by hair
+   lines, squircle rail icons, violet highlights and names, pill controls and
+   a round send button. Everything here is scoped to body.ui-classic.
+   ============================================================================ */
+body.ui-classic {
+  --bg-0: #0b0b0d; --bg-1: #121214; --bg-2: #000; --bg-3: #141417; --bg-4: #1c1c21; --bg-5: #26262c;
+  --line: rgba(255, 255, 255, .075); --line-2: rgba(255, 255, 255, .12); --line-3: rgba(255, 255, 255, .2);
+  --hover: rgba(255, 255, 255, .05); --active: rgba(255, 255, 255, .08);
+  background: #000;
+}
+
+/* ---- rail ------------------------------------------------------------------ */
+.ui-classic .rail { background: #0d0d0f; border-right: 1px solid var(--line); gap: 10px; }
+.ui-classic .r-btn { border-radius: 14px; background: #18181c; color: var(--txt-2); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04); }
+.ui-classic .r-item:hover .r-btn { border-radius: 14px; background: #222228; color: var(--txt-1); }
+.ui-classic .r-item.on .r-btn, .ui-classic .r-item.on .r-btn.tint, .ui-classic .r-item.on .r-btn.home {
+  border-radius: 14px; background: var(--accent); color: #fff; box-shadow: 0 8px 22px -8px var(--accent), inset 0 0 0 1px rgba(255, 255, 255, .14);
+}
+.ui-classic .r-item:hover .r-btn.tint { background: color-mix(in srgb, var(--accent) 35%, #18181c); color: #fff; }
+.ui-classic .r-btn.home { background: transparent; box-shadow: none; }
+.ui-classic .r-btn.home img { width: 44px; height: 44px; border-radius: 14px; }
+.ui-classic .r-item.on .r-btn.home { background: transparent; box-shadow: none; }
+.ui-classic .r-item.on .r-btn.home img { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px -6px var(--accent); }
+.ui-classic .r-btn.add { background: transparent; border: 1.5px dashed var(--line-3); box-shadow: none; color: var(--ok); }
+.ui-classic .r-item:hover .r-btn.add { background: rgba(61, 214, 140, .12); color: var(--ok); border-color: var(--ok); }
+.ui-classic .rail-sep { width: 28px; background: var(--line-2); }
+
+/* ---- sidebar --------------------------------------------------------------- */
+.ui-classic .side { background: linear-gradient(180deg, #161619, #0e0e10); border-right: 1px solid var(--line); }
+.ui-classic .side-head { border-bottom-color: var(--line); font-size: 16px; }
+.ui-classic .side-search { height: 36px; border-radius: 999px; background: transparent; border: 1px solid var(--line-2); padding: 0 14px; }
+.ui-classic .side-search:hover { border-color: var(--line-3); }
+.ui-classic .side-body { padding: 8px 8px 8px; }
+.ui-classic .s-item { border-radius: 10px; height: 36px; color: var(--txt-2); }
+.ui-classic .s-item.dm { height: 52px; padding: 0 10px; }
+.ui-classic .s-item.on {
+  background: color-mix(in srgb, var(--accent) 30%, transparent); color: #fff;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.ui-classic .s-item.on .t small { color: rgba(255, 255, 255, .7); }
+.ui-classic .side-sect { color: var(--txt-3); letter-spacing: .06em; }
+.ui-classic .me-panel { background: linear-gradient(180deg, #1b1b1f, #141417); border-top: 1px solid var(--line); height: 64px; }
+.ui-classic .me-panel .me-id b { color: var(--accent-hi); font-weight: 700; }
+.ui-classic .voice-panel { background: #101013; }
+
+/* ---- main ------------------------------------------------------------------ */
+.ui-classic .main { background: #000; }
+/* a wallpaper only shows behind the chat, under a black veil */
+body.ui-classic.has-bg .main { background: rgba(0, 0, 0, max(var(--chat-dim, .42), .55)); }
+body.ui-classic.has-bg .main-head { background: rgba(8, 8, 10, .8); }
+body.ui-classic.has-bg .side, body.ui-classic.has-bg .rail { -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.ui-classic.has-bg .side { background: linear-gradient(180deg, #161619, #0e0e10); }
+body.ui-classic.has-bg .rail { background: #0d0d0f; }
+body.ui-classic.has-bg .members { background: rgba(5, 5, 6, .92); }
+.ui-classic .main-head { background: linear-gradient(180deg, #0f0f11, #08080a); border-bottom-color: var(--line); height: 60px; }
+.ui-classic .main-head .h-title { font-size: 17px; }
+.ui-classic .main-head .tabs { background: #0d0d0f; border: 1px solid var(--line-2); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: nowrap; }
+.ui-classic .main-head .tabs .sep { display: none; }
+.ui-classic .tabs button { border-radius: 999px; height: 28px; color: var(--txt-3); }
+.ui-classic .tabs button.on { background: #232328; color: #fff; box-shadow: inset 0 0 0 1px var(--line-2); }
+.ui-classic .tabs button.cta { background: var(--accent); color: #fff; }
+.ui-classic .tabs button.cta.on { background: transparent; color: var(--accent-hi); }
+.ui-classic .members { background: #050506; border-left-color: var(--line); }
+.ui-classic .home-aside { background: #050506; }
+
+/* messages */
+.ui-classic .m-name { color: var(--accent-hi); font-weight: 700; }
+.ui-classic .m:hover { background: rgba(255, 255, 255, .025); }
+.ui-classic .msgs-top .big-ico { border-radius: 18px; background: var(--accent-lo); border: 1px solid var(--accent-mid); color: var(--accent-hi); }
+.ui-classic .msgs-top h2 { font-family: var(--f-display); font-size: 28px; letter-spacing: -.02em; }
+.ui-classic .att-grid.n1 .att-media, .ui-classic .att-file { border-radius: 14px; }
+
+/* composer: one long pill with a round send button */
+.ui-classic .composer { padding: 0 18px calc(10px + var(--safe-b)); }
+.ui-classic .composer .cbox { border-radius: 26px; background: #0d0d10; border: 1px solid var(--line-2); }
+.ui-classic .composer .cbox:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 0 3px var(--accent-lo); }
+.ui-classic .composer .c-row { padding: 4px 6px 4px 8px; align-items: center; }
+.ui-classic .composer .c-row .icon-btn { margin-bottom: 0; }
+.ui-classic .composer .send { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 6px 16px -6px var(--accent); }
+.ui-classic .composer .send:disabled { background: color-mix(in srgb, var(--accent) 40%, #1a1a1f); color: rgba(255, 255, 255, .55); box-shadow: none; }
+.ui-classic .composer .send i { font-size: 16px; }
+.ui-classic .composer .send i::before { content: "\f062"; }   /* arrow-up, like the original */
+
+/* buttons, inputs, overlays */
+.ui-classic .btn { border-radius: 999px; }
+.ui-classic .btn-primary { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 80%, #b06cff), color-mix(in srgb, var(--accent) 75%, #4f7dff)); border: 0; box-shadow: 0 10px 24px -12px var(--accent); }
+.ui-classic .btn-ghost { background: transparent; border: 1px solid var(--line-2); }
+.ui-classic .btn-ghost:hover { border-color: var(--line-3); background: rgba(255, 255, 255, .04); }
+.ui-classic .input, .ui-classic .field input, .ui-classic .field textarea { border-radius: 14px; background: #0d0d10; }
+.ui-classic .seg { border-radius: 999px; padding: 3px; background: #0d0d10; border: 1px solid var(--line-2); }
+.ui-classic .seg button { border-radius: 999px; }
+.ui-classic .modal { background: #0e0e11; border-radius: 22px; box-shadow: 0 30px 90px rgba(0, 0, 0, .7), 0 0 0 1px var(--line-2); }
+.ui-classic .menu, .ui-classic .ucard { background: #0e0e11; }
+
+/* ---- home ------------------------------------------------------------------ */
+.dh-hey { display: none; }
+.ui-classic .dh-greet { display: none; }
+.ui-classic .dh-hey { display: block; }
+.dh-hey-top { display: flex; align-items: center; gap: 8px; font-size: 14px; color: rgba(255, 255, 255, .8); font-weight: 500; }
+.dh-hey h1 { font-family: var(--f-display); font-size: clamp(34px, 5vw, 54px); font-weight: 800; letter-spacing: -.035em; line-height: 1.05; margin: 8px 0 4px; color: #fff; }
+.dh-hey-n { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #fff), var(--accent), color-mix(in srgb, var(--accent) 60%, #2dd4bf)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.dh-hey .wave { display: inline-block; animation: dh-wave 2.4s ease-in-out infinite; transform-origin: 70% 80%; }
+@keyframes dh-wave { 0%, 60%, 100% { transform: none; } 10%, 30% { transform: rotate(16deg); } 20%, 40% { transform: rotate(-8deg); } }
+.dh-hey p { color: rgba(255, 255, 255, .7); font-size: 15px; }
+.ui-classic .dh-clock { margin-top: 14px; }
+.ui-classic .dh-hm { font-size: clamp(40px, 5vw, 60px); }
+.ui-classic .dash-hero {
+  border-radius: 26px; border-color: rgba(255, 255, 255, .14);
+  background: radial-gradient(90% 140% at 0% 100%, rgba(45, 212, 191, .28), transparent 60%), radial-gradient(70% 120% at 100% 0%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 65%), linear-gradient(180deg, #101317, #07080a);
+}
+.ui-classic .dash-hero .dh-fx i { opacity: .25; }
+.ui-classic .dash-card { background: #0b0b0d; border-color: var(--line-2); border-radius: 22px; }
+.ui-classic .dash-card .active-card, .ui-classic .cl-rel { background: #121215; }
+.ui-classic .dc-empty { border: 1px dashed var(--line-2); border-radius: 16px; }
+.ui-classic .dash-ann { border-radius: 22px; }
+
+/* ---- calls ------------------------------------------------------------------ */
+.ui-classic .call { background: radial-gradient(120% 90% at 50% 0%, #121218 0%, #000 70%); }
+.ui-classic .vtile { border-radius: 20px; }
+
+/* ---- sign in: drifting colour and chat bubbles ------------------------------ */
+.ui-classic .auth-card { border-radius: 28px; background: rgba(12, 12, 15, .82); box-shadow: 0 0 0 1px rgba(255, 255, 255, .1), 0 30px 80px -20px color-mix(in srgb, var(--accent) 50%, transparent); }
+.ui-classic .auth-brand h1 { font-size: 40px; background: linear-gradient(90deg, #c4b5fd, #7c6cff 45%, #5eead4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ui-classic .auth .seg button.on { background: #232328; }
+.auth-bubbles { position: absolute; inset: 0; }
+.auth-bubbles .bub {
+  position: absolute; bottom: -40px; padding: 6px 12px; border-radius: 14px; font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, .55);
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08); white-space: nowrap; transform: scale(var(--s, 1));
+  animation: bub-up var(--dur, 24s) linear infinite;
+}
+.auth-bubbles .bub.me { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+@keyframes bub-up {
+  0% { transform: translate(0, 0) scale(var(--s, 1)); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translate(var(--sway, 0), -55vh) scale(var(--s, 1)); }
+  90% { opacity: 1; }
+  100% { transform: translate(0, -115vh) scale(var(--s, 1)); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .auth-bubbles { display: none; } }
+
+/* ---- settings previews for the Interface choice ---------------------------- */
+.oc-prev.ui-prev-modern, .oc-prev.ui-prev-classic { display: grid; grid-template-columns: 14% 26% 1fr; gap: 3px; padding: 6px; align-items: stretch; }
+.oc-prev.ui-prev-modern { background: #08090c; }
+.oc-prev.ui-prev-modern i { border-radius: 4px; background: #131419; }
+.oc-prev.ui-prev-modern i:nth-child(3) { background: linear-gradient(160deg, #3b5bdb 0%, #1a1c22 55%); }
+.oc-prev.ui-prev-classic { background: #000; gap: 0; padding: 0; }
+.oc-prev.ui-prev-classic i { background: #0d0d0f; border-right: 1px solid rgba(255, 255, 255, .1); }
+.oc-prev.ui-prev-classic i:nth-child(2) { background: linear-gradient(180deg, #19191c, #0e0e10); position: relative; }
+.oc-prev.ui-prev-classic i:nth-child(2)::after { content: ''; position: absolute; left: 4px; right: 4px; top: 30%; height: 16%; border-radius: 4px; background: rgba(124, 108, 255, .5); }
+.oc-prev.ui-prev-classic i:nth-child(3) { background: #000; border: 0; position: relative; }
+.oc-prev.ui-prev-classic i:nth-child(3)::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: 10%; height: 16%; border-radius: 99px; border: 1px solid rgba(255, 255, 255, .2); }
+
+/* ---- phones ---------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .ui-classic .drawer .side { background: linear-gradient(180deg, #161619, #0e0e10); }
+  .ui-classic .main-head { height: 56px; }
+  .ui-classic .composer { padding: 0 10px calc(8px + var(--safe-b)); }
+}

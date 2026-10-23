@@ -19,6 +19,7 @@
         ['fa-display', 'Screen shares take the main stage with everyone else in a strip below, and the call controls stay put.'],
         ['fa-expand', 'Full screen is now real full screen on phones and desktops.'],
         ['fa-house', 'This page: a clock, the weather, announcements, what’s new and who’s around.'],
+        ['fa-clock-rotate-left', 'Miss the old look? Settings → Appearance → Interface → Classic brings back the original NexChat style, rebuilt on the new app.'],
         ['fa-mobile-screen', 'The sidebar on phones is no longer greyed out behind its own shadow.'],
         ['fa-image', 'Very wide screenshots no longer leave an empty box under them.'],
         ['fa-ghost', 'Chats with accounts that were deleted show as “Deleted user” instead of “Unknown”.'],
@@ -165,6 +166,7 @@
         <div class="dh-fx" aria-hidden="true"><i></i><i></i><i></i></div>
         <div class="dh-left">
           <div class="dh-greet"></div>
+          <div class="dh-hey"></div>
           <div class="dh-clock"><span class="dh-hm mono"></span><span class="dh-s mono"></span><span class="dh-ap"></span></div>
           <div class="dh-date"></div>
           <div class="dh-day"><div class="dh-day-bar"><i></i></div><span></span></div>
@@ -197,7 +199,13 @@
     const g = $d('.dh-greet');
     if (!g) return;
     const gt = `${greet}, ${P().nameText(NX.me)}`;
-    if (g.dataset.t !== gt) { g.dataset.t = gt; g.innerHTML = `${greet}, <b>${P().nameText(NX.me)}</b>`; }
+    if (g.dataset.t !== gt) {
+      g.dataset.t = gt; g.innerHTML = `${greet}, <b>${P().nameText(NX.me)}</b>`;
+      // the classic portal's hero: "Hey, name 👋" with a line for the time of day
+      const sub = h < 5 ? 'Still up? Somebody’s always around.' : h < 12 ? 'Fresh start. See who’s up.' : h < 17 ? 'Afternoon check-in.' : h < 22 ? 'Evening hangout time.' : 'Winding down? Say goodnight.';
+      const phrase = h < 5 ? 'Up late?' : greet;
+      $d('.dh-hey').innerHTML = `<div class="dh-hey-top">${P().avatar(NX.me, 22, { halo: false, deco: false })}<span>${esc(phrase)}</span></div><h1>Hey, <span class="dh-hey-n">${P().nameText(NX.me)}</span> <span class="wave">👋</span></h1><p>${esc(sub)}</p>`;
+    }
     const parts = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }).formatToParts(now);
     const pick = (t) => parts.find((p) => p.type === t)?.value || '';
     $d('.dh-hm').textContent = `${pick('hour')}:${pick('minute')}`;

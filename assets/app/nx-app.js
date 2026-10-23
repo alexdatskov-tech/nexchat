@@ -84,6 +84,7 @@
   /* ---------- sign-in ---------- */
   function showAuth() {
     document.body.classList.add('is-auth');
+    document.body.classList.toggle('ui-classic', !!NX.ls.get('nx_ui_classic'));
     const el = NX.h(`<div class="auth">
       <div class="auth-bg" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="auth-card">
@@ -105,6 +106,12 @@
         </form>
         <p class="foot">A hobby project · be nice ✌️</p>
       </div></div>`);
+    if (document.body.classList.contains('ui-classic')) {
+      // the classic sign-in: chat bubbles drifting up behind the card
+      const words = ['gg', 'lmaooo', 'omw 🚀', 'gn 🌙', 'sup', 'that’s wild', 'call in 5?', '🔥🔥', 'lol', 'brb', 'W', 'no way 😭'];
+      el.querySelector('.auth-bg').insertAdjacentHTML('beforeend', '<div class="auth-bubbles">' + words.map((w, i) =>
+        `<span class="bub${i % 3 === 0 ? ' me' : ''}" style="left:${(i * 37 + 7) % 92}%;--dur:${22 + (i * 7) % 9}s;--sway:${(i % 2 ? 1 : -1) * (10 + (i * 5) % 18)}px;--s:${0.9 + (i % 3) * 0.12};animation-delay:-${(i * 2.3) % 20}s">${NX.esc(w)}</span>`).join('') + '</div>');
+    }
     document.body.appendChild(el);
     const forms = { in: el.querySelector('[data-f="in"]'), up: el.querySelector('[data-f="up"]') };
     el.querySelector('.seg').onclick = (e) => {
@@ -215,8 +222,13 @@
     const unreadDms = NX.data.ready ? NX.data.visibleDms().filter((c) => c.unread > 0 && NX.viewing !== 'dm:' + c.id).slice(0, 4) : [];
     const st = NX.call.state();
     const staff = P().rank(NX.me) > 0;
+    const classic = document.body.classList.contains('ui-classic');
+    const onDash = (!r.parts[0] || r.parts[0] === 'home') && !r.parts[1];
+    const lastDm = NX.data.ready ? NX.data.visibleDms()[0] : null;
     rail.innerHTML = `
-      <div class="r-item${onHome && !page ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn home" href="#/home" data-go="home" data-tip="Direct messages" data-tip-pos="right"><img src="assets/img/logo.svg" alt="Home"></a>${dmN ? `<span class="count">${dmN > 99 ? '99+' : dmN}</span>` : ''}</div>
+      <div class="r-item${(classic ? onDash : onHome) && !page ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn home" href="#/home" data-go="home" data-tip="${classic ? 'Home' : 'Direct messages'}" data-tip-pos="right"><img src="assets/img/logo.svg" alt="Home"></a>${dmN && !classic ? `<span class="count">${dmN > 99 ? '99+' : dmN}</span>` : ''}</div>
+      ${classic ? `<div class="r-item r-classic${onHome && !onDash && !page ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn tint" href="#/home" data-go="${lastDm ? 'dm/' + esc(lastDm.id) : 'home/online'}" data-tip="Messages" data-tip-pos="right"><i class="fa-solid fa-comment-dots"></i></a>${dmN ? `<span class="count">${dmN > 99 ? '99+' : dmN}</span>` : ''}</div>
+      <div class="r-item r-classic"><span class="r-pip"></span><a class="r-btn tint" href="#/home" data-go="home" data-anns data-tip="Announcements" data-tip-pos="right"><i class="fa-solid fa-bullhorn"></i></a></div>` : ''}
       ${unreadDms.map((c) => `<div class="r-item unread"><span class="r-pip"></span><a class="r-btn" href="#/dm/${esc(c.id)}" data-go="dm/${esc(c.id)}" data-tip="${esc(NX.data.dmTitle(c))}" data-tip-pos="right">${c.is_group ? '<i class="fa-solid fa-user-group"></i>' : P().avatar(c.people[0], 48, { halo: false, deco: false })}</a><span class="count">${c.unread > 99 ? '99+' : c.unread}</span></div>`).join('')}
       ${st.active ? `<div class="r-item r-call"><a class="r-btn" href="#" data-call data-tip="Back to call: ${esc(st.channel?.name || '')}" data-tip-pos="right"><i class="fa-solid fa-phone-volume"></i></a></div>` : ''}
       <div class="rail-sep"></div>
@@ -230,7 +242,11 @@
     const rail = $('#rail');
     rail.addEventListener('click', (e) => {
       const go = e.target.closest('[data-go]');
-      if (go) { e.preventDefault(); NX.go(go.dataset.go); if (!go.dataset.go.startsWith('s/')) closeDrawer(); return; }
+      if (go) {
+        e.preventDefault(); NX.go(go.dataset.go); if (!go.dataset.go.startsWith('s/')) closeDrawer();
+        if (go.dataset.anns != null) setTimeout(() => document.querySelector('.dash-anns')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+        return;
+      }
       if (e.target.closest('[data-add]')) { addServerDialog(); return; }
       if (e.target.closest('[data-call]')) { e.preventDefault(); NX.call.openRoom(); closeDrawer(); }
     });
@@ -327,7 +343,14 @@
   function applyTheme() {
     const t = NX.me?.theme || {};
     const root = document.documentElement.style;
-    document.body.classList.toggle('glass', t.ui_style === 'glass');
+    const classic = t.ui_layout === 'classic';
+    if (document.body.classList.contains('ui-classic') !== classic) {
+      document.body.classList.toggle('ui-classic', classic);
+      paintRail();
+    }
+    NX.ls.set('nx_ui_classic', classic);
+    // Classic is a complete look of its own: flat panels, no liquid glass
+    document.body.classList.toggle('glass', t.ui_style === 'glass' && !classic);
     document.body.classList.toggle('compact', t.density === 'compact');
     document.body.classList.toggle('reduce-motion', !!t.reduce_motion);
     if (t.chat_fs) root.setProperty('--chat-fs', t.chat_fs + 'px'); else root.removeProperty('--chat-fs');
