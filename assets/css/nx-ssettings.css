@@ -50,3 +50,22 @@
   .ss-rolecol .role-item { flex-shrink: 0; }
   .page .tbl th:nth-child(2), .page .tbl td:nth-child(2) { display: none; }
 }
+
+/* invites: the create / edit form and the table */
+.inv-form { display: flex; flex-direction: column; gap: 14px; }
+.inv-form .seg { align-self: flex-start; }
+.inv-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.inv-two .field { min-width: 0; }
+.inv-code { display: flex; align-items: center; height: 42px; border-radius: 10px; background: var(--bg-0); border: 1px solid var(--line-2); overflow: hidden; cursor: text; transition: border-color .15s, box-shadow .15s; }
+.inv-code:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.inv-pre { flex: 0 1 auto; min-width: 0; max-width: 58%; padding: 0 2px 0 12px; color: var(--txt-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-code input { flex: 1; min-width: 80px; height: 100%; border: 0; outline: 0; background: transparent; color: var(--txt-1); font-size: 14px; padding: 0 12px 0 1px; }
+.inv-st { min-height: 16px; }
+.inv-st.ok { color: var(--ok); }
+.inv-st.ok::before { content: '\2713  '; }
+.inv-st.bad { color: var(--danger); }
+.inv-own { align-self: flex-start; padding-left: 0; }
+.inv-cell { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.inv-tag { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 999px; padding: 2px 8px; }
+tr.inv-dead { opacity: .55; }
+@media (max-width: 520px) { .inv-two { grid-template-columns: 1fr; } .inv-pre { max-width: 45%; } }

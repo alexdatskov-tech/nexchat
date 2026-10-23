@@ -653,41 +653,149 @@
     members = members.filter((m) => m.user_id !== uid); touched(); repaint(); NX.toast('Member banned.');
   }
 
-  /* ---------- invites ---------- */
+  /* ---------- invites ----------
+     Anyone with Create Invite makes random codes. The owner and Manage Server
+     can also choose one (supabase/nexchat_v3_custom_invites.sql, which also
+     makes the database check it) and edit it later. */
+  const INV_EXP = [['1800', '30 minutes'], ['3600', '1 hour'], ['21600', '6 hours'], ['43200', '12 hours'], ['86400', '1 day'], ['604800', '7 days'], ['0', 'Never']];
+  const INV_USES = [['0', 'No limit'], ['1', '1 use'], ['5', '5 uses'], ['10', '10 uses'], ['25', '25 uses'], ['50', '50 uses'], ['100', '100 uses']];
+  const CODE_OK = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
+  const canCustom = () => isOwner() || staff() || can(BIT.MANAGE_SERVER);
+  let customOn = null;   // does the database have custom codes yet?
+  async function customReady() {
+    if (customOn === null) {
+      const { error } = await window.db.rpc('nx_invite_code_free', { p_code: 'nx-probe' });
+      customOn = !error || !/PGRST202|could not find the function/i.test(`${error.code} ${error.message}`);
+    }
+    return customOn;
+  }
+  const usedUp = (i) => i.max_uses && (i.uses || 0) >= i.max_uses;
+
+  async function inviteForm(inv, { custom = false, done } = {}) {
+    const edit = !!inv;
+    const mayCustom = canCustom() && await customReady();
+    const startCustom = edit ? !!inv.custom : custom && mayCustom;
+    // the link the code goes into, shortened to its host: "host/…/invite/"
+    const full = NX.linkTo('invite/').replace(/^https?:\/\//, '');
+    const pre = full.length > 34 ? full.split('/')[0] + '/…/invite/' : full;
+    const usesNow = edit ? String(inv.max_uses || 0) : '0';
+    const body = NX.h(`<div class="inv-form">
+      ${mayCustom && !edit ? `<div class="field"><label>Invite code</label><div class="seg" data-kind>
+        <button type="button" data-v="random"${startCustom ? '' : ' class="on"'}>Random</button><button type="button" data-v="custom"${startCustom ? ' class="on"' : ''}>Choose my own</button></div></div>` : ''}
+      <div class="field inv-custom"${startCustom ? '' : ' hidden'}>
+        ${edit ? '<label>Invite code</label>' : ''}
+        <label class="inv-code"><span class="inv-pre" title="${esc(full)}">${esc(pre)}</span><input class="mono" data-code maxlength="32" spellcheck="false" autocomplete="off" autocapitalize="none" placeholder="your-server" value="${esc(edit ? inv.code : '')}"></label>
+        <span class="hint inv-st" data-st>3 to 32 letters, numbers or dashes.</span>
+      </div>
+      <div class="inv-two">
+        <div class="field"><label>Expire after</label><select class="input" data-exp>
+          ${edit ? `<option value="keep" selected>Keep (${inv.expires_at ? (new Date(inv.expires_at) < new Date() ? 'expired' : esc(NX.fmt.stamp(inv.expires_at))) : 'never'})</option>` : ''}
+          ${INV_EXP.map(([v, l]) => `<option value="${v}"${!edit && v === '604800' ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label>Max uses</label><select class="input" data-uses>
+          ${(INV_USES.some(([v]) => v === usesNow) ? INV_USES : [...INV_USES, [usesNow, usesNow + ' uses']]).map(([v, l]) => `<option value="${v}"${v === usesNow ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+      </div>
+    </div>`);
+    const inp = body.querySelector('[data-code]'), st = body.querySelector('[data-st]'), box = body.querySelector('.inv-custom');
+    const kind = () => (edit ? (inv.custom ? 'custom' : 'random') : body.querySelector('[data-kind] .on')?.dataset.v || 'random');
+    const say = (cls, text) => { st.className = 'hint inv-st' + (cls ? ' ' + cls : ''); st.textContent = text; };
+    let free = null, seq = 0;
+    const check = NX.debounce(async () => {
+      const v = inp.value, n = ++seq;
+      free = null;
+      if (!v) return say('', '3 to 32 letters, numbers or dashes.');
+      if (!CODE_OK.test(v)) return say('bad', v.length < 3 ? 'At least 3 characters.' : 'Letters, numbers and dashes only, and no dash at the start or end.');
+      if (edit && v === inv.code) { free = true; return say('ok', 'The current code.'); }
+      say('', 'Checking…');
+      const { data, error } = await window.db.rpc('nx_invite_code_free', { p_code: v });
+      if (n !== seq) return;
+      if (error) return say('', 'Couldn’t check it: saving will tell.');
+      free = !!data;
+      say(free ? 'ok' : 'bad', free ? 'Available' : 'Taken: try another.');
+    }, 250);
+    inp.addEventListener('input', () => {
+      const clean = inp.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      if (clean !== inp.value) { const at = inp.selectionStart - (inp.value.length - clean.length); inp.value = clean; inp.setSelectionRange(at, at); }
+      check();
+    });
+    body.querySelector('[data-kind]')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-v]'); if (!btn) return;
+      body.querySelectorAll('[data-kind] button').forEach((x) => x.classList.toggle('on', x === btn));
+      box.hidden = btn.dataset.v !== 'custom';
+      if (!box.hidden) inp.focus();
+    });
+    const save = async () => {
+      const exp = body.querySelector('[data-exp]').value, uses = +body.querySelector('[data-uses]').value;
+      const row = { max_uses: uses || null };
+      if (exp !== 'keep') row.expires_at = +exp ? new Date(Date.now() + +exp * 1000).toISOString() : null;
+      if (kind() === 'custom') {
+        const v = inp.value.trim();
+        if (!CODE_OK.test(v)) { say('bad', 'Pick a code of 3 to 32 letters, numbers or dashes.'); inp.focus(); return false; }
+        if (free === false) { inp.focus(); return false; }
+        row.code = v; row.custom = true;
+      }
+      const res = edit
+        ? await window.db.from('invites').update(row).eq('id', inv.id).select().maybeSingle()
+        : await window.db.from('invites').insert({ ...row, server_id: sid, created_by: NX.me.id }).select().single();
+      if (res.error) {
+        if (res.error.code === '23505') { free = false; say('bad', 'Taken: try another.'); inp.focus(); return false; }
+        throw res.error;
+      }
+      if (!res.data) throw new Error('You can’t edit this invite.');
+      NX.copy(NX.linkTo(`invite/${res.data.code}`), edit ? 'Saved. Link copied' : 'Invite created. Link copied');
+      done?.(res.data);
+    };
+    const m = NX.modal({
+      title: edit ? 'Edit invite' : 'Create invite', sub: edit ? '' : `People with the link (or the code) can join ${esc(srv.name)}.`, body,
+      foot: [{ label: 'Cancel' }, { label: edit ? 'Save' : 'Create invite', cls: 'btn-primary', primary: true, onClick: save }],
+    });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); m.primary.click(); } });
+    if (startCustom) { setTimeout(() => inp.focus(), 50); if (edit) check(); }
+  }
+
   async function invitesTab(b) {
-    b.innerHTML = `<h1 class="page-title">Invites</h1><p class="lead">Active invite links for ${esc(srv.name)}. Revoke any you no longer want working.</p>
+    b.innerHTML = `<h1 class="page-title">Invites</h1><p class="lead">Invite links for ${esc(srv.name)}. Revoke any you no longer want working.</p>
       <div class="toolbar">${can(BIT.INVITE) ? '<button class="btn btn-primary btn-sm" data-a="new"><i class="fa-solid fa-plus"></i>Create invite</button>' : ''}</div>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Code</th><th>Created by</th><th>Uses</th><th>Expires</th><th></th></tr></thead><tbody><tr><td colspan="5" style="text-align:center;padding:30px"><span class="spinner"></span></td></tr></tbody></table></div>`;
+    let list = [];
     const paint = async () => {
       const { data, error } = await window.db.from('invites').select('*').eq('server_id', sid).order('created_at', { ascending: false });
       if (error) return NX.fail(error);
-      await P().need((data || []).map((i) => i.created_by));
+      list = data || [];
+      await P().need(list.map((i) => i.created_by));
       const tb = b.querySelector('tbody');
       if (!tb) return;
-      tb.innerHTML = (data || []).map((i) => {
-        const dead = i.expires_at && new Date(i.expires_at) < new Date();
+      // custom codes first: they're the ones people remember
+      const rows = [...list.filter((i) => i.custom), ...list.filter((i) => !i.custom)];
+      tb.innerHTML = rows.map((i) => {
+        const expired = i.expires_at && new Date(i.expires_at) < new Date();
+        const dead = expired || usedUp(i);
         const by = P().get(i.created_by);
         const mine = i.created_by === NX.me.id;
-        return `<tr data-id="${esc(i.id)}" data-code="${esc(i.code)}"${dead ? ' style="opacity:.55"' : ''}><td><b class="mono">${esc(i.code)}</b></td>
+        return `<tr data-id="${esc(i.id)}" data-code="${esc(i.code)}"${dead ? ' class="inv-dead"' : ''}>
+          <td><span class="inv-cell"><b class="mono">${esc(i.code)}</b>${i.custom ? '<span class="inv-tag">Custom</span>' : ''}</span></td>
           <td><div class="who">${P().avatar(by, 24, { halo: false, deco: false })}<span>${P().nameText(by)}</span></div></td>
-          <td>${i.uses || 0}${i.max_uses ? ' / ' + i.max_uses : ''}</td>
-          <td class="muted" style="white-space:nowrap">${dead ? 'Expired' : i.expires_at ? NX.fmt.stamp(i.expires_at) : 'Never'}</td>
+          <td style="white-space:nowrap">${i.uses || 0}${i.max_uses ? ' / ' + i.max_uses : ''}${usedUp(i) ? ' <span class="muted">· used up</span>' : ''}</td>
+          <td class="muted" style="white-space:nowrap">${expired ? 'Expired' : i.expires_at ? NX.fmt.stamp(i.expires_at) : 'Never'}</td>
           <td style="text-align:right;white-space:nowrap"><button class="icon-btn sm" data-a="copy" title="Copy link"><i class="fa-regular fa-copy"></i></button>
+            ${i.custom && canCustom() ? '<button class="icon-btn sm" data-a="edit" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
             ${mine || can(BIT.MANAGE_CHANNELS) ? '<button class="icon-btn sm danger" data-a="del" title="Revoke"><i class="fa-solid fa-trash-can"></i></button>' : ''}</td></tr>`;
       }).join('') || '<tr><td colspan="5" class="muted" style="text-align:center;padding:24px">No invites yet.</td></tr>';
     };
-    b.querySelector('[data-a="new"]')?.addEventListener('click', () => { NX.views.server?.invite?.(sid); setTimeout(paint, 1500); });
+    b.querySelector('[data-a="new"]')?.addEventListener('click', () => inviteForm(null, { done: paint }));
     b.querySelector('tbody').onclick = async (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a; const tr = e.target.closest('[data-id]');
       if (!a || !tr) return;
       if (a === 'copy') return NX.copy(NX.linkTo(`invite/${tr.dataset.code}`), 'Invite link copied');
+      if (a === 'edit') return inviteForm(list.find((i) => i.id === tr.dataset.id), { done: paint });
       if (a === 'del') {
         const { error } = await NX.must(window.db.from('invites').delete().eq('id', tr.dataset.id));
         if (error) return NX.fail(error);
         NX.toast('Invite revoked.'); paint();
       }
     };
-    paint();
+    await paint();
+    // "Choose my own code…" in the quick invite dialog lands here
+    if (NX.wantInviteForm === sid) { NX.wantInviteForm = null; inviteForm(null, { custom: true, done: paint }); }
   }
 
   /* ---------- bans ---------- */

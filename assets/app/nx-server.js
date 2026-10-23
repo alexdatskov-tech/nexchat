@@ -303,16 +303,24 @@
   async function invite(sid) {
     const s = sid === srv?.id ? srv : (await window.db.from('servers').select('*').eq('id', sid).maybeSingle()).data;
     if (!s) return;
+    // choosing a code: the owner, Manage Server, or platform staff (the database checks it too)
+    const mayChoose = s.owner_id === NX.me.id || P().rank(NX.me) >= 1 || (sid === srv?.id && member && can(BIT.MANAGE_SERVER));
     const body = NX.h(`<div style="display:flex;flex-direction:column;gap:12px">
       <div class="field"><label>Send a server invite link to a friend</label>
         <div class="row"><input class="input mono" readonly data-link placeholder="Generating…"><button class="btn btn-primary" data-copy disabled>Copy</button></div></div>
-      <div class="field"><label>Expire after</label><select class="input" data-exp><option value="24">1 day</option><option value="168" selected>7 days</option><option value="1">1 hour</option><option value="0">Never</option></select>
-      <span class="hint">Code: <b class="mono" data-code>…</b> · people can paste the code or open the link.</span></div></div>`);
-    NX.modal({ title: `Invite friends to ${s.name}`, body });
+      <div class="inv-two">
+        <div class="field"><label>Expire after</label><select class="input" data-exp><option value="1">1 hour</option><option value="24">1 day</option><option value="168" selected>7 days</option><option value="0">Never</option></select></div>
+        <div class="field"><label>Max uses</label><select class="input" data-uses><option value="0" selected>No limit</option><option value="1">1 use</option><option value="5">5 uses</option><option value="10">10 uses</option><option value="25">25 uses</option><option value="100">100 uses</option></select></div>
+      </div>
+      <span class="hint">Code: <b class="mono" data-code>…</b> · people can paste the code or open the link.</span>
+      ${mayChoose ? '<button class="btn btn-quiet btn-sm inv-own" data-own><i class="fa-solid fa-wand-magic-sparkles"></i>Choose my own code</button>' : ''}</div>`);
+    const dlg = NX.modal({ title: `Invite friends to ${s.name}`, body });
+    body.querySelector('[data-own]')?.addEventListener('click', () => { dlg.close(); NX.wantInviteForm = s.id; NX.go(`s/${s.id}/settings/invites`); });
     const gen = async () => {
-      const hrs = +body.querySelector('[data-exp]').value;
+      const hrs = +body.querySelector('[data-exp]').value, uses = +body.querySelector('[data-uses]').value;
       const row = { server_id: s.id, created_by: NX.me.id };
       if (hrs) row.expires_at = new Date(Date.now() + hrs * 3600e3).toISOString();
+      if (uses) row.max_uses = uses;
       const { data, error } = await window.db.from('invites').insert(row).select().single();
       if (error) {
         body.querySelector('[data-link]').value = '';
@@ -335,6 +343,7 @@
       body.querySelector('[data-copy]').onclick = () => NX.copy(link, 'Invite link copied');
     };
     body.querySelector('[data-exp]').onchange = gen;
+    body.querySelector('[data-uses]').onchange = gen;
     gen();
   }
 
