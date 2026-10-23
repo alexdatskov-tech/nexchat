@@ -8,6 +8,45 @@
   const drafts = NX.ls.get('nx_drafts', {});
   const saveDrafts = NX.debounce(() => NX.ls.set('nx_drafts', drafts), 400);
 
+  /* Writes that survive a flaky network path. Some managed networks bounce
+     requests through a redirect, which turns a POST into a GET: PostgREST
+     then answers "Cannot coerce the result to a single JSON object"
+     (PGRST116) without having written anything. Those are retried, and
+     because the ids are made here, a retry can't create a duplicate. */
+  const bounced = (e) => e && (e.code === 'PGRST116' || /coerce the result to a single json/i.test(e.message || ''));
+  async function sendRow(table, row) {
+    for (let t = 0; ; t++) {
+      const { data, error } = await window.db.from(table).insert(row).select().single();
+      if (!error && data?.id === row.id) return data;
+      if (error?.code === '23505' || (!error && data?.id !== row.id)) {
+        // already written by an earlier try (or the answer was for something else)
+        const got = await window.db.from(table).select('*').eq('id', row.id).maybeSingle();
+        if (got.data) return got.data;
+      }
+      if (t >= 3 || (error && !bounced(error) && error.code !== '23505')) throw error || new Error('The message wasn’t saved. Try again.');
+      await NX.sleep(250 * (t + 1));
+    }
+  }
+  async function sendRows(table, rows) {
+    const ids = rows.map((r) => r.id);
+    for (let t = 0; ; t++) {
+      const { data, error } = await window.db.from(table).insert(rows).select();
+      const mine = (data || []).filter((r) => ids.includes(r.id));
+      if (!error && mine.length === rows.length) return mine;
+      if (!error || error.code === '23505' || bounced(error)) {
+        const got = await window.db.from(table).select('*').in('id', ids);
+        const have = (got.data || []).filter((r) => ids.includes(r.id));
+        if (have.length === rows.length) return have;
+        rows = rows.filter((r) => !have.some((h) => h.id === r.id));
+        if (t >= 3) throw error || new Error('Some files weren’t saved. Try again.');
+        await NX.sleep(250 * (t + 1));
+        const rest = await sendRows(table, rows).catch(() => []);
+        return [...have, ...rest];
+      }
+      throw error;
+    }
+  }
+
   class Composer {
     constructor(chat) {
       this.chat = chat;
@@ -316,26 +355,25 @@
         // A retry after the files failed must not post the message twice.
         let real = m._real || null;
         if (!real) {
-          const row = { [this.a.fk]: this.a.id, author_id: NX.me.id, content: m.content };
+          // The id is made here, so a retry can never post the message twice:
+          // a second insert of the same id is refused and the saved row is used.
+          m._rid = m._rid || crypto.randomUUID();
+          const row = { id: m._rid, [this.a.fk]: this.a.id, author_id: NX.me.id, content: m.content };
           if (m.reply_to_id) row.reply_to_id = m.reply_to_id;
-          const res = await window.db.from(this.a.table).insert(row).select().single();
-          if (res.error) throw res.error;
-          real = m._real = res.data;
+          real = m._real = await sendRow(this.a.table, row);
         }
         let atts = [];
         if (results.length) {
+          m._attIds = m._attIds || results.map(() => crypto.randomUUID());
           const rows = results.map((r, i) => ({
-            message_id: real.id, url: r.url, file_name: r.name, file_size: r.size, mime_type: r.mime || null,
+            id: m._attIds[i], message_id: real.id, url: r.url, file_name: r.name, file_size: r.size, mime_type: r.mime || null,
             width: r.width || null, height: r.height || null, position: i,
           }));
-          const ins = await window.db.from(this.a.attTable).insert(rows).select();
-          if (ins.error) {
+          try { atts = await sendRows(this.a.attTable, rows); }
+          catch {
             // Older databases may lack width/height: retry with the basic columns.
-            const basic = rows.map(({ width, height, ...rest }) => rest);
-            const again = await window.db.from(this.a.attTable).insert(basic).select();
-            if (again.error) throw again.error;
-            atts = again.data || [];
-          } else atts = ins.data || [];
+            atts = await sendRows(this.a.attTable, rows.map(({ width, height, ...rest }) => rest));
+          }
         }
         atts.sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
         // pictures are fetched before the swap, so the local preview never blinks

@@ -262,7 +262,7 @@
           if (this.byId.has(m.id)) return;
           // Our own message echoing back while its send is still in flight:
           // the send will swap the pending bubble for it.
-          if (m.author_id === NX.me.id && m.content && this.msgs.some((x) => x._pending && x.content === m.content)) return;
+          if (m.author_id === NX.me.id && this.msgs.some((x) => x._pending && (x._rid === m.id || (m.content && x.content === m.content)))) return;
           await P().need([m.author_id]);
           if (m.reply_to_id && !this.byId.has(m.reply_to_id) && !this.refs.has(m.reply_to_id)) {
             const { data } = await window.db.from(a.table).select('id,author_id,content,created_at').eq('id', m.reply_to_id).maybeSingle();
