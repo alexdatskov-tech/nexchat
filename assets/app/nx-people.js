@@ -59,6 +59,12 @@
      New files are permanent CloudFront URLs. Old iDrive URLs get a signature
      at render time (storage.js hydrates <img data-nx-src>). */
   const imgAttr = (url) => (window.Store ? window.Store.imgAttr(url) : `src="${esc(url)}"`);
+  // A blob: URL only exists in the tab that made it. One that reached the
+  // database (a preview saved before its upload finished) can never load, so
+  // only the previews this tab made itself are drawn.
+  const ownBlobs = new Set();
+  function localUrl(file) { const u = URL.createObjectURL(file); ownBlobs.add(u); return u; }
+  const usableImg = (u) => !!u && (!/^(blob|file):/i.test(u) || ownBlobs.has(u));
 
   /* ---------- Nitro styling ---------- */
   const NX_FONTS = ['normal', 'bold', 'script', 'double', 'ascii'];
@@ -241,7 +247,7 @@
   function avatar(p, size = 40, o = {}) {
     p = p || {};
     const fs = Math.round(size * 0.4);
-    const inner = p.avatar_url
+    const inner = usableImg(p.avatar_url)
       ? `<span class="av" style="width:${size}px;height:${size}px"><img ${imgAttr(p.avatar_url)} alt=""${o.eager ? ' fetchpriority="high"' : ' loading="lazy"'} decoding="async"></span>`
       : `<span class="av" style="width:${size}px;height:${size}px;font-size:${fs}px;background:${tint(p)}">${esc(initial(nameOf(p)))}</span>`;
     const deco = o.deco !== false && size >= 24 ? decoPath(p, 'pfp') : null;
@@ -410,7 +416,7 @@
     warmed.set(uid, Date.now());
     fresh(uid).then((p) => {
       if (!p) return;
-      preloadImg(p.banner_url);
+      if (usableImg(p.banner_url)) preloadImg(p.banner_url);
       const deco = decoPath(p, 'bio');
       if (deco) { preloadImg(decoSrc(deco, true)); loadEffect(deco).catch(() => {}); }
     }).catch(() => {});
@@ -459,7 +465,8 @@
       rel = NX.data?.relation?.(uid) || null;
       sig = cardSig(p, roles);
       const accent = HEX.test(p.accent_color || '') ? p.accent_color : '#5865F2';
-      const bannerCss = p.banner_url ? '' : `background:linear-gradient(135deg, ${accent}, color-mix(in srgb, ${accent} 30%, #0e0f13))`;
+      const banner = usableImg(p.banner_url) ? p.banner_url : null;
+      const bannerCss = banner ? '' : `background:linear-gradient(135deg, ${accent}, color-mix(in srgb, ${accent} 30%, #0e0f13))`;
       const deco = decoPath(p, 'bio');
       el.classList.toggle('has-deco', !!deco);
       el.classList.toggle('card-deco-host', !!deco);
@@ -471,7 +478,7 @@
       const rs = roles || [];
       el.innerHTML = `
       ${deco ? `<div class="card-deco" aria-hidden="true">${fx}</div>` : ''}
-      <div class="uc-banner" style="${bannerCss}"${p.banner_url ? ` data-bg="${esc(p.banner_url)}"` : ''}></div>
+      <div class="uc-banner" style="${bannerCss}"${banner ? ` data-bg="${esc(banner)}"` : ''}></div>
       <div class="uc-av">${avatar(p, 84, { presence: true, eager: true })}</div>
       <div class="uc-body">
         <div>
@@ -548,7 +555,7 @@
   }
 
   NX.people = {
-    CARD, put, get, need, fetchFull, nameOf, name, nameText, nameCss, bigName, nameStyle, fancy, asciiArt, NX_FONTS,
+    CARD, put, get, need, fetchFull, nameOf, localUrl, usableImg, name, nameText, nameCss, bigName, nameStyle, fancy, asciiArt, NX_FONTS,
     avatar, decoPath, decoSrc, decoImg, haloClass, haloStyle, haloCss, haloImage, rank, roleBadge, roleIcon, ROLE_NAMES, imgAttr, tint,
     startPresence, setStatus, myStatus, presenceOf, isOnline, presenceDot, refreshDots, STATUS_LABEL, STATUS_COLOR,
     card, warm, all: () => [...cache.values()],

@@ -68,11 +68,11 @@
     // pictures: decoded once now, instant later
     const urls = new Set();
     [...ids].map((id) => P().get(id)).filter(Boolean).forEach((p) => {
-      if (p.avatar_url) urls.add(p.avatar_url);
+      if (NX.people.usableImg(p.avatar_url)) urls.add(p.avatar_url);
       const deco = P().decoPath(p, 'pfp');
       if (deco) urls.add(P().decoSrc(deco));
     });
-    if (NX.me.avatar_url) urls.add(NX.me.avatar_url);
+    if (NX.people.usableImg(NX.me.avatar_url)) urls.add(NX.me.avatar_url);
     D.servers.forEach((s) => { if (s.icon_url) urls.add(s.icon_url); });
     const pics = [...urls].slice(0, 120).map(async (u) => {
       try {

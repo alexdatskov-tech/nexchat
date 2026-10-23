@@ -5,6 +5,7 @@
   const P = () => NX.people;
   let host = null, pg = null, tab = 'profile';
   let draft = null, saved = null;
+  const uploading = new Map();   // draft key (avatar_url, banner_url) -> its upload, while it runs
 
   const ACCENTS = ['#5865F2', '#7C6CFF', '#A78BFA', '#E8659A', '#F2555A', '#F0B232', '#2FBF87', '#3B9EF5', '#5AC8D8', '#94A3B8'];
   const BG_PRESETS = [
@@ -55,8 +56,17 @@
     render();
   }
   async function save() {
+    // Save during an upload: wait for it, so the picture saved is the uploaded one.
+    if (uploading.size) {
+      NX.toast('Finishing your upload…');
+      await Promise.allSettled([...uploading.values()]);
+      await NX.sleep(0);
+    }
     const patch = {};
     EDIT_KEYS.forEach((k) => { if (!same(draft[k], saved[k])) patch[k] = draft[k]; });
+    // A local preview never leaves this tab (nobody else could load it).
+    ['avatar_url', 'banner_url', 'banner_gif_url'].forEach((k) => { if (/^(blob|data|file):/i.test(patch[k] || '')) delete patch[k]; });
+    if (!Object.keys(patch).length) { pg.dirty(!same(draft, saved), { onSave: save, onReset: reset }); return; }
     if ('display_name' in patch) patch.display_name = (patch.display_name || '').trim() || NX.me.username;
     if ('bio' in patch) patch.bio = (patch.bio || '').trim() || null;
     if ('custom_status' in patch) patch.custom_status = (patch.custom_status || '').trim() || null;
@@ -269,11 +279,20 @@
       if (!f) return;
       const key = inp.dataset.up;
       const before = draft[key];
-      draft[key] = URL.createObjectURL(f); paintPreview();
+      // the preview shows at once; only the uploaded URL ever goes into a save
+      const preview = P().localUrl(f);
+      draft[key] = preview; paintPreview();
+      const job = NX.files.uploadImage(f, `users/${NX.me.id}`, { max: key === 'avatar_url' ? 512 : 1600 });
+      uploading.set(key, job);
       try {
-        const up = await NX.files.uploadImage(f, `users/${NX.me.id}`, { max: key === 'avatar_url' ? 512 : 1600 });
-        set(key, up.url);
-      } catch (err) { draft[key] = before; paintPreview(); NX.fail(err, 'Upload failed'); }
+        const up = await job;
+        if (draft[key] === preview) set(key, up.url);   // not if another picture or a reset came after
+      } catch (err) {
+        if (draft[key] === preview) { draft[key] = before; paintPreview(); }
+        NX.fail(err, 'Upload failed');
+      } finally {
+        if (uploading.get(key) === job) uploading.delete(key);
+      }
     });
     b.querySelectorAll('[data-clear]').forEach((x) => { x.onclick = () => set(x.dataset.clear, null); });
     const paintSw = () => {
