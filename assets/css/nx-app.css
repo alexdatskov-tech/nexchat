@@ -572,3 +572,6 @@ body.glass.has-bg .ds-add { background: transparent; }
   .ds-card { flex: 0 0 76%; scroll-snap-align: start; }
   .ds-add { flex-basis: 46%; min-height: 200px; }
 }
+.wx-src { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: rgba(255, 255, 255, .62); min-width: 0; }
+.wx-src i { font-size: 10px; opacity: .8; }
+.wx-link small { font-size: 10px; font-weight: 600; opacity: .7; margin-left: 2px; }

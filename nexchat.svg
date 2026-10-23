@@ -75,7 +75,7 @@
   <foreignObject id="fo" x="0" y="0" width="100%" height="100%" visibility="hidden">
     <xhtml:div style="width:100%;height:100%;margin:0;background:#08090D;">
       <xhtml:iframe id="app" title="NexChat"
-        allow="camera; microphone; display-capture; autoplay; clipboard-read; clipboard-write; fullscreen; picture-in-picture"
+        allow="camera; microphone; display-capture; geolocation; autoplay; clipboard-read; clipboard-write; fullscreen; picture-in-picture"
         allowfullscreen="true"
         style="border:0;width:100%;height:100%;display:block;background:#08090D;"></xhtml:iframe>
     </xhtml:div>
