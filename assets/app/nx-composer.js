@@ -331,14 +331,21 @@
       this.localAtts(m);
       this.chat.insert(m);
       this.chat.toBottom();
-      const repaint = NX.throttle(() => { this.localAtts(m); this.chat.paintAtts(m.id); }, 150);
+      // Progress ticks update the rings in place so the fill glides; a full
+      // repaint happens only when a job changes phase (optimizing -> uploading
+      // -> done), which is rare.
+      const repaint = NX.throttle(() => {
+        this.localAtts(m);
+        const host = this.chat.rowEl(m.id)?.querySelector('.atts');
+        if (!NX.files.updateProgress(host, m._localAtts)) this.chat.paintAtts(m.id);
+      }, 120);
       jobs.forEach((j) => j.on(repaint));
       this.chat.sendChain = this.chat.sendChain.then(() => this.deliver(m)).catch(() => {});
     }
     localAtts(m) {
       m._localAtts = (m._jobs || []).map((j) => ({
         id: j.id, _local: true, file_name: j.file.name, file_size: j.file.size, mime_type: j.file.type,
-        url: j.preview || '', width: j.width, height: j.height, _progress: j.state === 'done' ? 1 : j.progress,
+        url: j.preview || '', width: j.width, height: j.height, _progress: j.state === 'done' ? 1 : j.progress, _state: j.state,
       }));
     }
     async deliver(m) {

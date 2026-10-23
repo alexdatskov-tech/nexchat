@@ -129,8 +129,34 @@
 .att-media .gif-tag { position: absolute; left: 6px; bottom: 6px; font-size: 10px; font-weight: 800; background: rgba(0, 0, 0, .6); padding: 2px 5px; border-radius: 4px; }
 .att-media.loading { cursor: default; }
 .att-media .up-over { position: absolute; inset: 0; background: rgba(8, 9, 12, .55); display: flex; align-items: center; justify-content: center; }
-.up-ring { --p: 0; width: 44px; height: 44px; border-radius: 50%; background: conic-gradient(var(--accent) calc(var(--p) * 1%), rgba(255, 255, 255, .15) 0); display: flex; align-items: center; justify-content: center; }
-.up-ring::after { content: ''; width: 36px; height: 36px; border-radius: 50%; background: rgba(8, 9, 12, .8); }
+/* Upload progress. --p is a registered property so the conic fill GLIDES
+   between the throttled progress updates instead of snapping. */
+@property --p { syntax: '<number>'; inherits: false; initial-value: 0; }
+.att-media .up-over { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); transition: opacity .25s; }
+.up-ring {
+  --p: 0; position: relative; width: 52px; height: 52px; border-radius: 50%;
+  background: conic-gradient(from -90deg, var(--accent) calc(var(--p) * 1%), rgba(255, 255, 255, .16) 0);
+  display: flex; align-items: center; justify-content: center;
+  transition: --p .22s linear;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .06), 0 6px 18px -6px rgba(0, 0, 0, .7);
+}
+.up-ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: rgba(10, 12, 16, .86); }
+.up-ring .up-pct {
+  position: relative; z-index: 1; font-size: 12px; font-weight: 700; color: #fff;
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1;
+}
+/* Before any bytes flow: a smooth sweep around the ring, no transition fighting it. */
+.up-ring.warming {
+  --p: 0; transition: none;
+  background: conic-gradient(from 0deg, transparent 0 25%, var(--accent) 90% 100%);
+  animation: up-spin .9s linear infinite;
+}
+.up-ring.warming::after { inset: 5px; }
+.up-ring.warming .up-pct { animation: up-spin-rev .9s linear infinite; color: var(--accent-hi); }
+@keyframes up-spin { to { transform: rotate(360deg); } }
+@keyframes up-spin-rev { to { transform: rotate(-360deg); } }
+/* A finished tile: ring fades, image un-dims. */
+.att-media:not(.loading) .up-over { opacity: 0; pointer-events: none; }
 .att-wrap { position: relative; }
 .att-x { position: absolute; top: 6px; right: 6px; z-index: 3; width: 26px; height: 26px; border-radius: 7px; background: rgba(0, 0, 0, .65); color: #fff; display: none; align-items: center; justify-content: center; font-size: 12px; }
 .att-wrap:hover > .att-x, .att-media:hover > .att-x { display: flex; }

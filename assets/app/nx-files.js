@@ -116,7 +116,7 @@
   }
 
   /* ---------- upload jobs (composer tray) ---------- */
-  const MAX_PARALLEL = 3;
+  const MAX_PARALLEL = 4;
   let running = 0;
   const queue = [];
   function pump() {
@@ -276,8 +276,14 @@
         cell.className = 'att-media' + (a._local ? ' loading' : '');
         if (n === 1) cell.style.cssText = fitBox(a.width, a.height);
         if (a._local) {
+          const pct = Math.round((a._progress || 0) * 100);
+          // No bytes on the wire yet (optimizing, queued, warming the endpoint):
+          // a sweeping ring, not a frozen empty one. Once uploading, the ring
+          // fills to the real percentage and animates smoothly between updates.
+          const warming = a._state === 'preparing' || a._state === 'queued' || pct <= 0;
           cell.innerHTML = (kindOf(a.file_name) === 'video' ? `<video class="thumb" src="${esc(a.url)}" muted playsinline></video>` : `<img src="${esc(a.url)}" alt="">`)
-            + `<div class="up-over"><div class="up-ring" style="--p:${Math.round((a._progress || 0) * 100)}"></div></div>`;
+            + `<div class="up-over"><div class="up-ring${warming ? ' warming' : ''}" data-up="${esc(a.id)}" style="--p:${pct}">`
+            + `<span class="up-pct">${warming ? (a._state === 'preparing' ? '<i class="fa-solid fa-wand-magic-sparkles"></i>' : '') : pct + '%'}</span></div></div>`;
         } else {
           cell.innerHTML = imgTag(a) + (extOf(a.file_name) === 'gif' ? '<span class="gif-tag">GIF</span>' : '')
             + (opts.canRemove ? '<button class="att-x" title="Delete file"><i class="fa-solid fa-xmark"></i></button>' : '');
@@ -504,5 +510,24 @@
     show();
   }
 
-  NX.files = { safeUrl, MAX_MB, kindOf, extOf, prepare, put, startUpload, uploadImage, renderAll, lightbox, download, resolved, fitBox, browserImage };
+  // Update the upload rings in place (so the conic fill glides smoothly)
+  // without rebuilding the DOM. Returns false if a full repaint is needed —
+  // a ring went missing, or a state crossed into/out of the warming phase.
+  function updateProgress(host, atts) {
+    if (!host) return false;
+    let ok = true;
+    (atts || []).forEach((a) => {
+      if (!a || !a._local) return;
+      const ring = host.querySelector(`.up-ring[data-up="${(window.CSS && CSS.escape) ? CSS.escape(a.id) : a.id}"]`);
+      if (!ring) { ok = false; return; }
+      const pct = Math.round((a._progress || 0) * 100);
+      const warming = a._state === 'preparing' || a._state === 'queued' || pct <= 0;
+      if (ring.classList.contains('warming') !== warming) { ok = false; return; }
+      ring.style.setProperty('--p', pct);
+      if (!warming) { const t = ring.querySelector('.up-pct'); if (t) t.textContent = pct + '%'; }
+    });
+    return ok;
+  }
+
+  NX.files = { safeUrl, MAX_MB, kindOf, extOf, prepare, put, startUpload, uploadImage, renderAll, updateProgress, lightbox, download, resolved, fitBox, browserImage };
 })();

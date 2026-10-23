@@ -144,13 +144,17 @@ window.CloudGate = (function () {
   // picked or the composer is focused.
   let warmedAt = 0;
   async function warm() {
-    if (Date.now() - warmedAt < 4 * 60 * 1000) return;
+    if (Date.now() - warmedAt < 90 * 1000) return;
     warmedAt = Date.now();
     try {
       await ready();
-      const ep = endpoints()[0];
-      if (proxyUrl()) viaProxy(ep, '/ping').catch(() => {});
-      else if (ep) fetch(ep.base + '/api/stats', { headers: { authorization: auth(ep) } }).catch(() => {});
+      // Wake every endpoint, not just the first: an upload may land on any of
+      // them (a group is tried in order, and a full/down one is skipped), and
+      // a cold Wasmer app adds ~2 s to the presign. All in parallel, ignored.
+      endpoints().forEach((ep) => {
+        if (proxyUrl()) viaProxy(ep, '/ping').catch(() => {});
+        else fetch(ep.base + '/api/stats', { headers: { authorization: auth(ep) } }).catch(() => {});
+      });
     } catch {}
   }
 
@@ -299,7 +303,14 @@ window.CloudGate = (function () {
     });
   }
 
-  const MULTIPART_OVER = 16 * 1024 * 1024;
+  // The server cuts multipart into fixed 6 MB parts, so anything larger than
+  // one part is uploaded as parallel parts instead of a single stream — the
+  // big win on a slow uplink (several parts fill the link at once, and their
+  // TLS handshakes overlap). Below this a single PUT is fewer round trips.
+  const MULTIPART_OVER = 6 * 1024 * 1024;
+  // How many parts go up at once. Browsers allow ~6 connections per host and
+  // the part URLs share one host, so 6 saturates without thrashing.
+  const PART_WORKERS = 6;
 
   // One complete upload to one endpoint. Multipart stays pinned to that endpoint.
   async function uploadTo(ep, p, filename, blob, onProgress, signal) {
@@ -317,7 +328,7 @@ window.CloudGate = (function () {
             loaded[i] = part.size; report();
           }
         };
-        await Promise.all(Array.from({ length: Math.min(6, m.partUrls.length) }, worker));
+        await Promise.all(Array.from({ length: Math.min(PART_WORKERS, m.partUrls.length) }, worker));
         // Its upload id lives on this endpoint, so it must complete here.
         const done = await callAt(ep, '/api/upload/multipart/complete', { method: 'POST', body: { key: m.key, uploadId: m.uploadId } });
         return { key: done.key, url: done.url || m.publicUrl, size: blob.size, type: m.contentType };
