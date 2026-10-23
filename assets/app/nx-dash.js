@@ -19,6 +19,7 @@
         ['fa-display', 'Screen shares take the main stage with everyone else in a strip below, and the call controls stay put.'],
         ['fa-expand', 'Full screen is now real full screen on phones and desktops.'],
         ['fa-house', 'This page: a clock, the weather where you are, announcements, what’s new, who’s around and big server cards.'],
+        ['fa-cloud-sun-rain', 'Colourful animated weather icons (Meteocons by Bas Milius). They hold still if you turn on Reduce motion.'],
         ['fa-tower-broadcast', 'Weather uses your exact location (or a city you pick), and in the US “now” is the real reading from the nearest weather station, refreshed every 10 minutes.'],
         ['fa-clock-rotate-left', 'Miss the old look? Settings → Appearance → Interface → Classic brings back the original NexChat style, rebuilt on the new app.'],
         ['fa-mobile-screen', 'The sidebar on phones is no longer greyed out behind its own shadow.'],
@@ -55,6 +56,23 @@
     95: ['Thunderstorm', 'fa-cloud-bolt', 'fa-cloud-bolt', 'storm'], 96: ['Thunderstorm, hail', 'fa-cloud-bolt', 'fa-cloud-bolt', 'storm'], 99: ['Thunderstorm, hail', 'fa-cloud-bolt', 'fa-cloud-bolt', 'storm'],
   };
   const wx = (code) => WX[code] || ['—', 'fa-cloud', 'fa-cloud', 'cloud'];
+  // Animated, colourful icons: Meteocons by Bas Milius (MIT), kept in
+  // assets/wx; the still versions are used when Reduce motion is on.
+  const ICON = {
+    0: ['clear-day', 'clear-night'], 1: ['clear-day', 'clear-night'], 2: ['partly-cloudy-day', 'partly-cloudy-night'], 3: ['cloudy', 'cloudy'],
+    45: ['fog-day', 'fog-night'], 48: ['fog-day', 'fog-night'],
+    51: ['partly-cloudy-day-drizzle', 'partly-cloudy-night-drizzle'], 53: ['drizzle', 'drizzle'], 55: ['drizzle', 'drizzle'], 56: ['sleet', 'sleet'], 57: ['sleet', 'sleet'],
+    61: ['rain', 'rain'], 63: ['rain', 'rain'], 65: ['extreme-rain', 'extreme-rain'], 66: ['sleet', 'sleet'], 67: ['sleet', 'sleet'],
+    71: ['partly-cloudy-day-snow', 'partly-cloudy-night-snow'], 73: ['snow', 'snow'], 75: ['extreme-snow', 'extreme-snow'], 77: ['snow', 'snow'],
+    80: ['partly-cloudy-day-rain', 'partly-cloudy-night-rain'], 81: ['rain', 'rain'], 82: ['extreme-rain', 'extreme-rain'], 85: ['partly-cloudy-day-snow', 'partly-cloudy-night-snow'], 86: ['extreme-snow', 'extreme-snow'],
+    95: ['thunderstorms-day-rain', 'thunderstorms-night-rain'], 96: ['hail', 'hail'], 99: ['hail', 'hail'],
+  };
+  const still = () => document.body.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const iconSrc = (name) => `assets/wx/${still() ? 'still/' : ''}${name}.svg`;
+  const wxImg = (code, night, cls = '', title = '') => {
+    const name = (ICON[code] || ['not-available', 'not-available'])[night ? 1 : 0];
+    return `<img class="wx-ic ${cls}" src="${iconSrc(name)}" alt="${esc(title || wx(code)[0])}" draggable="false">`;
+  };
   const units = () => NX.ls.get('nx_wx_units') || (/^en-(US|LR|MM)\b/.test(navigator.language || '') || /^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Indiana)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || '') ? 'f' : 'c');
   let wxState = { loading: false, data: null, error: '' };
 
@@ -134,7 +152,8 @@
     if (/fog|mist|haze|smoke/.test(t)) return 45;
     if (/overcast/.test(t)) return 3;
     if (/mostly cloudy|cloudy/.test(t)) return 3;
-    if (/partly|mostly sunny|mostly clear/.test(t)) return 2;
+    if (/mostly sunny|mostly clear/.test(t)) return 1;
+    if (/partly/.test(t)) return 2;
     if (/clear|sunny|fair/.test(t)) return 0;
     return null;
   };
@@ -331,7 +350,7 @@
     const u = units() === 'f' ? '°F' : '°C';
     if (!loc && wxState.loading) { el.innerHTML = '<div class="wx-setup"><span class="spinner"></span><p>Finding your weather…</p></div>'; return; }
     if (!loc) {
-      el.innerHTML = `<div class="wx-setup"><i class="fa-solid fa-cloud-sun wx-big"></i><b>See the weather here</b><p>Your location stays on this device.</p>
+      el.innerHTML = `<div class="wx-setup"><img class="wx-ic wx-big" src="${iconSrc('partly-cloudy-day')}" alt=""><b>See the weather here</b><p>Your location stays on this device.</p>
         <div class="row" style="gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn btn-primary btn-sm" data-w="locate"><i class="fa-solid fa-location-crosshairs"></i>Use my location</button><button class="btn btn-ghost btn-sm" data-w="city"><i class="fa-solid fa-magnifying-glass"></i>Pick a city</button></div></div>`;
       hours.innerHTML = '';
       if (week) week.innerHTML = '<p class="muted" style="font-size:13px">Set a place in the weather card to see the week ahead.</p>';
@@ -353,7 +372,7 @@
     const wind = o && o.windKmh != null ? (F ? o.windKmh / 1.609 : o.windKmh) : c.wind_speed_10m;
     const hum = o && o.humidity != null ? o.humidity : c.relative_humidity_2m;
     const code = o && o.code != null ? o.code : c.weather_code;
-    const [label, sun, moon, sky] = wx(code);
+    const [label, , , sky] = wx(code);
     hero.dataset.sky = sky + (day ? '' : '-night');
     const hi = Math.round(Math.max(d.daily.temperature_2m_max[0], temp)), lo = Math.round(Math.min(d.daily.temperature_2m_min[0], temp));
     const ago = (ms) => { const m = Math.max(0, Math.round((Date.now() - ms) / 60e3)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
@@ -362,10 +381,10 @@
     const how = loc.src === 'gps' ? `Your exact location${loc.acc ? ` (±${loc.acc < 1000 ? loc.acc + ' m' : Math.round(loc.acc / 1000) + ' km'})` : ''}. Tap to change.`
       : loc.src === 'city' ? 'A city you picked. Tap to change.' : 'Approximate, from your internet connection. Tap to use your exact location.';
     el.innerHTML = `<div class="wx-now">
-        <i class="fa-solid ${day ? sun : moon} wx-big"></i>
+        ${wxImg(code, !day, 'wx-big', label)}
         <div class="wx-temp">${Math.round(temp)}<small>${u}</small></div>
         <div class="wx-desc"><b>${esc(o?.text || label)}</b><span>Feels like ${Math.round(feels)}° · H ${hi}° L ${lo}°</span>
-          <span><i class="fa-solid fa-wind"></i> ${Math.round(wind)} ${F ? 'mph' : 'km/h'} · <i class="fa-solid fa-droplet"></i> ${Math.round(hum)}%</span></div>
+          <span class="wx-meta"><img class="wx-mini" src="${iconSrc('wind')}" alt="Wind">${Math.round(wind)} ${F ? 'mph' : 'km/h'}<img class="wx-mini" src="${iconSrc('humidity')}" alt="Humidity">${Math.round(hum)}%</span></div>
       </div>
       <div class="wx-src"><i class="fa-solid fa-${o ? 'tower-broadcast' : 'satellite'}"></i>${src}</div>
       <div class="wx-place"><button class="wx-link" data-w="place" title="${esc(how)}"><i class="fa-solid fa-${pin}"></i>${esc(loc.name || 'Your location')}${loc.src === 'ip' ? '<small>approx.</small>' : ''}</button>
@@ -379,19 +398,18 @@
     const hourLabel = (s) => new Date(wall(s)).toLocaleTimeString(undefined, { hour: 'numeric', timeZone: 'UTC' });
     hours.innerHTML = d.hourly.time.slice(nowIdx, nowIdx + 12).map((ts, i) => {
       const k = nowIdx + i;
-      const [, sn, mn] = wx(i === 0 ? code : d.hourly.weather_code[k]);
       const p = d.hourly.precipitation_probability?.[k];
       const night = i === 0 ? !day : d.hourly.is_day?.[k] === 0;
-      return `<div class="wx-h${i === 0 ? ' now' : ''}"><span>${i === 0 ? 'Now' : hourLabel(ts)}</span><i class="fa-solid ${night ? mn : sn}"></i><b>${Math.round(i === 0 ? temp : d.hourly.temperature_2m[k])}°</b>${p >= 20 ? `<small><i class="fa-solid fa-droplet"></i>${p}%</small>` : '<small></small>'}</div>`;
+      return `<div class="wx-h${i === 0 ? ' now' : ''}"><span>${i === 0 ? 'Now' : hourLabel(ts)}</span>${wxImg(i === 0 ? code : d.hourly.weather_code[k], night)}<b>${Math.round(i === 0 ? temp : d.hourly.temperature_2m[k])}°</b>${p >= 20 ? `<small><i class="fa-solid fa-droplet"></i>${p}%</small>` : '<small></small>'}</div>`;
     }).join('');
     if (week) {
       const all = d.daily.temperature_2m_max.concat(d.daily.temperature_2m_min);
       const mn = Math.min(...all), mx = Math.max(...all), span = Math.max(1, mx - mn);
       week.innerHTML = d.daily.time.map((t, i) => {
-        const [lab, s] = wx(d.daily.weather_code[i]);
+        const [lab] = wx(d.daily.weather_code[i]);
         const a = d.daily.temperature_2m_min[i], b = d.daily.temperature_2m_max[i];
         const p = d.daily.precipitation_probability_max?.[i];
-        return `<div class="wx-d"><span class="wd-n">${i === 0 ? 'Today' : new Date(Date.parse(t + 'T12:00Z')).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}</span><i class="fa-solid ${s}" title="${esc(lab)}"></i>
+        return `<div class="wx-d"><span class="wd-n">${i === 0 ? 'Today' : new Date(Date.parse(t + 'T12:00Z')).toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' })}</span>${wxImg(d.daily.weather_code[i], false, '', lab)}
           <small class="wd-p">${p >= 20 ? p + '%' : ''}</small><span class="wd-lo">${Math.round(a)}°</span>
           <span class="wd-bar"><i style="left:${((a - mn) / span) * 100}%;right:${100 - ((b - mn) / span) * 100}%"></i></span><span class="wd-hi">${Math.round(b)}°</span></div>`;
       }).join('');

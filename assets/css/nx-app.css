@@ -480,7 +480,7 @@ button.dh-chip:hover { background: rgba(0, 0, 0, .4); }
 .dc-empty > i { font-size: 26px; color: var(--txt-4); margin-bottom: 4px; }
 .dc-empty b { color: var(--txt-1); font-size: 14px; }
 .dc-empty .btn { margin-top: 6px; }
-.wx-d { display: grid; grid-template-columns: 52px 22px 34px 34px minmax(40px, 1fr) 34px; align-items: center; gap: 8px; font-size: 13.5px; padding: 5px 2px; }
+.wx-d { display: grid; grid-template-columns: 52px 32px 34px 34px minmax(40px, 1fr) 34px; align-items: center; gap: 8px; font-size: 13.5px; padding: 5px 2px; }
 .wx-d + .wx-d { border-top: 1px solid var(--line); }
 .wx-d .wd-n { font-weight: 600; }
 .wx-d > i { color: var(--txt-2); text-align: center; }
@@ -521,7 +521,7 @@ body.glass.has-bg .dash-card .active-card, body.glass.has-bg .cl-rel { backgroun
   .dh-greet { font-size: 15px; }
   .dh-date { font-size: 15px; }
   .dash-ann.big h3 { font-size: 19px; }
-  .wx-d { grid-template-columns: 46px 20px 30px 30px minmax(30px, 1fr) 30px; gap: 6px; font-size: 13px; }
+  .wx-d { grid-template-columns: 46px 30px 30px 30px minmax(30px, 1fr) 30px; gap: 6px; font-size: 13px; }
 }
 
 /* your servers: full-width cards (a swipeable row on phones) */
@@ -575,3 +575,14 @@ body.glass.has-bg .ds-add { background: transparent; }
 .wx-src { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: rgba(255, 255, 255, .62); min-width: 0; }
 .wx-src i { font-size: 10px; opacity: .8; }
 .wx-link small { font-size: 10px; font-weight: 600; opacity: .7; margin-left: 2px; }
+/* animated weather icons (Meteocons) */
+.wx-ic { display: block; flex-shrink: 0; user-select: none; -webkit-user-drag: none; }
+.wx-ic.wx-big, .wx-setup .wx-ic.wx-big { width: 104px; height: 104px; margin: -14px -6px -14px -14px; filter: drop-shadow(0 10px 22px rgba(0, 0, 0, .35)); }
+.wx-now .wx-ic.wx-big { grid-row: 1; }
+.wx-setup .wx-ic.wx-big { margin: -10px auto -6px; }
+.wx-h .wx-ic { width: 42px; height: 42px; margin: -6px 0; }
+.wx-d .wx-ic { width: 32px; height: 32px; margin: -6px auto; }
+.wx-meta { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.wx-mini { width: 24px; height: 24px; margin: -4px 0 -4px -4px; }
+.wx-mini + * { margin-right: 6px; }
+.wx-meta img.wx-mini:not(:first-child) { margin-left: 6px; }
