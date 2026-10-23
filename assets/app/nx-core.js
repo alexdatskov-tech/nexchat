@@ -21,6 +21,45 @@ window.NX = (function () {
     return t.content;
   };
   NX.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /* Updates a list in place instead of re-rendering it: items are
+     [{ key, html }]. An item whose html didn't change keeps its node; one
+     that changed is rebuilt, but its child elements that didn't change are
+     carried over, so avatars and icons never reload or flash. */
+  const mark = (n) => { n.querySelectorAll?.('*').forEach((c) => { c._src = c.outerHTML; }); return n; };
+  // Moves every unchanged descendant of `from` into `into` (matched by
+  // position), so images keep their loaded, decoded element.
+  function adopt(from, into) {
+    const oc = [...from.children], nc = [...into.children];
+    nc.forEach((c, i) => {
+      const o = oc[i];
+      if (!o || o.tagName !== c.tagName) return;
+      if (o._src && o._src === c._src) into.replaceChild(o, c);
+      else adopt(o, c);
+    });
+  }
+  NX.patch = (box, items) => {
+    if (!box) return;
+    const old = new Map();
+    [...box.children].forEach((n) => { if (n._k != null) old.set(n._k, n); else n.remove(); });
+    let prev = null;
+    for (const { key, html } of items) {
+      let n = old.get(key);
+      if (n && n._html !== html) {
+        const fresh = mark(NX.h(html));
+        if (fresh.tagName === n.tagName) adopt(n, fresh);
+        fresh._k = key; fresh._html = html;
+        n.replaceWith(fresh); n = fresh;
+      } else if (!n) {
+        n = mark(NX.h(html)); n._k = key; n._html = html;
+      }
+      old.delete(key);
+      const want = prev ? prev.nextSibling : box.firstChild;
+      if (n !== want) box.insertBefore(n, want);
+      prev = n;
+    }
+    old.forEach((n) => n.remove());
+  };
   NX.uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   NX.debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
   NX.throttle = (fn, ms) => {

@@ -338,11 +338,10 @@
           } else atts = ins.data || [];
         }
         atts.sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
+        // pictures are fetched before the swap, so the local preview never blinks
+        await Promise.race([Promise.allSettled(atts.filter((x) => /^image\//.test(x.mime_type || '')).map((x) => NX.files.resolved(x.url).then((u) => { const im = new Image(); im.src = u; return im.decode(); }))), NX.sleep(2500)]);
         const keep = chat.pinned;
-        chat.remove(m.id);
-        if (atts.length) chat.atts.set(real.id, atts);
-        if (!chat.byId.has(real.id)) chat.insert(real);
-        else chat.paintAtts(real.id);
+        chat.confirm(m.id, real, atts);
         if (keep) chat.toBottom();
         (m._jobs || []).forEach((j) => j.preview && setTimeout(() => URL.revokeObjectURL(j.preview), 60000));
         this.a.onSent?.(real);

@@ -412,17 +412,38 @@
           <div class="rx-row"></div>
           ${m._failed ? `<div class="m-fail"><i class="fa-solid fa-circle-exclamation"></i>${esc(m._error || 'Not sent.')} <button data-a="retry">Retry</button><button data-a="discard">Delete</button></div>` : ''}
         </div>
-        ${m._pending || m._failed ? '' : `<div class="m-acts">
-          ${QUICK.slice(0, 3).map((e) => `<button class="q" data-a="q" data-e="${e}" title="React ${e}">${e}</button>`).join('')}
-          <button data-a="react" title="Add reaction"><i class="fa-regular fa-face-smile"></i></button>
-          ${this.a.canSend() ? '<button data-a="reply" title="Reply"><i class="fa-solid fa-reply"></i></button>' : ''}
-          ${mine ? '<button data-a="edit" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
-          <button data-a="more" title="More"><i class="fa-solid fa-ellipsis"></i></button>
-        </div>`}`;
+        ${m._pending || m._failed ? '' : this.actsHtml(m)}`;
       if (!m.content && !m.edited_at) el.querySelector('.m-text').remove();
       this.paintAtts(m.id, el);
       this.paintRx(m.id, el);
       return el;
+    }
+    actsHtml(m) {
+      return `<div class="m-acts">
+          ${QUICK.slice(0, 3).map((e) => `<button class="q" data-a="q" data-e="${e}" title="React ${e}">${e}</button>`).join('')}
+          <button data-a="react" title="Add reaction"><i class="fa-regular fa-face-smile"></i></button>
+          ${this.a.canSend() ? '<button data-a="reply" title="Reply"><i class="fa-solid fa-reply"></i></button>' : ''}
+          ${m.author_id === NX.me.id ? '<button data-a="edit" title="Edit"><i class="fa-solid fa-pen"></i></button>' : ''}
+          <button data-a="more" title="More"><i class="fa-solid fa-ellipsis"></i></button>
+        </div>`;
+    }
+    /* A sent message becomes real in place: same element, same avatar, no
+       flicker. If the live update delivered it first, the copy just goes. */
+    confirm(tmpId, real, atts) {
+      const m = this.byId.get(tmpId);
+      if (this.byId.has(real.id)) { if (m) this.remove(tmpId); if (atts?.length) { this.atts.set(real.id, atts); this.paintAtts(real.id); } return; }
+      if (!m) { if (atts?.length) this.atts.set(real.id, atts); this.insert(real); return; }
+      const had = !!(m._jobs?.length);
+      Object.keys(m).forEach((k) => { if (k.startsWith('_')) delete m[k]; });
+      Object.assign(m, real);
+      this.byId.delete(tmpId); this.byId.set(real.id, m);
+      if (atts?.length) this.atts.set(real.id, atts);
+      const el = this.rowEl(tmpId);
+      if (!el) return;
+      el.dataset.id = real.id;
+      el.classList.remove('sending');
+      if (!el.querySelector('.m-acts')) el.insertAdjacentHTML('beforeend', this.actsHtml(m));
+      if (had) this.paintAtts(real.id, el);
     }
     replyHtml(rid) {
       const r = this.byId.get(rid) || this.refs.get(rid);

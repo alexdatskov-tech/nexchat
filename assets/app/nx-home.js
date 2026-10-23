@@ -7,19 +7,25 @@
   let offs = [];
 
   /* ---------- sidebar: conversations ---------- */
+  // Built once and moved between Home and DMs, so its avatars never reload.
+  let sideRoot = null;
   function mountSide(host) {
-    host.innerHTML = `
-      <div class="side-head" style="padding:0 10px"><button class="side-search" data-a="find"><i class="fa-solid fa-magnifying-glass"></i><span class="grow">Search</span>${NX.isTouch() ? '' : '<span class="kbd">Ctrl K</span>'}</button></div>
-      <div class="side-body" id="dmSide"></div>`;
-    side = host.querySelector('#dmSide');
-    host.querySelector('[data-a="find"]').onclick = () => NX.switcher();
-    side.addEventListener('click', onSideClick);
-    side.addEventListener('contextmenu', (e) => {
-      const it = e.target.closest('[data-cid]');
-      if (!it) return;
-      e.preventDefault();
-      dmMenu(D().dm(it.dataset.cid), e);
-    });
+    if (!sideRoot) {
+      sideRoot = NX.h(`<div style="display:contents">
+        <div class="side-head" style="padding:0 10px"><button class="side-search" data-a="find"><i class="fa-solid fa-magnifying-glass"></i><span class="grow">Search</span>${NX.isTouch() ? '' : '<span class="kbd">Ctrl K</span>'}</button></div>
+        <div class="side-body" id="dmSide"></div></div>`);
+      sideRoot.querySelector('[data-a="find"]').onclick = () => NX.switcher();
+      const body = sideRoot.querySelector('#dmSide');
+      body.addEventListener('click', onSideClick);
+      body.addEventListener('contextmenu', (e) => {
+        const it = e.target.closest('[data-cid]');
+        if (!it) return;
+        e.preventDefault();
+        dmMenu(D().dm(it.dataset.cid), e);
+      });
+    }
+    host.appendChild(sideRoot);
+    side = sideRoot.querySelector('#dmSide');
     paintSide();
   }
   function paintSide() {
@@ -31,24 +37,23 @@
     const live = window.Voice?.live?.() || new Map();
     // a 1:1 whose other person deleted their account sinks to the bottom
     const list = D().visibleDms().slice().sort((a, b) => (!a.is_group && !a.people[0]) - (!b.is_group && !b.people[0]));
-    side.innerHTML = `
-      <a class="s-item big${onHome ? ' on' : ''}" href="#/home" data-go="home"><i class="fa-solid fa-house"></i><span class="nm">Home</span></a>
-      <a class="s-item big${onFriends ? ' on' : ''}" href="#/home/online" data-go="home/online"><i class="fa-solid fa-user-group"></i><span class="nm">Friends</span>${pending ? `<span class="count">${pending}</span>` : ''}</a>
-      <div class="side-sect"><span class="grow">Direct messages</span><button class="icon-btn" data-a="new" data-tip="Create DM"><i class="fa-solid fa-plus"></i></button></div>
-      ${list.length ? list.map((c) => {
-        const o = c.people[0];
-        const unread = c.unread > 0 && NX.viewing !== 'dm:' + c.id;
-        const gone = !c.is_group && !o;
-        const sub = c.is_group ? NX.fmt.plural(c.people.length + 1, 'member') : gone ? 'This account no longer exists'
-          : (o?.custom_status || (c.last ? (c.last.author_id === NX.me.id ? 'You: ' : '') + (c.last.content ? MD.plain(c.last.content, 60) : 'Sent a file') : '@' + (o?.username || '')));
-        const inCall = live.get('dm-' + c.id);
-        return `<a class="s-item dm${r.parts[1] === c.id ? ' on' : ''}${unread ? ' unread' : ''}" href="#/dm/${esc(c.id)}" data-go="dm/${esc(c.id)}" data-cid="${esc(c.id)}">
-          ${c.is_group ? `<span class="av" style="width:32px;height:32px;background:var(--accent);font-size:13px"><i class="fa-solid fa-user-group"></i></span>`
-            : gone ? '<span class="av" style="width:32px;height:32px;background:var(--bg-4);color:var(--txt-3);font-size:13px"><i class="fa-solid fa-ghost"></i></span>' : P().avatar(o, 32, { presence: true, deco: false })}
-          <span class="t"><b>${esc(D().dmTitle(c))}</b><small>${inCall ? '<span style="color:var(--ok)"><i class="fa-solid fa-phone-volume"></i> Call in progress</span>' : esc(sub)}</small></span>
-          ${unread ? `<span class="count">${c.unread > 99 ? '99+' : c.unread}</span>` : `<button class="icon-btn sm x" data-a="close" data-cid="${esc(c.id)}" title="${c.is_group ? 'Leave group' : 'Close DM'}"><i class="fa-solid fa-xmark"></i></button>`}
-        </a>`;
-      }).join('') : '<div class="empty" style="padding:24px 10px"><p style="font-size:13px">No conversations yet. Message a friend to get started.</p></div>'}`;
+    const items = [
+      { key: 'home', html: `<a class="s-item big${onHome ? ' on' : ''}" href="#/home" data-go="home"><i class="fa-solid fa-house"></i><span class="nm">Home</span></a>` },
+      { key: 'friends', html: `<a class="s-item big${onFriends ? ' on' : ''}" href="#/home/online" data-go="home/online"><i class="fa-solid fa-user-group"></i><span class="nm">Friends</span>${pending ? `<span class="count">${pending}</span>` : ''}</a>` },
+      { key: 'sect', html: '<div class="side-sect"><span class="grow">Direct messages</span><button class="icon-btn" data-a="new" data-tip="Create DM"><i class="fa-solid fa-plus"></i></button></div>' },
+    ];
+    list.forEach((c) => {
+      const o = c.people[0];
+      const unread = c.unread > 0 && NX.viewing !== 'dm:' + c.id;
+      const gone = !c.is_group && !o;
+      const sub = c.is_group ? NX.fmt.plural(c.people.length + 1, 'member') : gone ? 'This account no longer exists'
+        : (o?.custom_status || (c.last ? (c.last.author_id === NX.me.id ? 'You: ' : '') + (c.last.content ? MD.plain(c.last.content, 60) : 'Sent a file') : '@' + (o?.username || '')));
+      const inCall = live.get('dm-' + c.id);
+      items.push({ key: 'dm:' + c.id, html: `<a class="s-item dm${r.parts[1] === c.id ? ' on' : ''}${unread ? ' unread' : ''}" href="#/dm/${esc(c.id)}" data-go="dm/${esc(c.id)}" data-cid="${esc(c.id)}">${c.is_group ? `<span class="av" style="width:32px;height:32px;background:var(--accent);font-size:13px"><i class="fa-solid fa-user-group"></i></span>`
+          : gone ? '<span class="av" style="width:32px;height:32px;background:var(--bg-4);color:var(--txt-3);font-size:13px"><i class="fa-solid fa-ghost"></i></span>' : P().avatar(o, 32, { presence: true, deco: false })}<span class="t"><b>${esc(D().dmTitle(c))}</b><small>${inCall ? '<span style="color:var(--ok)"><i class="fa-solid fa-phone-volume"></i> Call in progress</span>' : esc(sub)}</small></span>${unread ? `<span class="count">${c.unread > 99 ? '99+' : c.unread}</span>` : `<button class="icon-btn sm x" data-a="close" data-cid="${esc(c.id)}" title="${c.is_group ? 'Leave group' : 'Close DM'}"><i class="fa-solid fa-xmark"></i></button>`}</a>` });
+    });
+    if (!list.length) items.push({ key: 'empty', html: '<div class="empty" style="padding:24px 10px"><p style="font-size:13px">No conversations yet. Message a friend to get started.</p></div>' });
+    NX.patch(side, items);
   }
   function onSideClick(e) {
     const a = e.target.closest('[data-a]')?.dataset.a;
@@ -466,8 +471,8 @@
     },
     viewingKey: () => (conv ? 'dm:' + conv.id : null),
     step(d) {
-      // a 1:1 whose other person deleted their account sinks to the bottom
-    const list = D().visibleDms().slice().sort((a, b) => (!a.is_group && !a.people[0]) - (!b.is_group && !b.people[0]));
+      // same order as the sidebar (deleted accounts last)
+      const list = D().visibleDms().slice().sort((a, b) => (!a.is_group && !a.people[0]) - (!b.is_group && !b.people[0]));
       const i = list.findIndex((c) => c.id === conv?.id);
       const n = list[i + d];
       if (n) NX.go('dm/' + n.id);

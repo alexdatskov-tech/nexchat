@@ -257,18 +257,22 @@
     const classic = document.body.classList.contains('ui-classic');
     const onDash = (!r.parts[0] || r.parts[0] === 'home') && !r.parts[1];
     const lastDm = NX.data.ready ? NX.data.visibleDms()[0] : null;
-    rail.innerHTML = `
-      <div class="r-item${(classic ? onDash : onHome) && !page ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn home" href="#/home" data-go="home" data-tip="${classic ? 'Home' : 'Direct messages'}" data-tip-pos="right"><img src="assets/img/logo.svg" alt="Home"></a>${dmN && !classic ? `<span class="count">${dmN > 99 ? '99+' : dmN}</span>` : ''}</div>
-      ${classic ? `<div class="r-item r-classic${onHome && !onDash && !page ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn tint" href="#/home" data-go="${lastDm ? 'dm/' + esc(lastDm.id) : 'home/online'}" data-tip="Messages" data-tip-pos="right"><i class="fa-solid fa-comment-dots"></i></a>${dmN ? `<span class="count">${dmN > 99 ? '99+' : dmN}</span>` : ''}</div>
-      <div class="r-item r-classic"><span class="r-pip"></span><a class="r-btn tint" href="#/home" data-go="home" data-anns data-tip="Announcements" data-tip-pos="right"><i class="fa-solid fa-bullhorn"></i></a></div>` : ''}
-      ${unreadDms.map((c) => `<div class="r-item unread"><span class="r-pip"></span><a class="r-btn" href="#/dm/${esc(c.id)}" data-go="dm/${esc(c.id)}" data-tip="${esc(NX.data.dmTitle(c))}" data-tip-pos="right">${c.is_group ? '<i class="fa-solid fa-user-group"></i>' : P().avatar(c.people[0], 48, { halo: false, deco: false })}</a><span class="count">${c.unread > 99 ? '99+' : c.unread}</span></div>`).join('')}
-      ${st.active ? `<div class="r-item r-call"><a class="r-btn" href="#" data-call data-tip="Back to call: ${esc(st.channel?.name || '')}" data-tip-pos="right"><i class="fa-solid fa-phone-volume"></i></a></div>` : ''}
-      <div class="rail-sep"></div>
-      <div class="rail-list">${servers.map((s) => `<div class="r-item${s.id === activeSrv ? ' on' : ''}${s.unread && s.id !== activeSrv ? ' unread' : ''}"><span class="r-pip"></span>
-        <a class="r-btn tint" href="#/s/${esc(s.id)}" data-go="s/${esc(s.id)}" data-tip="${esc(s.name)}" data-tip-pos="right" data-sid="${esc(s.id)}">${s.icon_url ? `<img ${P().imgAttr(s.icon_url)} alt="">` : `<span style="font-size:${initials(s.name).length > 2 ? 12 : 15}px">${esc(initials(s.name))}</span>`}</a></div>`).join('')}</div>
-      <div class="r-item"><span class="r-pip"></span><button class="r-btn add" data-add data-tip="Add a server" data-tip-pos="right"><i class="fa-solid fa-plus"></i></button></div>
-      <div class="rail-fill"></div>
-      ${staff ? `<div class="r-item${r.parts[0] === 'admin' ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn tint" href="#/admin" data-go="admin" data-tip="Admin console" data-tip-pos="right"><i class="fa-solid fa-shield-halved"></i></a></div>` : ''}`;
+    const items = [];
+    const add = (key, html) => items.push({ key, html });
+    add('home', `<div class="r-item${(classic ? onDash : onHome) && !page ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn home" href="#/home" data-go="home" data-tip="${classic ? 'Home' : 'Direct messages'}" data-tip-pos="right"><img src="assets/img/logo.svg" alt="Home"></a>${dmN && !classic ? `<span class="count">${dmN > 99 ? '99+' : dmN}</span>` : ''}</div>`);
+    if (classic) {
+      add('c-msg', `<div class="r-item r-classic${onHome && !onDash && !page ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn tint" href="#/home" data-go="${lastDm ? 'dm/' + esc(lastDm.id) : 'home/online'}" data-tip="Messages" data-tip-pos="right"><i class="fa-solid fa-comment-dots"></i></a>${dmN ? `<span class="count">${dmN > 99 ? '99+' : dmN}</span>` : ''}</div>`);
+      add('c-ann', '<div class="r-item r-classic"><span class="r-pip"></span><a class="r-btn tint" href="#/home" data-go="home" data-anns data-tip="Announcements" data-tip-pos="right"><i class="fa-solid fa-bullhorn"></i></a></div>');
+    }
+    unreadDms.forEach((c) => add('udm:' + c.id, `<div class="r-item unread"><span class="r-pip"></span><a class="r-btn" href="#/dm/${esc(c.id)}" data-go="dm/${esc(c.id)}" data-tip="${esc(NX.data.dmTitle(c))}" data-tip-pos="right">${c.is_group ? '<i class="fa-solid fa-user-group"></i>' : P().avatar(c.people[0], 48, { halo: false, deco: false })}</a><span class="count">${c.unread > 99 ? '99+' : c.unread}</span></div>`));
+    if (st.active) add('call', `<div class="r-item r-call"><a class="r-btn" href="#" data-call data-tip="Back to call: ${esc(st.channel?.name || '')}" data-tip-pos="right"><i class="fa-solid fa-phone-volume"></i></a></div>`);
+    add('sep', '<div class="rail-sep"></div>');
+    add('servers', `<div class="rail-list">${servers.map((s) => `<div class="r-item${s.id === activeSrv ? ' on' : ''}${s.unread && s.id !== activeSrv ? ' unread' : ''}"><span class="r-pip"></span><a class="r-btn tint" href="#/s/${esc(s.id)}" data-go="s/${esc(s.id)}" data-tip="${esc(s.name)}" data-tip-pos="right" data-sid="${esc(s.id)}">${s.icon_url ? `<img ${P().imgAttr(s.icon_url)} alt="">` : `<span style="font-size:${initials(s.name).length > 2 ? 12 : 15}px">${esc(initials(s.name))}</span>`}</a></div>`).join('')}</div>`);
+    add('add', '<div class="r-item"><span class="r-pip"></span><button class="r-btn add" data-add data-tip="Add a server" data-tip-pos="right"><i class="fa-solid fa-plus"></i></button></div>');
+    add('fill', '<div class="rail-fill"></div>');
+    if (staff) add('admin', `<div class="r-item${r.parts[0] === 'admin' ? ' on' : ''}"><span class="r-pip"></span><a class="r-btn tint" href="#/admin" data-go="admin" data-tip="Admin console" data-tip-pos="right"><i class="fa-solid fa-shield-halved"></i></a></div>`);
+    // updated in place: icons that didn't change keep their element
+    NX.patch(rail, items);
   }
   function wireRail() {
     const rail = $('#rail');

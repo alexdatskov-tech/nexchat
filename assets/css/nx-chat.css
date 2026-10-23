@@ -37,7 +37,8 @@
 .m-time { color: var(--txt-4); font-size: 12px; font-weight: 500; }
 .m-text { color: #dcdee5; font-size: 15px; line-height: 1.42; overflow-wrap: anywhere; word-break: break-word; white-space: normal; min-width: 0; }
 .m-text .m-edited { font-size: 11px; color: var(--txt-4); margin-left: 4px; user-select: none; }
-.m.sending .m-text { opacity: .55; }
+.m.sending .m-text { animation: m-pend 0s .6s forwards; }   /* only dims if sending is slow */
+@keyframes m-pend { to { opacity: .6; } }
 .m.failed .m-text { color: #ff8a8e; }
 .m-fail { display: flex; align-items: center; gap: 8px; color: #ff8a8e; font-size: 12.5px; margin-top: 2px; }
 .m-fail button { color: var(--accent-hi); font-weight: 600; font-size: 12.5px; }
