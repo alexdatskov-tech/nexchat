@@ -277,7 +277,7 @@
         if (n === 1) cell.style.cssText = fitBox(a.width, a.height);
         if (a._local) {
           cell.innerHTML = (kindOf(a.file_name) === 'video' ? `<video class="thumb" src="${esc(a.url)}" muted playsinline></video>` : `<img src="${esc(a.url)}" alt="">`)
-            + `<div class="up-over"><div class="ring" style="--p:${Math.round((a._progress || 0) * 100)}"></div></div>`;
+            + `<div class="up-over"><div class="up-ring" style="--p:${Math.round((a._progress || 0) * 100)}"></div></div>`;
         } else {
           cell.innerHTML = imgTag(a) + (extOf(a.file_name) === 'gif' ? '<span class="gif-tag">GIF</span>' : '')
             + (opts.canRemove ? '<button class="att-x" title="Delete file"><i class="fa-solid fa-xmark"></i></button>' : '');

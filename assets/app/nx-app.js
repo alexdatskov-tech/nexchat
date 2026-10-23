@@ -42,6 +42,10 @@
     NX.data.startLive();
     NX.data.startCalls();
     window.CloudGate?.refresh?.();
+    // While the logo is still up: profiles, pictures, recent chats and server
+    // channels, so switching around is instant. At most ~3 s, then the rest
+    // carries on in the background.
+    await Promise.race([warmUp(), NX.sleep(3000)]);
     NX.on('route', route);
     route(firstRoute());
     bootEl?.classList.add('gone');
@@ -53,6 +57,34 @@
       const ask = () => { NX.ls.set('nx_asked_notify', 1); Notification.requestPermission().catch(() => {}); window.removeEventListener('pointerdown', ask); };
       setTimeout(() => window.addEventListener('pointerdown', ask, { once: true }), 4000);
     }
+  }
+
+  async function warmUp() {
+    const D = NX.data;
+    const dms = D.visibleDms();
+    const ids = new Set([...dms.flatMap((c) => c.people.map((p) => p.id)), ...D.friendIds()]);
+    // full profiles (decorations, name styles, banners) for everyone you talk to
+    await P().need([...ids]).catch(() => {});
+    // pictures: decoded once now, instant later
+    const urls = new Set();
+    [...ids].map((id) => P().get(id)).filter(Boolean).forEach((p) => {
+      if (p.avatar_url) urls.add(p.avatar_url);
+      const deco = P().decoPath(p, 'pfp');
+      if (deco) urls.add(P().decoSrc(deco));
+    });
+    if (NX.me.avatar_url) urls.add(NX.me.avatar_url);
+    D.servers.forEach((s) => { if (s.icon_url) urls.add(s.icon_url); });
+    const pics = [...urls].slice(0, 120).map(async (u) => {
+      try {
+        const src = window.Store?.isManaged(u) ? await window.Store.sign(u) : u;
+        const im = new Image(); im.decoding = 'async'; im.src = src;
+        await im.decode();
+      } catch {}
+    });
+    // the latest messages of your most recent chats, and your servers' channels
+    const chats = dms.slice(0, 6).map((c) => NX.views.home?.prefetch(c));
+    const servers = D.servers.slice(0, 8).map((s) => NX.views.server?.prefetch(s.id));
+    await Promise.allSettled([...pics, ...chats, ...servers]);
   }
 
   // Old links: portal.html?invite=, server.html?id=, dms.html?c=, profile.html …

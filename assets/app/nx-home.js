@@ -439,6 +439,8 @@
 
   NX.views.home = {
     enter, leave,
+    // warm a DM's chat (latest messages, authors, files) before it's opened
+    prefetch(c) { return c ? NX.Chat.open(adapterFor(c)).preload() : Promise.resolve(); },
     update(parts) {
       if (chat) { chat.hide(); chat = null; }
       if (main?.querySelector('.room-slot .call')) NX.call.unmount(main.querySelector('.room-slot'));

@@ -128,8 +128,8 @@
 .att-media .gif-tag { position: absolute; left: 6px; bottom: 6px; font-size: 10px; font-weight: 800; background: rgba(0, 0, 0, .6); padding: 2px 5px; border-radius: 4px; }
 .att-media.loading { cursor: default; }
 .att-media .up-over { position: absolute; inset: 0; background: rgba(8, 9, 12, .55); display: flex; align-items: center; justify-content: center; }
-.ring { --p: 0; width: 44px; height: 44px; border-radius: 50%; background: conic-gradient(var(--accent) calc(var(--p) * 1%), rgba(255, 255, 255, .15) 0); display: flex; align-items: center; justify-content: center; }
-.ring::after { content: ''; width: 36px; height: 36px; border-radius: 50%; background: rgba(8, 9, 12, .8); }
+.up-ring { --p: 0; width: 44px; height: 44px; border-radius: 50%; background: conic-gradient(var(--accent) calc(var(--p) * 1%), rgba(255, 255, 255, .15) 0); display: flex; align-items: center; justify-content: center; }
+.up-ring::after { content: ''; width: 36px; height: 36px; border-radius: 50%; background: rgba(8, 9, 12, .8); }
 .att-wrap { position: relative; }
 .att-x { position: absolute; top: 6px; right: 6px; z-index: 3; width: 26px; height: 26px; border-radius: 7px; background: rgba(0, 0, 0, .65); color: #fff; display: none; align-items: center; justify-content: center; font-size: 12px; }
 .att-wrap:hover > .att-x, .att-media:hover > .att-x { display: flex; }

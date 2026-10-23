@@ -303,7 +303,20 @@
       const row = { server_id: s.id, created_by: NX.me.id };
       if (hrs) row.expires_at = new Date(Date.now() + hrs * 3600e3).toISOString();
       const { data, error } = await window.db.from('invites').insert(row).select().single();
-      if (error) { body.querySelector('[data-link]').value = ''; return NX.fail(error); }
+      if (error) {
+        body.querySelector('[data-link]').value = '';
+        // not a member (staff looking around): offer to join instead of a database error
+        if (!member && sid === srv?.id && (error.code === '42501' || /row-level security/i.test(error.message || ''))) {
+          body.querySelector('.hint').innerHTML = 'You haven’t joined this server, so you can’t make invites for it yet.';
+          if (!body.querySelector('[data-join]')) {
+            const j = NX.h('<button class="btn btn-ok btn-sm" data-join style="align-self:flex-start"><i class="fa-solid fa-right-to-bracket"></i>Join the server and make an invite</button>');
+            body.appendChild(j);
+            j.onclick = async () => { if (await staffJoin(j)) { j.remove(); body.querySelector('.hint').innerHTML = 'Code: <b class="mono" data-code>…</b> · people can paste the code or open the link.'; gen(); } };
+          }
+          return;
+        }
+        return NX.fail(error);
+      }
       const link = NX.pageUrl(`index.html?invite=${data.code}`);
       body.querySelector('[data-link]').value = link;
       body.querySelector('[data-code]').textContent = data.code;
@@ -354,7 +367,30 @@
   function paintPreview() {
     const slot = main?.querySelector('.preview-slot');
     if (!slot) return;
-    slot.innerHTML = !member ? `<div class="preview-bar"><i class="fa-solid fa-eye"></i><span>You’re viewing this server as <b>${esc(P().ROLE_NAMES[P().rank(NX.me)] || 'staff')}</b>. You haven’t joined it; anything you post appears under your name.</span></div>` : '';
+    slot.innerHTML = !member ? `<div class="preview-bar"><i class="fa-solid fa-eye"></i><span class="grow">You’re viewing this server as <b>${esc(P().ROLE_NAMES[P().rank(NX.me)] || 'staff')}</b>. You haven’t joined it; anything you post appears under your name.</span>
+      <button class="btn btn-ok btn-sm" data-a="staff-join"><i class="fa-solid fa-right-to-bracket"></i>Join server</button></div>` : '';
+    slot.querySelector('[data-a="staff-join"]')?.addEventListener('click', (e) => staffJoin(e.currentTarget));
+  }
+  // Platform staff joining a server they're looking at (nx_staff_join; until
+  // that SQL is in, a plain self-insert, which the current policies allow).
+  async function staffJoin(btn) {
+    const sid = srv?.id;
+    if (!sid) return false;
+    btn?.classList.add('busy');
+    let { error } = await window.db.rpc('nx_staff_join', { p_server: sid });
+    if (error && (error.code === 'PGRST202' || /could not find the function|schema cache/i.test(error.message || ''))) {
+      ({ error } = await window.db.from('server_members').insert({ server_id: sid, user_id: NX.me.id }));
+      if (error?.code === '23505') error = null;   // already in
+    }
+    btn?.classList.remove('busy');
+    if (error) { NX.fail(error, 'Couldn’t join the server'); return false; }
+    const { data: pm } = await window.db.rpc('member_permissions', { p_server_id: sid, p_user_id: NX.me.id });
+    const e = cache.get(sid);
+    if (e) { e.member = true; e.members = null; e.perms = Number(pm) || e.perms; }
+    if (srv?.id === sid) { member = true; members = null; perms = Number(pm) || perms; paintPreview(); paintHead(); paintChannels(); paintMembers(); }
+    await NX.data.reloadServers();
+    NX.toast(`You joined ${srv?.name || 'the server'}.`, { icon: 'fa-right-to-bracket' });
+    return true;
   }
 
   async function openChannel(c, r) {
@@ -531,6 +567,7 @@
   function voiceIds() { return channels.filter(isVoice).map((c) => c.id); }
 
   NX.views.server = {
+    prefetch(sid) { return load(sid).catch(() => {}); },   // channels + permissions, cached
     enter(sideHost, mainHost, parts, r) {
       mountSide(sideHost); main = mainHost;
       offs = [

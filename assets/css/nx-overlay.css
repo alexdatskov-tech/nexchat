@@ -284,3 +284,8 @@ body.call-full .main { -webkit-backdrop-filter: none !important; backdrop-filter
   .vtile.pip { right: 12px; bottom: 12px; border-radius: 14px; }
   .call-stats { top: auto; bottom: 76px; max-height: 50%; }
 }
+/* incoming call: clear answer / decline */
+.island.ring .round-btn.ok { background: var(--ok); color: #06210f; }
+.island.ring .round-btn.ok:hover { filter: brightness(1.1); color: #06210f; }
+.island.ring .round-btn.no { background: var(--danger); color: #fff; }
+.island.ring .round-btn.no:hover { filter: brightness(1.1); color: #fff; }

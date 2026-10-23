@@ -101,9 +101,8 @@
       NX.viewing = this.key;
       this.subscribe();
       if (!this.loaded) {
-        this.head.innerHTML = '';
-        this.list.innerHTML = skeleton();
-        await this.loadLatest();
+        if (this._pre) await this._pre;   // already loading in the background
+        else { this.head.innerHTML = ''; this.list.innerHTML = skeleton(); await this.loadLatest(); }
       } else {
         if (this.pinned) this.toBottom();
         this.catchUp(true);
@@ -157,6 +156,13 @@
       if (refAuthors.length) await P().need(refAuthors);
     }
 
+    // Loads the latest page off-screen (the app warms recent chats at start),
+    // so opening the chat later shows it straight away.
+    preload() {
+      if (this.loaded) return Promise.resolve();
+      if (!this._pre) this._pre = this.loadLatest().finally(() => { this._pre = null; });
+      return this._pre;
+    }
     async loadLatest() {
       try {
         const page = await this.fetchPage();
