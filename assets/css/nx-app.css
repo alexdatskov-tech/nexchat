@@ -523,3 +523,52 @@ body.glass.has-bg .dash-card .active-card, body.glass.has-bg .cl-rel { backgroun
   .dash-ann.big h3 { font-size: 19px; }
   .wx-d { grid-template-columns: 46px 20px 30px 30px minmax(30px, 1fr) 30px; gap: 6px; font-size: 13px; }
 }
+
+/* your servers: full-width cards (a swipeable row on phones) */
+.dash-card.dc-news { grid-column: 1 / -1; }
+.dash-servers { display: flex; flex-direction: column; gap: 12px; }
+.ds-head { display: flex; align-items: center; gap: 8px; }
+.ds-head h2 { display: flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 700; }
+.ds-head h2 > i { width: 30px; height: 30px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; background: rgba(61, 214, 140, .14); color: var(--ok); }
+.ds-head .ds-n { color: var(--txt-3); font-weight: 600; }
+.ds-head .grow { flex: 1; }
+.ds-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.ds-card {
+  position: relative; display: flex; flex-direction: column; text-align: left; min-width: 0; border-radius: 20px; overflow: hidden;
+  background: var(--bg-3); border: 1px solid var(--line); transition: transform .18s var(--ease), border-color .15s, box-shadow .18s;
+}
+.ds-card:hover { transform: translateY(-3px); border-color: var(--line-3); box-shadow: 0 18px 40px -22px rgba(0, 0, 0, .8); }
+.ds-card.unread { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.ds-banner { display: block; height: 84px; background-size: cover; background-position: center; }
+.ds-ic {
+  position: absolute; left: 14px; top: 52px; width: 58px; height: 58px; border-radius: 18px; overflow: hidden; background: var(--bg-5);
+  border: 4px solid var(--bg-3); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; color: var(--txt-1);
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, .6); transition: border-radius .15s;
+}
+.ds-card:hover .ds-ic { border-radius: 22px; }
+.ds-ic img { width: 100%; height: 100%; object-fit: cover; }
+.ds-new { position: absolute; right: 10px; top: 10px; font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #fff; background: var(--accent); padding: 3px 8px; border-radius: 999px; box-shadow: 0 4px 12px -4px var(--accent); }
+.ds-body { display: flex; flex-direction: column; gap: 4px; padding: 34px 14px 14px; min-width: 0; flex: 1; }
+.ds-name { font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-desc { font-size: 13px; color: var(--txt-3); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+.ds-desc i { font-style: normal; color: var(--txt-4); }
+.ds-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--txt-3); }
+.ds-foot i { margin-right: 5px; font-size: 11px; }
+.ds-own { color: var(--nitro); font-weight: 700; }
+.ds-add { align-items: center; justify-content: center; gap: 6px; min-height: 210px; background: transparent; border: 1.5px dashed var(--line-3); color: var(--txt-3); font-size: 13px; text-align: center; padding: 16px; }
+.ds-add b { color: var(--txt-1); font-size: 14px; }
+.ds-add-ic { width: 46px; height: 46px; border-radius: 50%; background: var(--bg-4); display: flex; align-items: center; justify-content: center; color: var(--ok); font-size: 18px; margin-bottom: 4px; transition: background .15s, color .15s; }
+.ds-add:hover .ds-add-ic { background: var(--ok); color: #06210f; }
+body.glass.has-bg .ds-card { background: var(--glass-bg-2); border-color: var(--glass-edge); box-shadow: var(--glass-hi); }
+body.glass.has-bg .ds-ic { border-color: rgba(30, 32, 40, .9); }
+body.glass.has-bg .ds-add { background: transparent; }
+.ui-classic .ds-card { background: #0b0b0d; border-color: var(--line-2); border-radius: 22px; }
+.ui-classic .ds-ic { border-color: #0b0b0d; border-radius: 16px; }
+@media (max-width: 860px) {
+  .ds-head h2 { font-size: 15px; }
+  .ds-head .btn span, .ds-head .btn { font-size: 12.5px; }
+  .ds-row { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 10px; gap: 12px; margin: 0 -10px; padding: 2px 10px 6px; scrollbar-width: none; }
+  .ds-row::-webkit-scrollbar { display: none; }
+  .ds-card { flex: 0 0 76%; scroll-snap-align: start; }
+  .ds-add { flex-basis: 46%; min-height: 200px; }
+}

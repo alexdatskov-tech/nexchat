@@ -18,7 +18,7 @@
         ['fa-clone', 'One-to-one calls put the other person front and centre with you in a small corner preview. Tap it to swap, drag it to any corner.'],
         ['fa-display', 'Screen shares take the main stage with everyone else in a strip below, and the call controls stay put.'],
         ['fa-expand', 'Full screen is now real full screen on phones and desktops.'],
-        ['fa-house', 'This page: a clock, the weather, announcements, what’s new and who’s around.'],
+        ['fa-house', 'This page: a clock, the weather for wherever you are (worked out from your connection, or pick a city), announcements, what’s new, who’s around and big server cards.'],
         ['fa-clock-rotate-left', 'Miss the old look? Settings → Appearance → Interface → Classic brings back the original NexChat style, rebuilt on the new app.'],
         ['fa-mobile-screen', 'The sidebar on phones is no longer greyed out behind its own shadow.'],
         ['fa-image', 'Very wide screenshots no longer leave an empty box under them.'],
@@ -66,9 +66,29 @@
       return await r.json();
     } finally { clearTimeout(t); }
   }
+  // With no place picked, the weather follows your IP address (city level).
+  // It's looked up again twice a day in case you've moved.
+  async function ipLocation() {
+    const tries = [
+      ['https://get.geojs.io/v1/ip/geo.json', (r) => ({ lat: +r.latitude, lon: +r.longitude, name: r.city || r.region || r.country })],
+      ['https://ipwho.is/', (r) => (r.success === false ? null : { lat: +r.latitude, lon: +r.longitude, name: r.city || r.region || r.country })],
+    ];
+    for (const [url, pick] of tries) {
+      try {
+        const loc = pick(await getJson(url, 6000));
+        if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lon)) return { ...loc, name: loc.name || 'Your area', auto: true, at: Date.now() };
+      } catch {}
+    }
+    return null;
+  }
   async function loadWeather(force = false) {
-    const loc = NX.ls.get('nx_wx_loc');
-    if (!loc) { wxState = { loading: false, data: null, error: '' }; paintWeather(); return; }
+    let loc = NX.ls.get('nx_wx_loc');
+    if (!loc || (loc.auto && Date.now() - (loc.at || 0) > 12 * 36e5)) {
+      if (!loc) { wxState = { loading: true, data: null, error: '' }; paintWeather(); }
+      const ip = await ipLocation();
+      if (ip) { NX.ls.set('nx_wx_loc', ip); loc = ip; }
+      else if (!loc) { wxState = { loading: false, data: null, error: '' }; NX.ls.set('nx_wx_noip', Date.now()); paintWeather(); return; }
+    }
     const u = units();
     const key = `${loc.lat.toFixed(2)},${loc.lon.toFixed(2)},${u}`;
     const cache = NX.ls.get('nx_wx_cache');
@@ -101,7 +121,7 @@
         const r = await getJson(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`, 6000);
         name = r.city || r.locality || r.principalSubdivision || name;
       } catch {}
-      NX.ls.set('nx_wx_loc', { lat, lon, name });
+      NX.ls.set('nx_wx_loc', { lat, lon, name, exact: true });
       loadWeather(true);
     }, () => {
       NX.toast('Location is blocked here. Pick a city instead.', { err: true });
@@ -175,12 +195,15 @@
         <div class="dash-wx"></div>
         <div class="dh-hours"></div>
       </section>
+      <section class="dash-servers"><div class="ds-head"><h2><i class="fa-solid fa-server"></i>Your servers<span class="ds-n"></span></h2><span class="grow"></span>
+        <button class="btn btn-ghost btn-sm" data-f="join"><i class="fa-solid fa-right-to-bracket"></i>Join</button><button class="btn btn-primary btn-sm" data-f="create"><i class="fa-solid fa-plus"></i>Create</button></div>
+        <div class="ds-row"></div></section>
       <div class="dash-grid">
         <section class="dash-card dc-active"><h2><i class="fa-solid fa-signal"></i>Active now</h2><div class="dc-body"></div></section>
         <section class="dash-card dc-week"><h2><i class="fa-solid fa-calendar-week"></i>This week</h2><div class="dc-body"></div></section>
         <section class="dash-card dc-news"><h2><i class="fa-solid fa-wand-magic-sparkles"></i>What’s new<span class="grow"></span><span class="ver">v${VERSION}</span></h2><div class="dc-body"></div></section>
-        <section class="dash-card dc-servers"><h2><i class="fa-solid fa-server"></i>Your servers</h2><div class="dc-body"></div></section>
       </div>
+
     </div>`;
     el.querySelector('.dash').addEventListener('click', onClick);
     clearInterval(tick);
@@ -235,6 +258,7 @@
     if (!el) return;
     const loc = NX.ls.get('nx_wx_loc');
     const u = units() === 'f' ? '°F' : '°C';
+    if (!loc && wxState.loading) { el.innerHTML = '<div class="wx-setup"><span class="spinner"></span><p>Finding your weather…</p></div>'; return; }
     if (!loc) {
       el.innerHTML = `<div class="wx-setup"><i class="fa-solid fa-cloud-sun wx-big"></i><b>See the weather here</b><p>Your location stays on this device.</p>
         <div class="row" style="gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn btn-primary btn-sm" data-w="locate"><i class="fa-solid fa-location-crosshairs"></i>Use my location</button><button class="btn btn-ghost btn-sm" data-w="city"><i class="fa-solid fa-magnifying-glass"></i>Pick a city</button></div></div>`;
@@ -258,7 +282,7 @@
         <div class="wx-desc"><b>${esc(label)}</b><span>Feels like ${Math.round(c.apparent_temperature)}° · H ${hi}° L ${lo}°</span>
           <span><i class="fa-solid fa-wind"></i> ${Math.round(c.wind_speed_10m)} ${units() === 'f' ? 'mph' : 'km/h'} · <i class="fa-solid fa-droplet"></i> ${Math.round(c.relative_humidity_2m)}%</span></div>
       </div>
-      <div class="wx-place"><button class="wx-link" data-w="city" title="Change place"><i class="fa-solid fa-location-dot"></i>${esc(loc.name || 'Your location')}</button>
+      <div class="wx-place"><button class="wx-link" data-w="place" title="${loc.auto ? 'Based on your internet connection. Tap to change.' : 'Change place'}"><i class="fa-solid fa-${loc.auto ? 'wifi' : loc.exact ? 'location-crosshairs' : 'location-dot'}"></i>${esc(loc.name || 'Your location')}</button>
         <button class="wx-link" data-w="units" title="Switch units">${u === '°F' ? '°C' : '°F'}</button>
         <button class="wx-link" data-w="retry" title="Refresh"><i class="fa-solid fa-rotate${wxState.loading ? ' fa-spin' : ''}"></i></button></div>`;
     // the next 12 hours from now
@@ -308,23 +332,68 @@
     el.innerHTML = CHANGELOG.map((r, i) => `<details class="cl-rel"${i === 0 ? ' open' : ''}><summary><span class="cl-v">v${esc(r.v)}</span><b>${esc(r.title)}</b><small>${esc(new Date(r.date + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</small></summary>
       <ul>${r.items.map(([ic, t]) => `<li><i class="fa-solid ${ic}"></i><span>${esc(t)}</span></li>`).join('')}</ul></details>`).join('');
   }
+  // Descriptions, banners and member counts aren't in the inbox, so they're
+  // fetched once per set of servers.
+  const srvInfo = new Map();
+  let srvInfoKey = '';
+  async function loadServerInfo(ids) {
+    const key = ids.slice().sort().join(',');
+    if (!ids.length || key === srvInfoKey) return false;
+    srvInfoKey = key;
+    const { data } = await window.db.from('servers').select('id,description,banner_url,server_members(count)').in('id', ids);
+    (data || []).forEach((r) => srvInfo.set(r.id, { description: r.description, banner_url: r.banner_url, members: r.server_members?.[0]?.count ?? null }));
+    return true;
+  }
+  function srvGradient(id) {
+    let h = 0;
+    for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const a = Math.round((h * 137.508) % 360), b = (a + 48) % 360;
+    return `radial-gradient(120% 140% at 0% 0%, hsl(${a} 70% 48%) 0%, transparent 62%), radial-gradient(100% 120% at 100% 100%, hsl(${b} 65% 40%) 0%, transparent 60%), linear-gradient(135deg, hsl(${b} 45% 22%), hsl(${a} 35% 12%))`;
+  }
   function paintServers() {
-    const el = $d('.dc-servers .dc-body');
-    if (!el) return;
-    const list = D().servers.slice(0, 12);
-    el.innerHTML = list.length
-      ? `<div class="dc-srv">${list.map((s) => `<button class="dc-srv-i" data-go="s/${esc(s.id)}" title="${esc(s.name)}"><span class="ic">${s.icon_url ? `<img ${P().imgAttr(s.icon_url)} alt="">` : esc((s.name || '?')[0].toUpperCase())}</span><span class="nm">${esc(s.name)}</span>${s.unread ? '<span class="dot"></span>' : ''}</button>`).join('')}</div>`
-      : `<div class="dc-empty"><i class="fa-solid fa-compass"></i><b>No servers yet</b><span>Start your own or join one with an invite.</span><div class="row" style="gap:8px"><button class="btn btn-primary btn-sm" data-f="create">Create</button><button class="btn btn-ghost btn-sm" data-f="join">Join</button></div></div>`;
+    const row = $d('.ds-row');
+    if (!row) return;
+    const list = D().servers;
+    $d('.ds-n').textContent = list.length ? ` · ${list.length}` : '';
+    if (!list.length) {
+      row.innerHTML = `<div class="dc-empty" style="grid-column:1/-1"><i class="fa-solid fa-compass"></i><b>No servers yet</b><span>Start your own, or join one with an invite link.</span></div>`;
+      return;
+    }
+    row.innerHTML = list.map((s) => {
+      const info = srvInfo.get(s.id) || {};
+      const nameStyle = NX.serverNameStyle ? NX.serverNameStyle(s.theme) : '';
+      const ini = esc(((s.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => [...w][0] || '').join('') || '?').toUpperCase());
+      return `<button class="ds-card${s.unread ? ' unread' : ''}" data-go="s/${esc(s.id)}">
+        <span class="ds-banner" style="background:${srvGradient(s.id)}" data-banner="${esc(info.banner_url || '')}"></span>
+        <span class="ds-ic">${s.icon_url ? `<img ${P().imgAttr(s.icon_url)} alt="">` : ini}</span>
+        ${s.unread ? '<span class="ds-new">New</span>' : ''}
+        <span class="ds-body"><b class="ds-name" style="${esc(nameStyle)}">${esc(s.name)}</b>
+          <span class="ds-desc">${info.description ? esc(info.description) : '<i>No description yet</i>'}</span>
+          <span class="ds-foot">${info.members != null ? `<span><i class="fa-solid fa-user-group"></i>${NX.fmt.plural(info.members, 'member')}</span>` : '<span></span>'}${s.owner_id === NX.me.id ? '<span class="ds-own"><i class="fa-solid fa-crown"></i>Owner</span>' : ''}</span></span>
+      </button>`;
+    }).join('') + `<button class="ds-card ds-add" data-f="add-srv"><span class="ds-add-ic"><i class="fa-solid fa-plus"></i></span><b>Create or join</b><span>Start a server or use an invite</span></button>`;
+    row.querySelectorAll('.ds-banner[data-banner]').forEach((b) => {
+      const u = b.dataset.banner;
+      if (u) NX.files.resolved(u).then((x) => { b.style.background = `url("${x}") center / cover`; }).catch(() => {});
+    });
+    loadServerInfo(list.map((s) => s.id)).then((changed) => { if (changed && host?.isConnected) paintServers(); }).catch(() => {});
   }
 
   function onClick(e) {
     const w = e.target.closest('[data-w]')?.dataset.w;
     if (w === 'locate') return useMyLocation();
     if (w === 'city') return pickCity();
+    if (w === 'place') {
+      return NX.menu(e.target.closest('[data-w]'), [
+        { label: 'Use my exact location', icon: 'fa-location-crosshairs', onClick: useMyLocation },
+        { label: 'Pick a city…', icon: 'fa-magnifying-glass', onClick: pickCity },
+        { label: 'Follow my internet connection', icon: 'fa-wifi', onClick: async () => { NX.ls.del('nx_wx_loc'); NX.ls.del('nx_wx_cache'); loadWeather(true); } },
+      ]);
+    }
     if (w === 'retry') return loadWeather(true);
     if (w === 'units') { NX.ls.set('nx_wx_units', units() === 'f' ? 'c' : 'f'); return loadWeather(true); }
     const f = e.target.closest('[data-f]')?.dataset.f;
-    if (f === 'create') return NX.addServerDialog();
+    if (f === 'create' || f === 'add-srv') return NX.addServerDialog();
     if (f === 'join') return NX.joinServerDialog();
     const g = e.target.closest('[data-go]'); if (g) return NX.go(g.dataset.go);
     const d = e.target.closest('[data-dm]'); if (d) return D().openDm(d.dataset.dm);
