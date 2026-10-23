@@ -177,9 +177,11 @@
     const calls = D().dms.filter((c) => live.get('dm-' + c.id));
     const online = D().friendIds().map((id) => P().get(id)).filter((p) => p && P().isOnline(p.id))
       .sort((a, b) => P().nameOf(a).localeCompare(P().nameOf(b))).slice(0, 10);
-    el.innerHTML = calls.map((c) => `<div class="active-card" data-go="dm/${esc(c.id)}?join=1">${c.is_group ? '<span class="av" style="width:36px;height:36px;background:var(--accent)"><i class="fa-solid fa-user-group"></i></span>' : P().avatar(c.people[0], 36, { presence: true })}<div class="t"><b>${esc(D().dmTitle(c))}</b><small style="color:var(--ok)"><i class="fa-solid fa-phone-volume"></i> In a call · ${live.get('dm-' + c.id)}</small></div><button class="btn btn-ok btn-sm">Join</button></div>`).join('')
-      + online.map((p) => `<div class="active-card" data-dm="${esc(p.id)}">${P().avatar(p, 36, { presence: true })}<div class="t"><b>${P().nameText(p)}</b><small>${esc(p.custom_status || P().STATUS_LABEL[P().presenceOf(p.id)])}</small></div><i class="fa-solid fa-message" style="color:var(--txt-3)"></i></div>`).join('')
-      + (!calls.length && !online.length ? `<div class="dc-empty"><i class="fa-solid fa-moon"></i><b>It’s quiet right now</b><span>Friends who come online show up here.</span><button class="btn btn-ghost btn-sm" data-go="home/add"><i class="fa-solid fa-user-plus"></i>Add a friend</button></div>` : '');
+    const items = [];
+    calls.forEach((c) => items.push({ key: 'call:' + c.id, html: `<div class="active-card" data-go="dm/${esc(c.id)}?join=1">${c.is_group ? '<span class="av" style="width:36px;height:36px;background:var(--accent)"><i class="fa-solid fa-user-group"></i></span>' : P().avatar(c.people[0], 36, { presence: true })}<div class="t"><b>${esc(D().dmTitle(c))}</b><small style="color:var(--ok)"><i class="fa-solid fa-phone-volume"></i> In a call · ${live.get('dm-' + c.id)}</small></div><button class="btn btn-ok btn-sm">Join</button></div>` }));
+    online.forEach((p) => items.push({ key: 'on:' + p.id, html: `<div class="active-card" data-dm="${esc(p.id)}">${P().avatar(p, 36, { presence: true })}<div class="t"><b>${P().nameText(p)}</b><small>${esc(p.custom_status || P().STATUS_LABEL[P().presenceOf(p.id)])}</small></div><i class="fa-solid fa-message" style="color:var(--txt-3)"></i></div>` }));
+    if (!items.length) items.push({ key: 'quiet', html: `<div class="dc-empty"><i class="fa-solid fa-moon"></i><b>It’s quiet right now</b><span>Friends who come online show up here.</span><button class="btn btn-ghost btn-sm" data-go="home/add"><i class="fa-solid fa-user-plus"></i>Add a friend</button></div>` });
+    NX.patch(el, items);   // in place: avatars keep their element
   }
   function paintNews() {
     const el = $d('.dc-news .dc-body');

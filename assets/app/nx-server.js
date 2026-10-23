@@ -28,7 +28,8 @@
       window.db.from('server_members').select('user_id').eq('server_id', sid).eq('user_id', NX.me.id).maybeSingle(),
     ]);
     if (!s.data) return null;
-    const entry = { srv: s.data, channels: ch.data || [], perms: Number(pm.data) || 0, member: !!mem.data, roles: [], memberRoles: new Map(), members: null, at: Date.now() };
+    // a refresh keeps what we already had (members, roles) so nothing blinks
+    const entry = { srv: s.data, channels: ch.data || [], perms: Number(pm.data) || 0, member: !!mem.data, roles: c?.roles || [], memberRoles: c?.memberRoles || new Map(), members: c?.members || null, at: Date.now() };
     cache.set(sid, entry);
     loadRoles(sid);
     return entry;
@@ -151,20 +152,26 @@
         if (people.length) occ = `<div class="vc-users">${people.map((p) => `<div class="vc-user${NX.call.speaking().has(p.id) ? ' speaking' : ''}" data-uid="${esc(p.id)}">${P().avatar(P().get(p.id) || p, 22, { halo: false, deco: false })}<span class="nm">${P().nameText(P().get(p.id) || p)}</span><span class="flags">${p.sharing ? '<span class="live" style="font-size:9px">LIVE</span>' : ''}${p.cam ? '<i class="fa-solid fa-video"></i>' : ''}${p.muted ? '<i class="fa-solid fa-microphone-slash off"></i>' : ''}${p.deaf ? '<i class="fa-solid fa-headphones off"></i>' : ''}</span></div>`).join('')}</div>`;
         else if (live.get(c.id)) occ = `<div class="vc-users"><div class="vc-user" style="cursor:default"><span class="nm" style="color:var(--ok)">${NX.fmt.plural(live.get(c.id), 'person', 'people')} talking</span></div></div>`;
       }
-      return `<a class="s-item${active?.id === c.id ? ' on' : ''}${unread ? ' unread' : ''}" href="#/s/${esc(srv.id)}/${esc(c.id)}" data-ch="${esc(c.id)}"><i class="fa-solid ${chanIcon(c)}"></i><span class="nm">${esc(c.name)}</span>
-        ${can(BIT.MANAGE_CHANNELS) ? `<span class="acts"><button class="icon-btn" data-a="invite" data-tip="Create invite"><i class="fa-solid fa-user-plus"></i></button><button class="icon-btn" data-a="edit" data-tip="Edit channel"><i class="fa-solid fa-gear"></i></button></span>` : ''}
-        ${unread && D().chanUnread.get(c.id) > 0 && false ? '' : ''}</a>${occ}`;
+      items.push({ key: 'ch:' + c.id, html: `<a class="s-item${active?.id === c.id ? ' on' : ''}${unread ? ' unread' : ''}" href="#/s/${esc(srv.id)}/${esc(c.id)}" data-ch="${esc(c.id)}"><i class="fa-solid ${chanIcon(c)}"></i><span class="nm">${esc(c.name)}</span>${can(BIT.MANAGE_CHANNELS) ? `<span class="acts"><button class="icon-btn" data-a="invite" data-tip="Create invite"><i class="fa-solid fa-user-plus"></i></button><button class="icon-btn" data-a="edit" data-tip="Edit channel"><i class="fa-solid fa-gear"></i></button></span>` : ''}</a>` });
+      if (occ) items.push({ key: 'occ:' + c.id, html: occ });
     };
-    let html = loose.map(item).join('');
+    const items = [];
+    loose.forEach(item);
     cats.forEach((cat) => {
       const kids = channels.filter((c) => c.parent_id === cat.id).sort((a, b) => a.position - b.position);
       const shut = collapsed.has(cat.id);
       const visible = shut ? kids.filter((c) => c.id === active?.id || (st.active && st.channel?.id === c.id)) : kids;
-      html += `<div class="side-sect${shut ? ' shut' : ''}" data-cat="${esc(cat.id)}"><i class="fa-solid fa-chevron-down chev"></i><span class="grow">${esc(cat.name)}</span>${can(BIT.MANAGE_CHANNELS) ? `<button class="icon-btn" data-a="add" data-tip="Create channel"><i class="fa-solid fa-plus"></i></button>` : ''}</div>${visible.map(item).join('')}`;
+      items.push({ key: 'cat:' + cat.id, html: `<div class="side-sect${shut ? ' shut' : ''}" data-cat="${esc(cat.id)}"><i class="fa-solid fa-chevron-down chev"></i><span class="grow">${esc(cat.name)}</span>${can(BIT.MANAGE_CHANNELS) ? `<button class="icon-btn" data-a="add" data-tip="Create channel"><i class="fa-solid fa-plus"></i></button>` : ''}</div>` });
+      visible.forEach(item);
     });
-    if (!channels.some((c) => c.type !== 'category')) html += `<div class="empty" style="padding:24px 10px"><p style="font-size:13px">No channels yet.${can(BIT.MANAGE_CHANNELS) ? '' : ' Ask an admin to make one.'}</p>${can(BIT.MANAGE_CHANNELS) ? '<button class="btn btn-ghost btn-sm" data-a="add">Create a channel</button>' : ''}</div>`;
-    host.innerHTML = html;
+    if (!channels.some((c) => c.type !== 'category')) items.push({ key: 'empty', html: `<div class="empty" style="padding:24px 10px"><p style="font-size:13px">No channels yet.${can(BIT.MANAGE_CHANNELS) ? '' : ' Ask an admin to make one.'}</p>${can(BIT.MANAGE_CHANNELS) ? '<button class="btn btn-ghost btn-sm" data-a="add">Create a channel</button>' : ''}</div>` });
+    // each server keeps its own list element, updated in place
+    let box = chanBoxes.get(srv.id);
+    if (!box) { box = document.createElement('div'); chanBoxes.set(srv.id, box); }
+    if (host.firstChild !== box || host.childNodes.length !== 1) host.replaceChildren(box);
+    NX.patch(box, items);
   }
+  const chanBoxes = new Map(), memBoxes = new Map();
   function onChanClick(e) {
     const a = e.target.closest('[data-a]')?.dataset.a;
     const it = e.target.closest('[data-ch]');
@@ -469,7 +476,15 @@
   async function paintMembers() {
     const host = main?.querySelector('#memList');
     if (!host || host.classList.contains('hidden') || !srv) return;
-    if (!members) { host.innerHTML = '<div style="padding:20px;display:flex;justify-content:center"><span class="spinner"></span></div>'; await loadMembers(srv.id); }
+    let box = memBoxes.get(srv.id);
+    if (!box) { box = document.createElement('div'); memBoxes.set(srv.id, box); }
+    if (host.firstChild !== box || host.childNodes.length !== 1) host.replaceChildren(box);
+    if (!members) {
+      if (!box.childElementCount) box.innerHTML = '<div style="padding:20px;display:flex;justify-content:center"><span class="spinner"></span></div>';
+      const sid = srv.id;
+      await loadMembers(sid);
+      if (srv?.id !== sid) return;
+    }
     if (!members) return;
     const ppl = members.map((m) => ({ m, p: P().get(m.user_id) })).filter((x) => x.p);
     const online = ppl.filter((x) => P().isOnline(x.p.id));
@@ -483,10 +498,18 @@
       if (!groups.has(key)) groups.set(key, { name: r ? r.name : 'Online', list: [], pos: r?.position ?? -1 });
       groups.get(key).list.push(x);
     });
-    const row = (x) => `<div class="mem${P().isOnline(x.p.id) ? '' : ' off'}" data-uid="${esc(x.p.id)}">${P().avatar(x.p, 32, { presence: true })}
-      <div class="t"><b style="${esc(P().nameCss(x.p, { color: roleColor(x.p.id), noGlow: true }))}">${esc(x.m.nickname || '') || P().nameText(x.p)}${x.p.id === srv.owner_id ? '<i class="fa-solid fa-crown crown" title="Server owner"></i>' : ''}</b>${x.p.custom_status ? `<small>${esc(x.p.custom_status)}</small>` : ''}</div></div>`;
-    host.innerHTML = [...groups.values()].sort((a, b) => b.pos - a.pos).map((g) => `<div class="side-sect">${esc(g.name)} — ${g.list.length}</div>${g.list.map(row).join('')}`).join('')
-      + (offline.length ? `<div class="side-sect">Offline — ${offline.length}</div>${offline.sort(sortFn).slice(0, 200).map(row).join('')}` : '');
+    const row = (x) => ({ key: 'u:' + x.p.id, html: `<div class="mem${P().isOnline(x.p.id) ? '' : ' off'}" data-uid="${esc(x.p.id)}">${P().avatar(x.p, 32, { presence: true })}<div class="t"><b style="${esc(P().nameCss(x.p, { color: roleColor(x.p.id), noGlow: true }))}">${esc(x.m.nickname || '') || P().nameText(x.p)}${x.p.id === srv.owner_id ? '<i class="fa-solid fa-crown crown" title="Server owner"></i>' : ''}</b>${x.p.custom_status ? `<small>${esc(x.p.custom_status)}</small>` : ''}</div></div>` });
+    const items = [];
+    [...groups.entries()].sort((a, b) => b[1].pos - a[1].pos).forEach(([k, g]) => {
+      items.push({ key: 'g:' + k, html: `<div class="side-sect">${esc(g.name)} — ${g.list.length}</div>` });
+      g.list.forEach((x) => items.push(row(x)));
+    });
+    if (offline.length) {
+      items.push({ key: 'g:_off', html: `<div class="side-sect">Offline — ${offline.length}</div>` });
+      offline.sort(sortFn).slice(0, 200).forEach((x) => items.push(row(x)));
+    }
+    // in place: a presence change moves a row, it doesn't redraw everyone
+    NX.patch(box, items);
     host.onclick = (e) => { const r = e.target.closest('[data-uid]'); if (r) P().card(r.dataset.uid, r, { serverId: srv.id }); };
   }
 
@@ -529,10 +552,15 @@
     if (srv?.id !== sid) {
       if (chat) { chat.hide(); chat = null; }
       active = null;
-      side.querySelector('#chanList').innerHTML = `<div style="padding:10px">${'<div class="skel" style="height:22px;margin:8px 4px"></div>'.repeat(6)}</div>`;
-      side.querySelector('.srv-top').innerHTML = `<div class="side-head"><span class="t">${esc(D().server(sid)?.name || '')}</span></div>`;
+      // a server we've seen shows straight from the cache (refreshed quietly)
+      const seen = cache.get(sid);
+      if (!seen) {
+        side.querySelector('#chanList').innerHTML = `<div style="padding:10px">${'<div class="skel" style="height:22px;margin:8px 4px"></div>'.repeat(6)}</div>`;
+        side.querySelector('.srv-top').innerHTML = `<div class="side-head"><span class="t">${esc(D().server(sid)?.name || '')}</span></div>`;
+      }
       mainShell();
-      const entry = await load(sid);
+      const entry = seen || await load(sid);
+      if (seen && Date.now() - seen.at > 5 * 60 * 1000) load(sid).then((fresh) => { if (fresh && srv?.id === sid) { apply(fresh); paintTop(); paintChannels(); paintMembers(); } }).catch(() => {});
       // Another server (or another view) was opened while this one loaded.
       if (gen !== showGen || !main || !side) return;
       if (entry) apply(entry);

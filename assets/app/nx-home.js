@@ -155,7 +155,7 @@
     if (!host) return;
     if (tab === 'home') {
       // the dashboard keeps itself up to date; only draw it once
-      if (!host.querySelector('.dash')) { host.onclick = null; NX.dash.render(host); }
+      if (!host.querySelector('.dash')) { host.onclick = null; host.dataset.tab = 'home'; NX.dash.render(host); }
       return;
     }
     const q = (host.querySelector('.f-search input')?.value || '').trim().toLowerCase();
@@ -164,6 +164,7 @@
     let html = '';
     if (tab === 'add') {
       const waiting = D().incoming().length;
+      host.dataset.tab = 'add';
       host.innerHTML = `<div class="af">
         <section class="af-card">
           <div class="af-art" aria-hidden="true"><i class="fa-solid fa-user-plus"></i></div>
@@ -204,33 +205,43 @@
       if (!NX.isTouch()) setTimeout(() => inp.focus(), 30);
       return;
     }
+    // Lists update in place (avatars keep their element); the search box stays.
+    const items = [];
+    const head = (t) => items.push({ key: 'h:' + t, html: `<div class="list-h">${t}</div>` });
+    const one = (key, html) => items.push({ key, html });
     if (tab === 'pending') {
       const inc = D().incoming().map((id) => P().get(id)).filter(Boolean).filter(match);
       const out = D().outgoing().map((id) => P().get(id)).filter(Boolean).filter(match);
-      html = search + (inc.length || out.length ? `<div class="list-h">Pending — ${inc.length + out.length}</div>`
-        + inc.map((p) => personRow(p, `<button class="round-btn ok" data-f="accept" data-tip="Accept"><i class="fa-solid fa-check"></i></button><button class="round-btn no" data-f="ignore" data-tip="Ignore"><i class="fa-solid fa-xmark"></i></button>`, 'Incoming friend request')).join('')
-        + out.map((p) => personRow(p, `<button class="round-btn no" data-f="cancel" data-tip="Cancel"><i class="fa-solid fa-xmark"></i></button>`, 'Outgoing friend request')).join('')
-        : empty('fa-hourglass-half', 'No pending requests', 'Requests you send and receive wait here until they’re answered.'));
+      if (inc.length || out.length) {
+        head(`Pending — ${inc.length + out.length}`);
+        inc.forEach((p) => one('in:' + p.id, personRow(p, `<button class="round-btn ok" data-f="accept" data-tip="Accept"><i class="fa-solid fa-check"></i></button><button class="round-btn no" data-f="ignore" data-tip="Ignore"><i class="fa-solid fa-xmark"></i></button>`, 'Incoming friend request')));
+        out.forEach((p) => one('out:' + p.id, personRow(p, `<button class="round-btn no" data-f="cancel" data-tip="Cancel"><i class="fa-solid fa-xmark"></i></button>`, 'Outgoing friend request')));
+      } else one('empty', empty('fa-hourglass-half', 'No pending requests', 'Requests you send and receive wait here until they’re answered.'));
     } else if (tab === 'blocked') {
       const bl = [...D().blocked];
       P().need(bl).then(() => { if (tab === 'blocked' && bl.some((id) => P().get(id) && !host.querySelector(`[data-uid-row="${id}"]`))) paintFriends(); });
       const people = bl.map((id) => P().get(id)).filter(Boolean).filter(match);
-      html = search + (people.length ? `<div class="list-h">Blocked — ${people.length}</div>` + people.map((p) => personRow(p, `<button class="round-btn" data-f="unblock" data-tip="Unblock"><i class="fa-solid fa-user-check"></i></button>`, 'Blocked')).join('')
-        : empty('fa-ban', 'Nobody blocked', 'People you block can’t message you. They show up here.', false));
+      if (people.length) { head(`Blocked — ${people.length}`); people.forEach((p) => one('b:' + p.id, personRow(p, `<button class="round-btn" data-f="unblock" data-tip="Unblock"><i class="fa-solid fa-user-check"></i></button>`, 'Blocked'))); }
+      else one('empty', empty('fa-ban', 'Nobody blocked', 'People you block can’t message you. They show up here.', false));
     } else {
       let fr = D().friendIds().map((id) => P().get(id)).filter(Boolean);
       if (tab === 'online') fr = fr.filter((p) => P().isOnline(p.id));
       fr = fr.filter(match).sort((a, b) => (P().isOnline(b.id) - P().isOnline(a.id)) || P().nameOf(a).localeCompare(P().nameOf(b)));
       const total = D().friendIds().length;
-      html = search + (fr.length ? `<div class="list-h">${tab === 'online' ? 'Online' : 'All friends'} — ${fr.length}</div>`
-        + fr.map((p) => personRow(p, `<button class="round-btn" data-f="msg" data-tip="Message"><i class="fa-solid fa-message"></i></button><button class="round-btn" data-f="call" data-tip="Call"><i class="fa-solid fa-phone"></i></button><button class="round-btn" data-f="more" data-tip="More"><i class="fa-solid fa-ellipsis-vertical"></i></button>`, statusSub(p))).join('')
-        : !total ? welcome()
-          : empty('fa-moon', tab === 'online' ? 'No one’s around right now' : 'No matches', tab === 'online' ? 'Your friends will show up here when they come online.' : 'Try a different search.'));
+      if (fr.length) {
+        head(`${tab === 'online' ? 'Online' : 'All friends'} — ${fr.length}`);
+        fr.forEach((p) => one('f:' + p.id, personRow(p, `<button class="round-btn" data-f="msg" data-tip="Message"><i class="fa-solid fa-message"></i></button><button class="round-btn" data-f="call" data-tip="Call"><i class="fa-solid fa-phone"></i></button><button class="round-btn" data-f="more" data-tip="More"><i class="fa-solid fa-ellipsis-vertical"></i></button>`, statusSub(p))));
+      } else one('empty', !total ? welcome()
+        : empty('fa-moon', tab === 'online' ? 'No one’s around right now' : 'No matches', tab === 'online' ? 'Your friends will show up here when they come online.' : 'Try a different search.'));
     }
-    const focused = document.activeElement === host.querySelector('.f-search input');
-    host.innerHTML = html;
-    const s = host.querySelector('.f-search input');
-    if (s) { s.oninput = NX.debounce(paintFriends, 120); if (focused) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }
+    let list = host.querySelector(':scope > .fr-list');
+    if (!list || host.dataset.tab !== tab) {
+      host.innerHTML = search + '<div class="fr-list"></div>';
+      host.dataset.tab = tab;
+      list = host.querySelector('.fr-list');
+      host.querySelector('.f-search input').oninput = NX.debounce(paintFriends, 120);
+    }
+    NX.patch(list, items);
     host.onclick = onFriendClick;
   }
   function empty(icon, title, text, cta = true) {
@@ -286,18 +297,22 @@
     const live = window.Voice?.live?.() || new Map();
     const active = D().friendIds().map((id) => P().get(id)).filter((p) => p && P().isOnline(p.id)).slice(0, 8);
     const calls = D().dms.filter((c) => live.get('dm-' + c.id));
-    host.innerHTML = `
-      <h3>Active now</h3>
-      <div class="active-now">${calls.map((c) => `<div class="active-card" data-go="dm/${esc(c.id)}?join=1">${c.is_group ? '<span class="av" style="width:36px;height:36px;background:var(--accent)"><i class="fa-solid fa-user-group"></i></span>' : P().avatar(c.people[0], 36, { presence: true })}<div class="t"><b>${esc(D().dmTitle(c))}</b><small style="color:var(--ok)"><i class="fa-solid fa-phone-volume"></i> In a call · ${live.get('dm-' + c.id)}</small></div><button class="btn btn-ok btn-sm">Join</button></div>`).join('')}
-      ${active.map((p) => `<div class="active-card" data-dm="${esc(p.id)}">${P().avatar(p, 36, { presence: true })}<div class="t"><b>${P().nameText(p)}</b><small>${esc(statusSub(p))}</small></div></div>`).join('')}
-      ${!active.length && !calls.length ? '<div class="empty" style="padding:16px 8px;align-items:flex-start;text-align:left"><b style="color:var(--txt-1)">It’s quiet for now…</b><p style="font-size:13px">When friends are online or in a call, they’ll show up here.</p></div>' : ''}</div>
-      ${anns?.length ? `<div class="sub-h">Announcements</div>${anns.map((a) => {
+    NX.patch(host, [
+      { key: 'h', html: '<h3>Active now</h3>' },
+      { key: 'act', html: '<div class="active-now"></div>' },
+      { key: 'anns', html: anns?.length ? `<div>${'<div class="sub-h">Announcements</div>' + anns.map((a) => {
         const lv = LV[a.level] || LV.info;
         return `<article class="ann lv-${esc(a.level || 'info')}"><div class="ann-ico"><i class="fa-solid ${lv[0]}"></i></div><div class="ann-main">
           <div class="ann-meta"><span class="ann-tag">${lv[1]}</span>${a.pinned ? '<span class="ann-pin"><i class="fa-solid fa-thumbtack"></i> Pinned</span>' : ''}<span>${esc(fmt.ago(a.created_at))}</span></div>
           <h4>${esc(a.title)}</h4>${a.body ? `<div class="ann-body m-text">${MD.render(a.body)}</div>` : ''}</div></article>`;
-      }).join('')}` : ''}
-      ${D().servers.length ? `<div class="sub-h">Your servers</div><div class="srv-grid" style="grid-template-columns:1fr 1fr">${D().servers.slice(0, 8).map((s) => `<button class="srv-card" data-go="s/${esc(s.id)}"><div class="sc-banner" style="${bannerCss(s)}"></div><div class="sc-body"><div class="sc-ico">${s.icon_url ? `<img ${P().imgAttr(s.icon_url)} alt="">` : esc((s.name || '?')[0].toUpperCase())}</div><b>${esc(s.name)}</b></div></button>`).join('')}</div>` : ''}`;
+      }).join('')}</div>` : '<div></div>' },
+      { key: 'srv', html: D().servers.length ? `<div><div class="sub-h">Your servers</div><div class="srv-grid" style="grid-template-columns:1fr 1fr">${D().servers.slice(0, 8).map((s) => `<button class="srv-card" data-go="s/${esc(s.id)}"><div class="sc-banner" style="${bannerCss(s)}"></div><div class="sc-body"><div class="sc-ico">${s.icon_url ? `<img ${P().imgAttr(s.icon_url)} alt="">` : esc((s.name || '?')[0].toUpperCase())}</div><b>${esc(s.name)}</b></div></button>`).join('')}</div></div>` : '<div></div>' },
+    ]);
+    const act = [];
+    calls.forEach((c) => act.push({ key: 'call:' + c.id, html: `<div class="active-card" data-go="dm/${esc(c.id)}?join=1">${c.is_group ? '<span class="av" style="width:36px;height:36px;background:var(--accent)"><i class="fa-solid fa-user-group"></i></span>' : P().avatar(c.people[0], 36, { presence: true })}<div class="t"><b>${esc(D().dmTitle(c))}</b><small style="color:var(--ok)"><i class="fa-solid fa-phone-volume"></i> In a call · ${live.get('dm-' + c.id)}</small></div><button class="btn btn-ok btn-sm">Join</button></div>` }));
+    active.forEach((p) => act.push({ key: 'on:' + p.id, html: `<div class="active-card" data-dm="${esc(p.id)}">${P().avatar(p, 36, { presence: true })}<div class="t"><b>${P().nameText(p)}</b><small>${esc(statusSub(p))}</small></div></div>` }));
+    if (!act.length) act.push({ key: 'quiet', html: '<div class="empty" style="padding:16px 8px;align-items:flex-start;text-align:left"><b style="color:var(--txt-1)">It’s quiet for now…</b><p style="font-size:13px">When friends are online or in a call, they’ll show up here.</p></div>' });
+    NX.patch(host.querySelector('.active-now'), act);
     host.onclick = (e) => {
       const g = e.target.closest('[data-go]'); if (g) return NX.go(g.dataset.go);
       const d = e.target.closest('[data-dm]'); if (d) return D().openDm(d.dataset.dm);
