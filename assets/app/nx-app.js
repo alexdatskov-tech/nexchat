@@ -46,6 +46,8 @@
     route(firstRoute());
     bootEl?.classList.add('gone');
     setTimeout(() => bootEl?.remove(), 400);
+    // New announcements pop up once; afterwards they live on the home page.
+    setTimeout(() => NX.dash?.announceNew().catch(() => {}), 1500);
     // Desktop notifications: ask once, after the user has done something.
     if ('Notification' in window && Notification.permission === 'default' && !NX.ls.get('nx_asked_notify')) {
       const ask = () => { NX.ls.set('nx_asked_notify', 1); Notification.requestPermission().catch(() => {}); window.removeEventListener('pointerdown', ask); };
@@ -165,13 +167,13 @@
     document.body.insertAdjacentHTML('beforeend', `
       <div id="wall"><div class="wall-img"></div><div class="wall-dim"></div></div>
       <div class="app" id="app">
+        <div class="scrim" id="scrim"></div>
         <div class="drawer">
           <nav class="rail" id="rail" aria-label="Servers"></nav>
           <aside class="side" id="side"><div id="sideView" style="display:flex;flex-direction:column;flex:1;min-height:0"></div><div id="voicePanel"></div><div class="me-panel" id="mePanel"></div></aside>
         </div>
         <main class="main" id="main"></main>
-      </div>
-      <div class="scrim" id="scrim"></div>`);
+      </div>`);
     $('#scrim').onclick = closeDrawer;
     wireRail();
     paintRail();

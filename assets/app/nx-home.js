@@ -25,21 +25,26 @@
   function paintSide() {
     if (!side) return;
     const r = NX.route();
-    const onFriends = !r.parts[0] || r.parts[0] === 'home';
+    const onHome = (!r.parts[0] || r.parts[0] === 'home') && !r.parts[1];
+    const onFriends = r.parts[0] === 'home' && !!r.parts[1];
     const pending = D().incoming().length;
     const live = window.Voice?.live?.() || new Map();
-    const list = D().visibleDms();
+    // a 1:1 whose other person deleted their account sinks to the bottom
+    const list = D().visibleDms().slice().sort((a, b) => (!a.is_group && !a.people[0]) - (!b.is_group && !b.people[0]));
     side.innerHTML = `
-      <a class="s-item big${onFriends ? ' on' : ''}" href="#/home" data-go="home"><i class="fa-solid fa-user-group"></i><span class="nm">Friends</span>${pending ? `<span class="count">${pending}</span>` : ''}</a>
+      <a class="s-item big${onHome ? ' on' : ''}" href="#/home" data-go="home"><i class="fa-solid fa-house"></i><span class="nm">Home</span></a>
+      <a class="s-item big${onFriends ? ' on' : ''}" href="#/home/online" data-go="home/online"><i class="fa-solid fa-user-group"></i><span class="nm">Friends</span>${pending ? `<span class="count">${pending}</span>` : ''}</a>
       <div class="side-sect"><span class="grow">Direct messages</span><button class="icon-btn" data-a="new" data-tip="Create DM"><i class="fa-solid fa-plus"></i></button></div>
       ${list.length ? list.map((c) => {
         const o = c.people[0];
         const unread = c.unread > 0 && NX.viewing !== 'dm:' + c.id;
-        const sub = c.is_group ? NX.fmt.plural(c.people.length + 1, 'member')
+        const gone = !c.is_group && !o;
+        const sub = c.is_group ? NX.fmt.plural(c.people.length + 1, 'member') : gone ? 'This account no longer exists'
           : (o?.custom_status || (c.last ? (c.last.author_id === NX.me.id ? 'You: ' : '') + (c.last.content ? MD.plain(c.last.content, 60) : 'Sent a file') : '@' + (o?.username || '')));
         const inCall = live.get('dm-' + c.id);
         return `<a class="s-item dm${r.parts[1] === c.id ? ' on' : ''}${unread ? ' unread' : ''}" href="#/dm/${esc(c.id)}" data-go="dm/${esc(c.id)}" data-cid="${esc(c.id)}">
-          ${c.is_group ? `<span class="av" style="width:32px;height:32px;background:var(--accent);font-size:13px"><i class="fa-solid fa-user-group"></i></span>` : P().avatar(o, 32, { presence: true, deco: false })}
+          ${c.is_group ? `<span class="av" style="width:32px;height:32px;background:var(--accent);font-size:13px"><i class="fa-solid fa-user-group"></i></span>`
+            : gone ? '<span class="av" style="width:32px;height:32px;background:var(--bg-4);color:var(--txt-3);font-size:13px"><i class="fa-solid fa-ghost"></i></span>' : P().avatar(o, 32, { presence: true, deco: false })}
           <span class="t"><b>${esc(D().dmTitle(c))}</b><small>${inCall ? '<span style="color:var(--ok)"><i class="fa-solid fa-phone-volume"></i> Call in progress</span>' : esc(sub)}</small></span>
           ${unread ? `<span class="count">${c.unread > 99 ? '99+' : c.unread}</span>` : `<button class="icon-btn sm x" data-a="close" data-cid="${esc(c.id)}" title="${c.is_group ? 'Leave group' : 'Close DM'}"><i class="fa-solid fa-xmark"></i></button>`}
         </a>`;
@@ -98,24 +103,26 @@
   window.Voice?.onLive?.(() => { paintSide(); NX.emit('live'); });
 
   /* ---------- Home: friends ---------- */
-  let tab = 'online';
+  let tab = 'home';
   function homeMain(host, parts) {
-    tab = ['online', 'all', 'pending', 'blocked', 'add'].includes(parts[1]) ? parts[1] : (tab || 'online');
+    tab = ['online', 'all', 'pending', 'blocked', 'add'].includes(parts[1]) ? parts[1] : 'home';
+    const dash = tab === 'home';
     const pending = D().incoming().length;
     host.innerHTML = `
       <div class="main-head">
         <button class="icon-btn h-burger" data-a="burger" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
-        <i class="fa-solid fa-user-group h-ico"></i><span class="h-title">Friends</span>
+        <i class="fa-solid fa-${dash ? 'house' : 'user-group'} h-ico"></i><span class="h-title">${dash ? 'Home' : 'Friends'}</span>
         <div class="tabs" style="margin-left:10px">
           <span class="sep"></span>
+          <button data-t="home"><i class="fa-solid fa-house"></i>Home</button>
           <button data-t="online">Online</button><button data-t="all">All</button>
           <button data-t="pending">Pending${pending ? ` <span class="count">${pending}</span>` : ''}</button><button data-t="blocked">Blocked</button>
           <button data-t="add" class="cta">Add Friend</button>
         </div>
         <div class="h-acts"><button class="icon-btn" data-a="new" data-tip="New group DM" data-tip-pos="bottom"><i class="fa-solid fa-comment-medical"></i></button></div>
       </div>
-      <div class="home"><div class="home-main" id="homeList"></div><aside class="home-aside" id="homeAside"></aside></div>`;
-    host.querySelector('.tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) NX.go('home/' + b.dataset.t); };
+      <div class="home${dash ? ' is-dash' : ''}"><div class="home-main" id="homeList"></div>${dash ? '' : '<aside class="home-aside" id="homeAside"></aside>'}</div>`;
+    host.querySelector('.tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) NX.go(b.dataset.t === 'home' ? 'home' : 'home/' + b.dataset.t); };
     host.querySelector('[data-a="new"]').onclick = () => NX.newDmDialog();
     host.querySelector('[data-a="burger"]').onclick = () => NX.openDrawer();
     if (NX.isNarrow()) host.querySelector('.tabs').style.cssText = 'margin-left:4px;overflow-x:auto;flex-wrap:nowrap';
@@ -138,6 +145,11 @@
   function paintFriends() {
     const host = main?.querySelector('#homeList');
     if (!host) return;
+    if (tab === 'home') {
+      // the dashboard keeps itself up to date; only draw it once
+      if (!host.querySelector('.dash')) { host.onclick = null; NX.dash.render(host); }
+      return;
+    }
     const q = (host.querySelector('.f-search input')?.value || '').trim().toLowerCase();
     const match = (p) => !q || P().nameOf(p).toLowerCase().includes(q) || p.username.toLowerCase().includes(q);
     const search = `<div class="f-search" style="margin-bottom:6px"><input class="input" placeholder="Search" value="${esc(q)}" style="background:var(--bg-0)"></div>`;
@@ -273,12 +285,14 @@
       kind: 'dm', id: c.id, table: 'dm_messages', attTable: 'dm_message_attachments', rxTable: 'dm_message_reactions', fk: 'conversation_id',
       title: D().dmTitle(c), route: 'dm/' + c.id,
       placeholder: c.is_group ? `Message ${D().dmTitle(c)}` : `Message @${other?.username || ''}`,
-      intro: () => c.is_group
+      intro: () => !c.is_group && !other
+        ? '<div class="big-ico" style="background:var(--bg-4);color:var(--txt-3)"><i class="fa-solid fa-ghost"></i></div><h2>Deleted user</h2><p>This account no longer exists, so you can read the old messages but not reply.</p>'
+        : c.is_group
         ? `<div class="big-ico" style="background:var(--accent);color:#fff"><i class="fa-solid fa-user-group"></i></div><h2>${esc(D().dmTitle(c))}</h2><p>Welcome to the beginning of the <b>${esc(D().dmTitle(c))}</b> group.</p>`
         : `<div style="margin-bottom:12px">${P().avatar(other, 80)}</div><h2>${P().nameText(other)}</h2><p style="font-size:16px;color:var(--txt-1);margin:2px 0 8px">${esc(other?.username || '')}</p><p>This is the beginning of your direct message history with <b>${esc(P().nameOf(other))}</b>.</p>
           <div class="row" style="margin-top:12px">${D().relation(other?.id) === 'friends' ? '<button class="btn btn-ghost btn-sm" data-intro="remove">Remove friend</button>' : D().relation(other?.id) === 'incoming' ? '<button class="btn btn-primary btn-sm" data-intro="accept">Accept friend request</button>' : D().relation(other?.id) === 'outgoing' ? '<button class="btn btn-ghost btn-sm" disabled>Friend request sent</button>' : '<button class="btn btn-primary btn-sm" data-intro="add">Add friend</button>'}
           <button class="btn btn-ghost btn-sm" data-intro="block">${D().isBlocked(other?.id) ? 'Unblock' : 'Block'}</button></div>`,
-      canSend: () => c.is_group || !D().isBlocked(other?.id),
+      canSend: () => c.is_group || (!!other && !D().isBlocked(other.id)),
       canManage: () => false, canPin: () => false,
       uploadPath: `dm/${c.id}`,
       lastReadAt: () => c.last_read_at,
@@ -422,7 +436,8 @@
     },
     viewingKey: () => (conv ? 'dm:' + conv.id : null),
     step(d) {
-      const list = D().visibleDms();
+      // a 1:1 whose other person deleted their account sinks to the bottom
+    const list = D().visibleDms().slice().sort((a, b) => (!a.is_group && !a.people[0]) - (!b.is_group && !b.people[0]));
       const i = list.findIndex((c) => c.id === conv?.id);
       const n = list[i + d];
       if (n) NX.go('dm/' + n.id);

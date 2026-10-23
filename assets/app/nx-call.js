@@ -88,15 +88,20 @@
     });
     return out;
   }
-  function paintTiles(stage, st, { focusable = true } = {}) {
+  function paintTiles(stage, st, { focusable = true, room = true, only = null } = {}) {
     const grid = stage.querySelector('.grid');
     const focusSlot = stage.querySelector('.focus-slot');
-    const list = feeds(st);
+    const list = feeds(st).filter((f) => !only || f.key === only);
     let focus = stage.dataset.focus || '';
     if (!focus && focusable) { const sc = list.find((f) => f.screen && !f.me); if (sc && !stage.dataset.unfocused) focus = sc.key; }
     if (focus && !list.some((f) => f.key === focus)) focus = '';
-    stage.closest('.call')?.classList.toggle('has-focus', !!focus && !!focusSlot);
-    grid.dataset.count = list.filter((f) => f.key !== focus || !focusSlot).length;
+    // One-to-one with nobody sharing: the other person fills the call and you
+    // sit in a small corner preview (tap it to swap, drag it to a corner).
+    const duo = room && !focus && list.length === 2 && list.some((f) => f.me) && !list.some((f) => f.screen);
+    const small = duo ? (stage.dataset.swap ? list.find((f) => !f.me) : list.find((f) => f.me)).key : '';
+    const call = stage.closest('.call');
+    call?.classList.toggle('has-focus', !!focus && !!focusSlot);
+    call?.classList.toggle('duo', duo);
     const seen = new Set();
     list.forEach((f) => {
       seen.add(f.key);
@@ -105,19 +110,39 @@
         t = NX.h(`<div class="vtile" data-k="${esc(f.key)}"><video autoplay playsinline muted></video><div class="vt-av"></div><div class="vt-name"></div>
           ${focusSlot ? '<button class="vt-max" title="Focus"><i class="fa-solid fa-expand"></i></button>' : ''}</div>`);
         const v = t.querySelector('video');
-        const ready = () => t.classList.toggle('has-frame', v.videoWidth > 0);
-        ['loadeddata', 'resize', 'emptied'].forEach((ev) => v.addEventListener(ev, ready));
+        const ready = () => {
+          const has = v.videoWidth > 0;
+          t.classList.toggle('has-frame', has);
+          if (has) { t.dataset.ar = (v.videoWidth / v.videoHeight).toFixed(4); t.style.setProperty('--ar', t.dataset.ar); }
+          layout(stage);
+        };
+        ['loadedmetadata', 'loadeddata', 'resize', 'emptied'].forEach((ev) => v.addEventListener(ev, ready));
         t.querySelector('.vt-max')?.addEventListener('click', (e) => {
           e.stopPropagation();
           if (stage.dataset.focus === f.key) { stage.dataset.focus = ''; stage.dataset.unfocused = '1'; }
           else { stage.dataset.focus = f.key; delete stage.dataset.unfocused; }
-          paintTiles(stage, state(), { focusable });
+          paintTiles(stage, state(), { focusable, room });
         });
-        t.querySelector('.vt-av').addEventListener('click', () => P().card(f.p.id, t));
+        t.addEventListener('click', (e) => {
+          if (t.classList.contains('pip')) {
+            if (t._dragged) { t._dragged = false; return; }
+            if (stage.dataset.swap) delete stage.dataset.swap; else stage.dataset.swap = '1';
+            return paintTiles(stage, state(), { focusable, room });
+          }
+          // in the strip under a focused tile, a tap brings that tile up
+          if (room && t.parentNode === grid && stage.closest('.call')?.classList.contains('has-focus') && !e.target.closest('.vt-av')) {
+            stage.dataset.focus = f.key; delete stage.dataset.unfocused;
+            return paintTiles(stage, state(), { focusable, room });
+          }
+          if (e.target.closest('.vt-av')) P().card(f.p.id, t);
+        });
         t.addEventListener('dblclick', () => t.querySelector('.vt-max')?.click());
+        if (room) dragPip(t, stage);
       }
       const host = focusSlot && f.key === focus ? focusSlot : grid;
       if (t.parentNode !== host) host.appendChild(t);
+      t.classList.toggle('pip', f.key === small);
+      t.classList.toggle('focused', f.key === focus);
       const v = t.querySelector('video');
       const track = f.stream?.getVideoTracks()[0] || null;
       const tid = track ? track.id : '';
@@ -126,11 +151,12 @@
         v.srcObject = f.stream || null;
         if (f.stream) v.play?.().catch(() => {});
         t.classList.remove('has-frame');
+        delete t.dataset.ar;
       }
       t.classList.toggle('is-screen', !!f.screen);
       t.classList.toggle('mirror', f.me && !f.screen);
       const av = t.querySelector('.vt-av');
-      const size = focusSlot && f.key === focus ? 120 : (list.length > 4 ? 64 : 88);
+      const size = f.key === small ? 56 : focusSlot && f.key === focus ? 120 : (list.length > 4 ? 64 : NX.isNarrow() ? 84 : 96);
       if (av.dataset.u !== f.p.id + size) { av.dataset.u = f.p.id + size; av.innerHTML = P().avatar(P().get(f.p.id) || f.p, size, { halo: false }); }
       const known = P().get(f.p.id);
       if (!known) P().need([f.p.id]);
@@ -147,6 +173,91 @@
     stage.querySelectorAll('.vtile').forEach((t) => {
       if (!seen.has(t.dataset.k)) { const v = t.querySelector('video'); if (v) v.srcObject = null; t.remove(); }
     });
+    if (room) {
+      if (!stage._ro && window.ResizeObserver) { stage._ro = new ResizeObserver(() => layout(stage)); stage._ro.observe(stage); }
+      layout(stage);
+    }
+  }
+
+  /* Sizes every tile in the grid so they all fit the stage at the biggest
+     size possible, each keeping its own shape: a camera keeps its real aspect
+     ratio (a phone held upright stays tall), a screen share keeps its own, and
+     tiles without video fill their cell. */
+  function layout(stage) {
+    const call = stage.closest('.call');
+    const grid = stage.querySelector('.grid');
+    if (!grid || !call) return;
+    const tiles = [...grid.children].filter((t) => t.classList.contains('vtile'));
+    const pip = tiles.find((t) => t.classList.contains('pip'));
+    const main = tiles.filter((t) => t !== pip);
+    if (call.classList.contains('has-focus')) {
+      // strip under the focused tile: same height, width from each tile's shape
+      tiles.forEach((t) => { t.style.width = ''; t.style.height = ''; });
+      return;
+    }
+    if (pip) {
+      const W = stage.clientWidth;
+      const ar = +pip.dataset.ar || 1;
+      const w = Math.round(Math.max(84, Math.min(NX.isNarrow() ? 132 : 220, W * 0.28)) * (ar < 1 ? 0.8 : ar > 1.4 ? 1.25 : 1));
+      pip.style.width = w + 'px'; pip.style.height = Math.round(w / ar) + 'px';
+    }
+    const n = main.length;
+    if (!n) return;
+    const cs = getComputedStyle(grid);
+    const W = grid.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const H = grid.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (W <= 0 || H <= 0) return;
+    const gap = 10;
+    const ars = main.map((t) => +t.dataset.ar || 0);
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+      const rows = Math.ceil(n / cols);
+      const cw = (W - gap * (cols - 1)) / cols, ch = (H - gap * (rows - 1)) / rows;
+      if (cw < 60 || ch < 60) continue;
+      // tiles without video score as if they were 4:3, so a grid isn't chosen
+      // just because empty cells would be huge
+      const area = ars.reduce((sum, ar) => { const a = ar || 4 / 3; const w = Math.min(cw, ch * a); return sum + w * (w / a); }, 0);
+      if (!best || area > best.area + 1) best = { cols, cw, ch, area };
+    }
+    if (!best) best = { cols: 1, cw: W, ch: H / n };
+    main.forEach((t, i) => {
+      const ar = ars[i];
+      let w, h;
+      if (ar) { w = Math.min(best.cw, best.ch * ar); h = w / ar; }
+      else { w = best.cw; h = best.ch; if (h > w * 1.15) h = w * 1.15; if (w > h * 2.2) w = h * 2.2; }
+      t.style.width = Math.floor(w) + 'px'; t.style.height = Math.floor(h) + 'px';
+    });
+  }
+  // The corner preview can be dragged; it snaps to the nearest corner.
+  function dragPip(t, stage) {
+    let sx = 0, sy = 0, ox = 0, oy = 0, on = false;
+    t.addEventListener('pointerdown', (e) => {
+      if (!t.classList.contains('pip')) return;
+      on = true; t._dragged = false; sx = e.clientX; sy = e.clientY;
+      const r = t.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      ox = r.left - sr.left; oy = r.top - sr.top;
+      t.setPointerCapture?.(e.pointerId);
+    });
+    t.addEventListener('pointermove', (e) => {
+      if (!on) return;
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!t._dragged && Math.hypot(dx, dy) < 6) return;
+      t._dragged = true;
+      t.classList.add('dragging');
+      t.style.left = ox + dx + 'px'; t.style.top = oy + dy + 'px'; t.style.right = 'auto'; t.style.bottom = 'auto';
+    });
+    const end = () => {
+      if (!on) return;
+      on = false;
+      if (!t._dragged) return;
+      t.classList.remove('dragging');
+      const r = t.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+      const right = r.left + r.width / 2 > sr.left + sr.width / 2, bottom = r.top + r.height / 2 > sr.top + sr.height / 2;
+      stage.dataset.corner = (bottom ? 'b' : 't') + (right ? 'r' : 'l');
+      t.style.left = t.style.top = t.style.right = t.style.bottom = '';
+    };
+    t.addEventListener('pointerup', end);
+    t.addEventListener('pointercancel', end);
   }
   function markSpeaking() {
     document.querySelectorAll('.vtile').forEach((t) => {
@@ -167,14 +278,14 @@
         <button class="icon-btn" data-c="pip" data-tip="Pop out video" title="Pop out"><i class="fa-solid fa-up-right-from-square"></i></button>
         <button class="icon-btn" data-c="full" data-tip="Full screen" title="Full screen"><i class="fa-solid fa-expand"></i></button>
         ${opts.onBack ? '<button class="icon-btn" data-c="back" data-tip="Back to chat" title="Back to chat"><i class="fa-solid fa-message"></i></button>' : ''}</div>
-      <div class="stage"><div class="focus-slot"></div><div class="grid"></div></div>
-      <div class="call-bar">
+      <div class="stage" data-corner="br"><div class="focus-slot"></div><div class="grid"></div></div>
+      <div class="call-bar"><div class="cb-pill">
         <button class="cb" data-c="mute" title="Mute"></button>
         <button class="cb" data-c="deaf" title="Deafen"><i class="fa-solid fa-headphones"></i></button>
         <button class="cb" data-c="cam" title="Camera"></button>
-        <button class="cb" data-c="share" title="Share screen"><i class="fa-solid fa-display"></i></button>
+        ${V()?.screenSupported?.() ? '<button class="cb" data-c="share" title="Share screen"><i class="fa-solid fa-display"></i></button>' : ''}
         <button class="cb leave" data-c="leave" title="Leave call"><i class="fa-solid fa-phone-slash"></i></button>
-      </div></div>`;
+      </div></div></div>`;
     const call = host.querySelector('.call');
     call.addEventListener('click', (e) => {
       const c = e.target.closest('[data-c]')?.dataset.c;
@@ -187,16 +298,37 @@
       if (c === 'back') opts.onBack?.();
       if (c === 'stats') { statsOpen = !statsOpen; paintStats(); }
       if (c === 'pip') popOut();
-      if (c === 'full') {
-        call.classList.toggle('full');
-        e.target.closest('[data-c]').innerHTML = `<i class="fa-solid fa-${call.classList.contains('full') ? 'compress' : 'expand'}"></i>`;
-      }
+      if (c === 'full') toggleFull(call);
     });
     paint();
+  }
+  // Real full screen where the browser allows it (Android, desktop); iPhones
+  // get a full-window view instead.
+  function toggleFull(call) {
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    const btn = () => { const b = call.querySelector('[data-c="full"]'); if (b) b.innerHTML = `<i class="fa-solid fa-${call.classList.contains('full') ? 'compress' : 'expand'}"></i>`; };
+    if (fsEl || call.classList.contains('full')) {
+      if (fsEl) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document).catch?.(() => {});
+      call.classList.remove('full'); document.body.classList.remove('call-full'); btn();
+      return;
+    }
+    call.classList.add('full'); document.body.classList.add('call-full'); btn();
+    const req = call.requestFullscreen || call.webkitRequestFullscreen;
+    if (req) {
+      try { req.call(call)?.catch?.(() => {}); } catch {}
+      const off = () => {
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        call.classList.remove('full'); document.body.classList.remove('call-full'); btn();
+        document.removeEventListener('fullscreenchange', off); document.removeEventListener('webkitfullscreenchange', off);
+      };
+      document.addEventListener('fullscreenchange', off); document.addEventListener('webkitfullscreenchange', off);
+    }
   }
   function unmount(host) {
     if (roomHost !== host) return;
     roomHost?.querySelectorAll('video').forEach((v) => { v.srcObject = null; });
+    roomHost?.querySelector('.stage')?._ro?.disconnect();
+    if (roomHost?.querySelector('.call.full')) { document.body.classList.remove('call-full'); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); }
     roomHost = null; roomOpts = null;
     paint();
   }
@@ -213,7 +345,7 @@
         set('mute', st.muted, `<i class="fa-solid fa-microphone${st.muted ? '-slash' : ''}"></i>`);
         set('deaf', st.deaf);
         set('cam', st.cam, `<i class="fa-solid fa-video${st.cam ? '' : '-slash'}"></i>`, 'live');
-        set('share', st.sharing, null, 'live');
+        if (call.querySelector('[data-c="share"]')) set('share', st.sharing, null, 'live');
         paintTiles(call.querySelector('.stage'), st);
       }
     }
@@ -258,9 +390,7 @@
     const list = feeds(st);
     const pick = list.find((f) => f.screen && !f.me) || list.find((f) => f.stream && !f.me) || list.find((f) => !f.me) || list[0];
     const stage = mini.querySelector('.mc-stage');
-    const fake = { ...st, members: new Map(pick ? [[pick.p.id, pick.p]] : []) };
-    paintTiles(stage, fake, { focusable: false });
-    if (pick?.screen === false && list.some((f) => f.p.id === pick.p.id && f.screen)) { /* fine */ }
+    paintTiles(stage, st, { focusable: false, room: false, only: pick?.key || '-' });
   }
   function openRoom() {
     const st = state();

@@ -187,7 +187,7 @@
   function dmTitle(c) {
     if (!c) return 'Conversation';
     if (c.is_group) return c.name || c.people.map((p) => people().nameOf(p)).join(', ') || 'Group';
-    return people().nameOf(c.people[0]);
+    return c.people[0] ? people().nameOf(c.people[0]) : 'Deleted user';
   }
   async function reloadDms() {
     const { data, missing: gone } = await rpc('nx_inbox');
