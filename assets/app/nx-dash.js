@@ -9,8 +9,18 @@
   const P = () => NX.people;
 
   /* ---------- what's new ---------- */
-  const VERSION = '3.1';
+  const VERSION = '3.2';
   const CHANGELOG = [
+    {
+      v: '3.2', date: '2026-10-23', title: 'Cleaner Friends, search and admin',
+      items: [
+        ['fa-user-plus', 'Friends has its own header with a proper Add friend button, tabs that fit on a phone, and a new Add friend page.'],
+        ['fa-magnifying-glass', 'Search is new: people, chats, servers, channels and quick actions, grouped, with matches highlighted. Ctrl K anywhere.'],
+        ['fa-wand-magic-sparkles', 'Profile effects play over the whole card at full quality, like Discord’s.'],
+        ['fa-cloud-sun', 'Weather on Home is just the basics; tap it for the full forecast. It never asks for your location unless you choose to share it.'],
+        ['fa-shield-halved', 'The admin console is tidier, especially on phones.'],
+      ],
+    },
     {
       v: '3.1', date: '2026-10-22', title: 'Calls you can actually see, and a real home page',
       items: [

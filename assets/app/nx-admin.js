@@ -108,11 +108,10 @@
     if (n) b.insertAdjacentHTML('beforeend', `<span class="count">${n > 99 ? '99+' : n}</span>`);
   }
 
-  const TAB_TINT = { overview: '#7c6cff', users: '#3b9ef5', servers: '#2fbf87', announce: '#e8659a', roles: '#a78bfa', audit: '#94a3b8', owner: '#f0b232', nitro: '#f0b232', storage: '#5ac8d8', endpoints: '#3b9ef5', appeals: '#f2555a' };
+  // A compact title row (no banner): the tab's name, one line on what it's
+  // for, and its actions on the right.
   function head(title, sub, extra = '') {
-    const it = TABS().flatMap((x) => x.items).find((i) => i.id === tab);
-    return pg ? pg.hero({ icon: it?.icon, tint: TAB_TINT[tab] || 'var(--accent)', title, sub, actions: extra })
-      : `<h1 class="page-title">${esc(title)}</h1>`;
+    return `<header class="adm-top"><div class="adm-top-t"><h1>${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ''}</div>${extra ? `<div class="adm-top-acts">${extra}</div>` : ''}</header>`;
   }
 
   async function enter(h, parts) {
@@ -194,10 +193,10 @@
     return error ? null : (count ?? 0);
   }
   async function overview() {
-    body.innerHTML = head('Overview', 'Everything happening on NexChat right now.') + `<div class="stat-grid" id="admKpis">${'<div class="skel" style="height:104px;border-radius:14px"></div>'.repeat(6)}</div>
-      <div class="adm-two"><div class="card"><h3><i class="fa-solid fa-inbox"></i> Needs attention</h3><div id="ovQueue">${skel(2, 48)}</div></div>
-        <div class="card"><div class="adm-row-h"><h3><i class="fa-solid fa-user-plus"></i> Newest members</h3><button class="btn btn-quiet btn-sm" data-goto="users">All users <i class="fa-solid fa-arrow-right"></i></button></div><div id="ovRecent">${skel(3, 40)}</div></div></div>
-      <div class="card"><div class="adm-row-h"><h3><i class="fa-solid fa-chart-column"></i> Sign-ups, last 14 days</h3><span class="muted" id="ovTotal"></span></div><div class="adm-bars" id="ovBars"></div></div>`;
+    body.innerHTML = head('Overview', 'Everything happening on NexChat right now.') + `<div class="kpis" id="admKpis">${'<div class="skel kpi-skel"></div>'.repeat(6)}</div>
+      <div class="card adm-chart"><div class="adm-row-h"><h3>Sign-ups</h3><span class="adm-chip-muted">Last 14 days</span><span class="grow"></span><b class="adm-total" id="ovTotal"></b></div><div class="adm-bars" id="ovBars"></div></div>
+      <div class="adm-two"><div class="card"><h3>Needs attention</h3><div id="ovQueue">${skel(2, 48)}</div></div>
+        <div class="card"><div class="adm-row-h"><h3>Newest members</h3><span class="grow"></span><button class="btn btn-quiet btn-sm" data-goto="users">All users <i class="fa-solid fa-arrow-right"></i></button></div><div id="ovRecent">${skel(3, 40)}</div></div></div>`;
     await loadUsers(true);
     if (!still('overview')) return;
     const day = 86400000, now = Date.now();
@@ -219,8 +218,8 @@
       { t: '#f2555a', k: 'Banned', v: users.filter((u) => u.is_banned).length, ic: 'fa-ban', sub: `${pendAppeals ?? 0} appeals open`, go: can('review_appeals') ? 'appeals' : null },
       { t: '#a78bfa', k: 'Staff', v: users.filter((u) => R(u) > 0).length, ic: 'fa-shield-halved', sub: anns == null ? 'announcements not set up' : `${anns} announcements`, go: 'roles' },
     ];
-    body.querySelector('#admKpis').innerHTML = kpis.map((x) => `<div class="stat${x.go ? ' adm-click' : ''}" style="--t:${x.t}"${x.go ? ` data-goto="${x.go}"` : ''}>
-      <div class="k"><i class="fa-solid ${x.ic}"></i>${esc(x.k)}</div><div class="v">${x.v == null ? '—' : Number(x.v).toLocaleString()}</div><small>${esc(x.sub)}</small></div>`).join('');
+    body.querySelector('#admKpis').innerHTML = kpis.map((x) => `<${x.go ? 'button' : 'div'} class="kpi" style="--t:${x.t}"${x.go ? ` data-goto="${x.go}"` : ''}>
+      <span class="kpi-k"><i></i>${esc(x.k)}</span><b class="kpi-v">${x.v == null ? '—' : Number(x.v).toLocaleString()}</b><small class="kpi-s${/^\+[1-9]/.test(x.sub) ? ' up' : ''}">${esc(x.sub)}</small></${x.go ? 'button' : 'div'}>`).join('');
     const queue = [];
     const qi = (go, ic, t, s) => `<button class="adm-q" data-goto="${go}"><span class="adm-qi"><i class="fa-solid ${ic}"></i></span><span class="grow"><b>${t}</b><small>${s}</small></span><i class="fa-solid fa-chevron-right muted"></i></button>`;
     if (pendNitro) queue.push(qi('nitro', 'fa-bolt', `${fmt.plural(pendNitro, 'Nitro request')}`, 'Waiting for a decision'));
@@ -238,7 +237,7 @@
       if (hit) hit.n++;
     });
     const max = Math.max(1, ...days.map((x) => x.n));
-    body.querySelector('#ovTotal').textContent = `${days.reduce((a, x) => a + x.n, 0)} in total`;
+    body.querySelector('#ovTotal').textContent = fmt.plural(days.reduce((a, x) => a + x.n, 0), 'new member');
     body.querySelector('#ovBars').innerHTML = days.map((x, i) => {
       const label = x.d.toLocaleDateString([], { month: 'short', day: 'numeric' });
       return `<div class="adm-bar-col" data-tip="${esc(label)}: ${fmt.plural(x.n, 'sign-up')}"><div class="adm-bar" style="height:${Math.max(2, (x.n / max) * 100)}%">${x.n === max && x.n ? `<span>${x.n}</span>` : ''}</div><span class="adm-bar-x">${i % 2 === 1 || i === 13 ? esc(label) : ''}</span></div>`;
@@ -250,8 +249,8 @@
   const FILTERS = { all: () => true, admin: (u) => R(u) > 0, nitro: (u) => u.is_nitro, banned: (u) => u.is_banned };
   async function usersTab() {
     body.innerHTML = head('Users', 'Everyone with an account.') + `<div id="admPowers"></div>
-      <div class="toolbar"><input class="input" id="uSearch" placeholder="Search by name or username" value="${esc(uQuery)}">
-        <div class="seg" id="uFilter">${[['all', 'All'], ['admin', 'Staff'], ['nitro', 'Nitro'], ['banned', 'Banned']].map(([k, l]) => `<button type="button" data-f="${k}" class="${uFilter === k ? 'on' : ''}">${l} <span class="muted"></span></button>`).join('')}</div></div>
+      <div class="adm-tools"><label class="f-search adm-search"><i class="fa-solid fa-magnifying-glass"></i><input id="uSearch" placeholder="Search by name or username" value="${esc(uQuery)}" autocomplete="off" spellcheck="false"></label>
+        <div class="seg-tabs" id="uFilter">${[['all', 'All'], ['admin', 'Staff'], ['nitro', 'Nitro'], ['banned', 'Banned']].map(([k, l]) => `<button type="button" data-f="${k}" class="${uFilter === k ? 'on' : ''}">${l}<span class="seg-c"></span></button>`).join('')}</div></div>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>User</th><th class="adm-hide-m">Joined</th><th class="adm-hide-m">Drive</th><th style="text-align:right">Actions</th></tr></thead><tbody id="userRows"><tr><td colspan="4">${skel(4, 36)}</td></tr></tbody></table></div>`;
     body.querySelector('#uSearch').oninput = (e) => { uQuery = e.target.value; paintUsers(); };
     body.querySelector('#uFilter').onclick = (e) => {
@@ -269,9 +268,10 @@
     const r = myRank();
     const who = r >= 3 ? 'everyone else' : r === 2 ? 'admins and regular users' : 'regular users';
     const list = PERMS.filter((p) => can(p.k)).map((p) => `<span class="chip"><i class="fa-solid ${p.ic}"></i>${esc(p.t)}</span>`).join('');
-    el.innerHTML = `<div class="card adm-powers"><div class="adm-row-h">${P().roleBadge(NX.me)}<b class="grow">You can act on ${who}.${r < 3 ? ' <small class="muted" style="font-weight:500">Anyone at or above your rank is locked.</small>' : ''}</b>${rankUpButton()}</div>
-      <div class="chip-input" style="margin-top:10px">${list || '<span class="muted">No moderation permissions yet.</span>'}</div></div>`;
-    el.querySelector('[data-rr-ask]')?.addEventListener('click', requestRankUp);
+    const n = PERMS.filter((p) => can(p.k)).length;
+    el.innerHTML = `<details class="adm-powers"><summary>${P().roleBadge(NX.me)}<span class="grow">You can act on ${who}<small> · ${fmt.plural(n, 'permission')}</small></span>${rankUpButton()}<i class="fa-solid fa-chevron-down adm-chev"></i></summary>
+      <div class="adm-powers-list">${list || '<span class="muted">No moderation permissions yet.</span>'}${r < 3 ? '<p class="muted">Anyone at or above your rank is locked.</p>' : ''}</div></details>`;
+    el.querySelector('[data-rr-ask]')?.addEventListener('click', (e) => { e.preventDefault(); requestRankUp(); });
   }
   function paintUsers() {
     const tb = body?.querySelector('#userRows');
@@ -469,8 +469,8 @@
   let servers = null, sSort = 'new', sQuery = '';
   async function serversTab() {
     body.innerHTML = head('Servers', 'Every server on NexChat. Open any of them to read and post without joining.') + `
-      <div class="toolbar"><input class="input" id="sSearch" placeholder="Search servers or owners" value="${esc(sQuery)}">
-        <div class="seg" id="sSort">${[['new', 'Newest'], ['members', 'Most members'], ['name', 'A–Z']].map(([k, l]) => `<button type="button" data-s="${k}" class="${sSort === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+      <div class="adm-tools"><label class="f-search adm-search"><i class="fa-solid fa-magnifying-glass"></i><input id="sSearch" placeholder="Search servers or owners" value="${esc(sQuery)}" autocomplete="off" spellcheck="false"></label>
+        <div class="seg-tabs" id="sSort">${[['new', 'Newest'], ['members', 'Most members'], ['name', 'A–Z']].map(([k, l]) => `<button type="button" data-s="${k}" class="${sSort === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
       <div class="adm-srvgrid" id="srvRows">${'<div class="skel" style="height:170px;border-radius:14px"></div>'.repeat(6)}</div>`;
     body.querySelector('#sSearch').oninput = (e) => { sQuery = e.target.value; paintServers(); };
     body.querySelector('#sSort').onclick = (e) => {
@@ -816,7 +816,7 @@
   let auditFilter = 'all';
   async function auditTab() {
     body.innerHTML = head('Audit log', 'Bans, role changes, password resets, deletions and permission changes.') + `
-      <div class="toolbar"><div class="seg" id="auFilter">${[['all', 'All'], ['role', 'Roles'], ['ban', 'Bans'], ['reset_password', 'Passwords'], ['delete_user', 'Deletions'], ['permission', 'Permissions']].map(([k, l]) => `<button type="button" data-f="${k}" class="${auditFilter === k ? 'on' : ''}">${l}</button>`).join('')}</div></div><div data-audit></div>`;
+      <div class="adm-tools"><div class="seg-tabs scroll" id="auFilter">${[['all', 'All'], ['role', 'Roles'], ['ban', 'Bans'], ['reset_password', 'Passwords'], ['delete_user', 'Deletions'], ['permission', 'Permissions']].map(([k, l]) => `<button type="button" data-f="${k}" class="${auditFilter === k ? 'on' : ''}">${l}</button>`).join('')}</div></div><div data-audit></div>`;
     body.querySelector('#auFilter').onclick = (e) => {
       const b = e.target.closest('[data-f]'); if (!b) return;
       auditFilter = b.dataset.f;

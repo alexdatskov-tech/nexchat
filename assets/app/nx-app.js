@@ -537,33 +537,104 @@
   NX.newDmDialog = newDmDialog;
 
   /* Quick switcher: Ctrl/Cmd+K. Conversations, friends, servers, channels. */
-  async function switcher() {
-    if (document.querySelector('.switcher')) return;
-    const items = [];
-    NX.data.dms.forEach((c) => items.push({ t: NX.data.dmTitle(c), sub: c.is_group ? 'Group' : '@' + (c.people[0]?.username || ''), icon: c.is_group ? '<i class="fa-solid fa-user-group"></i>' : P().avatar(c.people[0], 24, { halo: false, deco: false }), go: 'dm/' + c.id, unread: c.unread }));
-    NX.data.friendIds().forEach((id) => { const p = P().get(id); if (p && !NX.data.dms.some((c) => !c.is_group && c.people[0]?.id === id)) items.push({ t: P().nameOf(p), sub: '@' + p.username, icon: P().avatar(p, 24, { halo: false, deco: false }), fn: () => NX.data.openDm(id) }); });
-    NX.data.servers.forEach((s) => items.push({ t: s.name, sub: 'Server', icon: '<i class="fa-solid fa-server"></i>', go: 's/' + s.id }));
-    (NX.views.server?.knownChannels?.() || []).forEach((c) => items.push({ t: c.name, sub: NX.data.server(c.server_id)?.name || '', icon: `<i class="fa-solid ${c.type === 'voice' ? 'fa-volume-high' : 'fa-hashtag'}"></i>`, go: `s/${c.server_id}/${c.id}` }));
-    const body = NX.h(`<div style="display:flex;flex-direction:column;gap:10px"><input class="input" placeholder="Where would you like to go?" style="height:46px;font-size:16px"><div class="pop-list" style="position:static;box-shadow:none;border:0;padding:0;max-height:50vh;overflow:auto;animation:none"></div><p class="hint">Tip: <span class="kbd">Ctrl</span> <span class="kbd">K</span> opens this anywhere.</p></div>`);
-    const list = body.querySelector('.pop-list'), input = body.querySelector('input');
-    let shown = [], sel = 0;
-    const paint = () => {
-      const q = input.value.trim().toLowerCase().replace(/^[@#]/, '');
-      shown = (q ? items.filter((i) => i.t.toLowerCase().includes(q) || i.sub.toLowerCase().includes(q)) : items.filter((i) => i.unread).concat(items.slice(0, 12))).slice(0, 14);
-      shown = [...new Set(shown)];
-      sel = Math.min(sel, Math.max(0, shown.length - 1));
-      list.innerHTML = shown.length ? shown.map((i, n) => `<button type="button" data-i="${n}" class="${n === sel ? 'on' : ''}"><span style="width:24px;display:inline-flex;justify-content:center">${i.icon}</span><span class="ellipsis">${esc(i.t)}</span><small>${esc(i.sub)}</small></button>`).join('')
-        : '<div class="empty" style="padding:20px"><p>No matches.</p></div>';
-    };
-    const m = NX.modal({ cls: 'switcher', body });
-    const pick = (i) => { if (!i) return; m.close(); if (i.go) NX.go(i.go); else i.fn(); };
-    input.addEventListener('input', () => { sel = 0; paint(); });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % Math.max(1, shown.length); paint(); }
-      if (e.key === 'Enter') { e.preventDefault(); pick(shown[sel]); }
+  /* Search (Ctrl K, the sidebar search, the Home search button): people,
+     chats, servers, channels and quick actions, grouped, with the matching
+     letters highlighted. Full screen on phones. */
+  function switcher() {
+    if (document.querySelector('.sw-ov')) return;
+    const D = NX.data;
+    const av = (p) => P().avatar(p, 32, { halo: false, deco: false, presence: true });
+    const tile = (icon, tint = '') => `<span class="sw-tile${tint ? ' ' + tint : ''}"><i class="fa-solid ${icon}"></i></span>`;
+    const all = [];
+    D.visibleDms().forEach((c, i) => all.push({
+      g: 'People', t: D.dmTitle(c), sub: c.is_group ? NX.fmt.plural(c.people.length + 1, 'member') : '@' + (c.people[0]?.username || ''),
+      icon: c.is_group ? tile('fa-user-group', 'acc') : c.people[0] ? av(c.people[0]) : tile('fa-ghost'), go: 'dm/' + c.id, unread: c.unread || 0, rank: i, keys: c.people.map((p) => p.username).join(' '),
+    }));
+    D.friendIds().forEach((id) => {
+      const p = P().get(id);
+      if (!p || D.dms.some((c) => !c.is_group && c.people[0]?.id === id)) return;
+      all.push({ g: 'People', t: P().nameOf(p), sub: '@' + p.username, icon: av(p), fn: () => D.openDm(id), rank: 500, keys: p.username });
     });
+    D.servers.forEach((s, i) => all.push({ g: 'Servers', t: s.name, sub: 'Server', icon: s.icon_url ? `<span class="sw-tile img"><img ${P().imgAttr(s.icon_url)} alt=""></span>` : `<span class="sw-tile srv">${esc(initials(s.name))}</span>`, go: 's/' + s.id, unread: s.unread ? 1 : 0, rank: i }));
+    (NX.views.server?.knownChannels?.() || []).forEach((c) => all.push({ g: 'Channels', t: c.name, sub: D.server(c.server_id)?.name || '', icon: tile(c.type === 'voice' ? 'fa-volume-high' : 'fa-hashtag'), go: `s/${c.server_id}/${c.id}`, rank: 0 }));
+    const actions = [
+      { t: 'Add a friend', icon: tile('fa-user-plus', 'ok'), go: 'home/add', keys: 'friend request' },
+      { t: 'Friends', icon: tile('fa-user-group'), go: 'home/online', keys: 'online pending blocked' },
+      { t: 'Settings', icon: tile('fa-gear'), go: 'settings', keys: 'profile account appearance' },
+      { t: 'Appearance', icon: tile('fa-palette'), go: 'settings/appearance', keys: 'theme classic glass accent' },
+      { t: 'Create a server', icon: tile('fa-plus', 'ok'), fn: () => NX.addServerDialog(), keys: 'new' },
+      { t: 'Join a server', icon: tile('fa-right-to-bracket'), fn: () => NX.joinServerDialog(), keys: 'invite' },
+      { t: 'Weather forecast', icon: tile('fa-cloud-sun'), fn: () => { NX.go('home'); setTimeout(() => NX.weather?.open(), 300); }, keys: 'rain temperature' },
+      ...(P().rank(NX.me) > 0 ? [{ t: 'Admin console', icon: tile('fa-shield-halved', 'acc'), go: 'admin', keys: 'staff' }] : []),
+    ].map((x) => ({ ...x, g: 'Actions', sub: '' }));
+
+    const ov = NX.h(`<div class="sw-ov" role="dialog" aria-modal="true" aria-label="Search"><div class="sw">
+      <div class="sw-in"><i class="fa-solid fa-magnifying-glass"></i><input placeholder="Search people, servers and channels" autocomplete="off" spellcheck="false" enterkeyhint="go" aria-label="Search">
+        ${NX.isTouch() ? '<button class="sw-cancel" type="button">Cancel</button>' : '<span class="kbd">Esc</span>'}</div>
+      <div class="sw-list" role="listbox"></div>
+      ${NX.isTouch() ? '' : '<div class="sw-foot"><span><span class="kbd">↑</span><span class="kbd">↓</span> move</span><span><span class="kbd">Enter</span> open</span><span><span class="kbd">Ctrl</span><span class="kbd">K</span> search anywhere</span></div>'}
+    </div></div>`);
+    const input = ov.querySelector('input'), list = ov.querySelector('.sw-list');
+    let shown = [], sel = 0;
+    const norm = (x) => String(x || '').toLowerCase();
+    const mark = (text, q) => {
+      if (!q) return esc(text);
+      const i = norm(text).indexOf(q);
+      return i < 0 ? esc(text) : esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+    };
+    const score = (x, q) => {
+      const t = norm(x.t), k = norm(x.sub + ' ' + (x.keys || ''));
+      if (t.startsWith(q)) return 0;
+      if (t.split(/\s+/).some((w) => w.startsWith(q))) return 1;
+      if (t.includes(q)) return 2;
+      if (k.includes(q)) return 3;
+      return -1;
+    };
+    function paint() {
+      const q = norm(input.value.trim()).replace(/^[@#]/, '');
+      let groups;
+      if (!q) {
+        const unread = all.filter((x) => x.unread && x.g !== 'Channels');
+        groups = [
+          ['Unread', unread.slice(0, 5)],
+          ['Recent', all.filter((x) => x.g === 'People' && !x.unread && x.rank < 500).slice(0, 5)],
+          ['Servers', all.filter((x) => x.g === 'Servers' && !x.unread).slice(0, 4)],
+          ['Quick actions', actions.slice(0, NX.isNarrow() ? 4 : 6)],
+        ];
+      } else {
+        const hits = all.concat(actions).map((x) => ({ x, s: score(x, q) })).filter((h) => h.s >= 0).sort((a, b) => a.s - b.s || a.x.rank - b.x.rank);
+        groups = ['People', 'Servers', 'Channels', 'Actions'].map((g) => [g, hits.filter((h) => h.x.g === g).slice(0, g === 'Channels' ? 6 : 5).map((h) => h.x)]);
+      }
+      groups = groups.filter(([, xs]) => xs.length);
+      shown = groups.flatMap(([, xs]) => xs);
+      sel = Math.min(sel, Math.max(0, shown.length - 1));
+      let n = 0;
+      list.innerHTML = shown.length ? groups.map(([g, xs]) => `<div class="sw-g">${g}</div>` + xs.map((x) => {
+        const i = n++;
+        return `<button type="button" role="option" class="sw-it${i === sel ? ' on' : ''}" data-i="${i}" aria-selected="${i === sel}">${x.icon}
+          <span class="sw-t"><b>${mark(x.t, q)}</b>${x.sub ? `<small>${mark(x.sub, q)}</small>` : ''}</span>
+          ${x.unread ? `<span class="sw-badge">${x.unread > 99 ? '99+' : x.unread}</span>` : '<i class="fa-solid fa-arrow-turn-down sw-enter"></i>'}</button>`;
+      }).join('')).join('')
+        : `<div class="sw-none"><i class="fa-solid fa-magnifying-glass"></i><b>Nothing called “${esc(input.value.trim())}”</b><span>Try a username, a server or a channel name.</span></div>`;
+      list.querySelector('.sw-it.on')?.scrollIntoView({ block: 'nearest' });
+    }
+    const close = () => { document.removeEventListener('keydown', keys, true); ov.classList.remove('open'); setTimeout(() => ov.remove(), 160); };
+    const pick = (x) => { if (!x) return; close(); if (x.go) NX.go(x.go); else x.fn(); closeDrawer(); };
+    function keys(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (shown.length) { sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + shown.length) % shown.length; paint(); } }
+      else if (e.key === 'Enter' && document.activeElement === input) { e.preventDefault(); pick(shown[sel]); }
+    }
+    input.addEventListener('input', () => { sel = 0; paint(); });
     list.addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) pick(shown[+b.dataset.i]); });
+    list.addEventListener('mousemove', (e) => { const b = e.target.closest('[data-i]'); if (b && +b.dataset.i !== sel) { sel = +b.dataset.i; list.querySelectorAll('.sw-it').forEach((x) => x.classList.toggle('on', +x.dataset.i === sel)); } });
+    ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); });
+    ov.querySelector('.sw-cancel')?.addEventListener('click', close);
+    document.addEventListener('keydown', keys, true);
+    document.body.appendChild(ov);
     paint();
+    requestAnimationFrame(() => ov.classList.add('open'));
+    setTimeout(() => input.focus(), 30);
   }
   NX.switcher = switcher;
 

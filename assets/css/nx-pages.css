@@ -108,7 +108,6 @@
 .pcard .pc-name { font-size: 21px; font-weight: 800; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .pcard .pc-handle { color: var(--txt-2); font-size: 13.5px; }
 .pcard .pc-bio { font-size: 13.5px; color: var(--txt-2); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; }
-.pcard.has-deco .pc-body { background: rgba(8, 9, 12, .55); margin: 10px; border-radius: 12px; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 .pcard .pc-edit { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; opacity: 0; transition: opacity .15s; cursor: pointer; border-radius: inherit; text-transform: uppercase; letter-spacing: .04em; gap: 6px; }
 .pcard .pc-banner:hover .pc-edit, .pcard .pc-av:hover .pc-edit { opacity: 1; }
 .pcard .pc-banner { position: relative; }

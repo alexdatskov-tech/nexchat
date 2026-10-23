@@ -83,7 +83,6 @@
 .ucard .uc-av .av-halo > .av, .ucard .uc-av .av-halo > .av-decoed > .av { box-shadow: 0 0 0 3px var(--bg-1); }
 .ucard .uc-av .av-slot > .pdot { width: 16px; height: 16px; border-width: 4px; right: 2px; bottom: 2px; }
 .ucard .uc-body { margin: 10px 12px 12px; background: var(--bg-0); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; position: relative; }
-.ucard.has-deco .uc-body { background: rgba(8, 9, 12, .6); backdrop-filter: blur(4px); }
 .ucard .uc-name { font-size: 20px; font-weight: 800; line-height: 1.2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ucard .uc-handle { color: var(--txt-2); font-size: 13.5px; margin-top: -6px; }
 .ucard .uc-status { font-size: 13.5px; color: var(--txt-1); }

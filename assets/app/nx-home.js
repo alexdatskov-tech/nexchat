@@ -9,7 +9,7 @@
   /* ---------- sidebar: conversations ---------- */
   function mountSide(host) {
     host.innerHTML = `
-      <div class="side-head" style="padding:0 10px"><button class="side-search" data-a="find"><span class="grow">Find or start a conversation</span><span class="kbd">Ctrl K</span></button></div>
+      <div class="side-head" style="padding:0 10px"><button class="side-search" data-a="find"><i class="fa-solid fa-magnifying-glass"></i><span class="grow">Search</span>${NX.isTouch() ? '' : '<span class="kbd">Ctrl K</span>'}</button></div>
       <div class="side-body" id="dmSide"></div>`;
     side = host.querySelector('#dmSide');
     host.querySelector('[data-a="find"]').onclick = () => NX.switcher();
@@ -104,34 +104,37 @@
 
   /* ---------- Home: friends ---------- */
   let tab = 'home';
+  const FR_TABS = [['online', 'Online'], ['all', 'All'], ['pending', 'Pending'], ['blocked', 'Blocked']];
+  const pendingBadge = () => { const n = D().incoming().length; return n ? `<span class="seg-n">${n > 99 ? '99+' : n}</span>` : ''; };
   function homeMain(host, parts) {
     tab = ['online', 'all', 'pending', 'blocked', 'add'].includes(parts[1]) ? parts[1] : 'home';
     const dash = tab === 'home';
-    const pending = D().incoming().length;
     host.innerHTML = `
       <div class="main-head">
         <button class="icon-btn h-burger" data-a="burger" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
         <i class="fa-solid fa-${dash ? 'house' : 'user-group'} h-ico"></i><span class="h-title">${dash ? 'Home' : 'Friends'}</span>
-        <div class="tabs" style="margin-left:10px">
-          <span class="sep"></span>
-          <button data-t="home"><i class="fa-solid fa-house"></i>Home</button>
-          <button data-t="online">Online</button><button data-t="all">All</button>
-          <button data-t="pending">Pending${pending ? ` <span class="count">${pending}</span>` : ''}</button><button data-t="blocked">Blocked</button>
-          <button data-t="add" class="cta">Add Friend</button>
+        <div class="h-acts">
+          ${dash
+            ? '<button class="icon-btn" data-a="find" data-tip="Search" data-tip-pos="bottom" aria-label="Search"><i class="fa-solid fa-magnifying-glass"></i></button>'
+            : `<button class="add-fr-btn${tab === 'add' ? ' on' : ''}" data-t="add" aria-label="Add friend"><i class="fa-solid fa-user-plus"></i><span>Add friend</span></button>`}
+          <button class="icon-btn" data-a="new" data-tip="New group DM" data-tip-pos="bottom" aria-label="New group DM"><i class="fa-solid fa-comment-medical"></i></button>
         </div>
-        <div class="h-acts"><button class="icon-btn" data-a="new" data-tip="New group DM" data-tip-pos="bottom"><i class="fa-solid fa-comment-medical"></i></button></div>
       </div>
+      ${dash ? '' : `<div class="fr-bar"><div class="seg-tabs" role="tablist">${FR_TABS.map(([k, t]) => `<button role="tab" data-t="${k}">${t}${k === 'pending' ? pendingBadge() : ''}</button>`).join('')}</div></div>`}
       <div class="home${dash ? ' is-dash' : ''}"><div class="home-main" id="homeList"></div>${dash ? '' : '<aside class="home-aside" id="homeAside"></aside>'}</div>`;
-    host.querySelector('.tabs').onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) NX.go(b.dataset.t === 'home' ? 'home' : 'home/' + b.dataset.t); };
+    host.addEventListener('click', (e) => {
+      const t = e.target.closest('.fr-bar [data-t], .add-fr-btn');
+      if (t) NX.go(t.dataset.t === 'add' && tab === 'add' ? 'home/online' : 'home/' + t.dataset.t);
+    });
     host.querySelector('[data-a="new"]').onclick = () => NX.newDmDialog();
     host.querySelector('[data-a="burger"]').onclick = () => NX.openDrawer();
-    if (NX.isNarrow()) host.querySelector('.tabs').style.cssText = 'margin-left:4px;overflow-x:auto;flex-wrap:nowrap';
+    host.querySelector('[data-a="find"]')?.addEventListener('click', () => NX.switcher());
     paintTabs();
     paintFriends();
     paintAside();
   }
   function paintTabs() {
-    main?.querySelectorAll('.tabs [data-t]').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
+    main?.querySelectorAll('.fr-bar [data-t]').forEach((b) => { b.classList.toggle('on', b.dataset.t === tab); b.setAttribute('aria-selected', b.dataset.t === tab); });
   }
   function personRow(p, actions, sub) {
     return `<div class="person" data-uid-row="${esc(p.id)}">${P().avatar(p, 36, { presence: true })}
@@ -152,24 +155,48 @@
     }
     const q = (host.querySelector('.f-search input')?.value || '').trim().toLowerCase();
     const match = (p) => !q || P().nameOf(p).toLowerCase().includes(q) || p.username.toLowerCase().includes(q);
-    const search = `<div class="f-search" style="margin-bottom:6px"><input class="input" placeholder="Search" value="${esc(q)}" style="background:var(--bg-0)"></div>`;
+    const search = `<label class="f-search"><i class="fa-solid fa-magnifying-glass"></i><input placeholder="Search friends" value="${esc(q)}" autocomplete="off" spellcheck="false"></label>`;
     let html = '';
     if (tab === 'add') {
-      html = `<div class="add-friend"><h2>Add friend</h2><p>You can add friends with their NexChat username.</p>
-        <form><input placeholder="You can add friends with their username." autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="33"><button class="btn btn-primary" disabled>Send Friend Request</button></form><div class="msg"></div></div>
-        <div class="empty" style="padding-top:60px"><div class="ico"><i class="fa-solid fa-user-plus"></i></div><h3>Find your people</h3><p>Ask friends for their username, or share yours: <b class="mono">@${esc(NX.me.username)}</b></p></div>`;
-      host.innerHTML = html;
-      const form = host.querySelector('form'), inp = form.querySelector('input'), btn = form.querySelector('button'), msg = host.querySelector('.msg');
-      inp.oninput = () => { btn.disabled = !inp.value.trim(); msg.innerHTML = ''; };
+      const waiting = D().incoming().length;
+      host.innerHTML = `<div class="af">
+        <section class="af-card">
+          <div class="af-art" aria-hidden="true"><i class="fa-solid fa-user-plus"></i></div>
+          <h2>Add a friend</h2>
+          <p>Type their NexChat username. They’ll get a request they can accept.</p>
+          <form class="af-form" novalidate>
+            <label class="af-field"><span class="af-at">@</span><input name="u" placeholder="username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="33" enterkeyhint="send" aria-label="Username"></label>
+            <button class="btn btn-ok af-send" disabled><i class="fa-solid fa-paper-plane"></i><span>Send request</span></button>
+          </form>
+          <div class="af-msg" aria-live="polite"></div>
+        </section>
+        <section class="af-me">
+          <div class="af-me-t"><b>Your username</b><small>Share it so friends can add you.</small></div>
+          <button class="af-chip" data-copy title="Copy"><span>@${esc(NX.me.username)}</span><i class="fa-regular fa-copy"></i></button>
+        </section>
+        ${waiting ? `<button class="af-wait" data-go="home/pending"><span class="af-wait-n">${waiting}</span><span><b>${waiting === 1 ? 'Someone wants' : waiting + ' people want'} to be your friend</b><small>Review your pending requests</small></span><i class="fa-solid fa-chevron-right"></i></button>` : ''}
+      </div>`;
+      const form = host.querySelector('form'), inp = form.querySelector('input'), btn = form.querySelector('button'), msg = host.querySelector('.af-msg');
+      const clean = () => inp.value.trim().replace(/^@/, '');
+      inp.oninput = () => { btn.disabled = !clean(); msg.innerHTML = ''; form.classList.remove('bad', 'good'); };
       form.onsubmit = async (e) => {
         e.preventDefault();
+        if (!clean() || btn.classList.contains('busy')) return;
         btn.classList.add('busy');
-        const r = await D().addFriend(inp.value);
+        const who = clean();
+        const r = await D().addFriend(who, { quiet: true });
         btn.classList.remove('busy');
-        msg.innerHTML = r.ok ? `<p class="ok-msg">Success! Your friend request to <b>${esc(inp.value.trim().replace(/^@/, ''))}</b> was sent.</p>` : `<p class="err">${esc(r.error)}</p>`;
+        form.classList.toggle('good', r.ok); form.classList.toggle('bad', !r.ok);
+        msg.innerHTML = r.ok
+          ? `<div class="af-note ok"><i class="fa-solid fa-circle-check"></i><span>${r.rel === 'friends' ? `You and <b>@${esc(who)}</b> are now friends.` : `Request sent to <b>@${esc(who)}</b>. You’ll be friends as soon as they accept.`}</span></div>`
+          : `<div class="af-note err"><i class="fa-solid fa-circle-exclamation"></i><span>${esc(r.error)}</span></div>`;
         if (r.ok) { inp.value = ''; btn.disabled = true; }
       };
-      setTimeout(() => inp.focus(), 30);
+      host.onclick = (e) => {
+        if (e.target.closest('[data-copy]')) NX.copy('@' + NX.me.username, 'Username copied');
+        const g = e.target.closest('[data-go]'); if (g) NX.go(g.dataset.go);
+      };
+      if (!NX.isTouch()) setTimeout(() => inp.focus(), 30);
       return;
     }
     if (tab === 'pending') {
@@ -178,13 +205,13 @@
       html = search + (inc.length || out.length ? `<div class="list-h">Pending — ${inc.length + out.length}</div>`
         + inc.map((p) => personRow(p, `<button class="round-btn ok" data-f="accept" data-tip="Accept"><i class="fa-solid fa-check"></i></button><button class="round-btn no" data-f="ignore" data-tip="Ignore"><i class="fa-solid fa-xmark"></i></button>`, 'Incoming friend request')).join('')
         + out.map((p) => personRow(p, `<button class="round-btn no" data-f="cancel" data-tip="Cancel"><i class="fa-solid fa-xmark"></i></button>`, 'Outgoing friend request')).join('')
-        : empty('fa-hourglass-half', 'No pending requests', 'Requests you send and receive show up here.'));
+        : empty('fa-hourglass-half', 'No pending requests', 'Requests you send and receive wait here until they’re answered.'));
     } else if (tab === 'blocked') {
       const bl = [...D().blocked];
       P().need(bl).then(() => { if (tab === 'blocked' && bl.some((id) => P().get(id) && !host.querySelector(`[data-uid-row="${id}"]`))) paintFriends(); });
       const people = bl.map((id) => P().get(id)).filter(Boolean).filter(match);
       html = search + (people.length ? `<div class="list-h">Blocked — ${people.length}</div>` + people.map((p) => personRow(p, `<button class="round-btn" data-f="unblock" data-tip="Unblock"><i class="fa-solid fa-user-check"></i></button>`, 'Blocked')).join('')
-        : empty('fa-ban', 'Nobody blocked', 'You haven’t blocked anyone.'));
+        : empty('fa-ban', 'Nobody blocked', 'People you block can’t message you. They show up here.', false));
     } else {
       let fr = D().friendIds().map((id) => P().get(id)).filter(Boolean);
       if (tab === 'online') fr = fr.filter((p) => P().isOnline(p.id));
@@ -201,8 +228,9 @@
     if (s) { s.oninput = NX.debounce(paintFriends, 120); if (focused) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }
     host.onclick = onFriendClick;
   }
-  function empty(icon, title, text) {
-    return `<div class="empty" style="padding-top:70px"><div class="ico"><i class="fa-solid ${icon}"></i></div><h3>${esc(title)}</h3><p>${esc(text)}</p></div>`;
+  function empty(icon, title, text, cta = true) {
+    return `<div class="fr-empty"><div class="fr-empty-art"><i class="fa-solid ${icon}"></i></div><h3>${esc(title)}</h3><p>${esc(text)}</p>
+      ${cta ? '<button class="btn btn-ok btn-sm" data-f="add"><i class="fa-solid fa-user-plus"></i>Add a friend</button>' : ''}</div>`;
   }
   function welcome() {
     return `<div class="hero" style="margin-top:8px"><h1>Welcome to NexChat, ${P().nameText(NX.me)}</h1>
@@ -387,7 +415,7 @@
     offs.forEach((f) => f());
     offs = [
       NX.on('dms', () => { paintSide(); watchCalls(); }),
-      NX.on('friends', () => { paintSide(); if (main?.querySelector('#homeList')) { paintFriends(); paintAside(); main.querySelectorAll('.tabs [data-t="pending"]').forEach((b) => { const n = D().incoming().length; b.innerHTML = `Pending${n ? ` <span class="count">${n}</span>` : ''}`; }); } }),
+      NX.on('friends', () => { paintSide(); if (main?.querySelector('#homeList')) { paintFriends(); paintAside(); main.querySelectorAll('.fr-bar [data-t="pending"]').forEach((b) => { b.innerHTML = 'Pending' + pendingBadge(); }); } }),
       NX.on('presence', NX.debounce(() => { if (main?.querySelector('#homeList') && (tab === 'online' || tab === 'all')) paintFriends(); if (main?.querySelector('#homeAside')) paintAside(); }, 300)),
       NX.on('blocked', () => { if (tab === 'blocked') paintFriends(); }),
       NX.on('live', () => { paintLive(); if (main?.querySelector('#homeAside')) paintAside(); }),

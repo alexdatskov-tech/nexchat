@@ -139,15 +139,16 @@
     await people().need(D.friendships.map((f) => (f.user_id === me ? f.friend_id : f.user_id)));
     NX.emit('friends');
   }
-  async function addFriend(username) {
+  // quiet: the caller shows the result itself (the Add friend page)
+  async function addFriend(username, { quiet = false } = {}) {
     username = String(username || '').trim().replace(/^@/, '');
     if (!username) return { error: 'Type a username.' };
     const { data, error } = await db().rpc('send_friend_request', { p_username: username });
-    if (error) { NX.toast(error.message, { err: true }); return { error: error.message }; }
+    if (error) { if (!quiet) NX.toast(error.message, { err: true }); return { error: error.message }; }
     await refreshFriends();
     const rel = relation(data);
-    NX.toast(rel === 'friends' ? `You and @${username} are now friends.` : `Friend request sent to @${username}.`);
-    return { ok: true };
+    if (!quiet) NX.toast(rel === 'friends' ? `You and @${username} are now friends.` : `Friend request sent to @${username}.`);
+    return { ok: true, rel };
   }
   async function acceptFriend(uid) {
     const { error } = await db().rpc('accept_friend_request', { p_from: uid });

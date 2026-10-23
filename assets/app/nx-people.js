@@ -161,11 +161,15 @@
     return v;
   }
 
-  // Optimised copies (assets/deco/opt, ~3x smaller animated WebP, plus a
-  // still frame for grids). Falls back to the original file if missing.
+  // Avatar decorations use the optimised copies in assets/deco/opt (small
+  // animated WebP). Profile effects play the original 450x880 APNG at full
+  // quality, like Discord's. Both have a still frame for grids. Falls back
+  // to the original file if a copy is missing.
   function decoSrc(path, still) {
     const m = /^assets\/deco\/(pfp|profile)\/([\w-]+)\.png$/i.exec(path || '');
-    return m ? `assets/deco/opt/${m[1]}/${m[2]}${still ? '.still' : ''}.webp` : path;
+    if (!m) return path;
+    if (m[1] === 'profile' && !still) return path;
+    return `assets/deco/opt/${m[1]}/${m[2]}${still ? '.still' : ''}.webp`;
   }
   function decoImg(path, cls, still) {
     return `<img class="${cls}" src="${esc(decoSrc(path, still))}" onerror="this.onerror=null;this.src='${esc(path)}'" alt="" loading="lazy" decoding="async">`;
